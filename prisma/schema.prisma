@@ -1,0 +1,300 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum OrderStatus {
+  ORDER_PLACED
+  ALLOCATED
+  IN_PROVISIONING
+  DC_GENERATED
+  PACKED_AND_LABELLED
+  DOCKET_ASSIGNED
+  EWAY_BILL_REQUESTED
+  EWAY_BILL_GENERATED
+  DISPATCHED
+  DELIVERED
+  DELIVERY_CONFIRMED
+  INVOICED
+  PAYMENT_RECEIVED
+  WARRANTY_UPDATED
+}
+
+enum InventoryStatus {
+  AVAILABLE
+  ALLOCATED
+  DEFECTIVE
+  RETIRED
+}
+
+enum UserRole {
+  ADMIN
+  WAREHOUSE
+  PROVISIONING
+  FINANCE
+  LOGISTICS
+  WARRANTY
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         UserRole  @default(WAREHOUSE)
+  name         String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  sessions     Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique // Hashed session token
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Order {
+  id                   String      @id @default(uuid()) @db.Uuid
+  clientName           String      @default("PWC") @map("client_name")
+  intermediary         String      @default("HP")
+  totalQuantity        Int         @map("total_quantity")
+  deliveryLocation     String      @map("delivery_location")
+  status               OrderStatus @default(ORDER_PLACED)
+  warehouseLocation    String?     @map("warehouse_location")
+  provisioningLocation String?     @map("provisioning_location")
+  engineerName         String?     @map("engineer_name")
+  dcNumber             String?     @map("dc_number")
+  invoiceNumber        String?     @map("invoice_number")
+  createdAt            DateTime    @default(now()) @map("created_at")
+  updatedAt            DateTime    @updatedAt @map("updated_at")
+
+  assets               Asset[]
+  dockets              Docket[]
+
+  @@map("orders")
+}
+
+model InventoryItem {
+  id                        String          @id @default(uuid()) @db.Uuid
+  serialNumber              String          @unique @map("serial_number")
+  model                     String
+  specs                     String?
+  status                    InventoryStatus @default(AVAILABLE)
+  partner                   String?
+  sr                        Int?
+  entity                    String?
+  userBaseLocation          String?         @map("user_base_location")
+  imageType                 String?         @map("image_type")
+  purpose                   String?
+  requestDate               DateTime?       @map("request_date") @db.Date
+  count                     Int?
+  employeeName              String?         @map("employee_name")
+  emailId                   String?         @map("email_id")
+  shippingAddress           String?         @map("shipping_address")
+  landMark                  String?         @map("land_mark")
+  city                      String?
+  state                     String?
+  pinCode                   String?         @map("pin_code")
+  mobileNumber              String?         @map("mobile_number")
+  pwcRemarks                String?         @map("pwc_remarks")
+  laptopMake                String?         @map("laptop_make")
+  laptopModel               String?         @map("laptop_model")
+  invoiceProductDescription String?         @map("invoice_product_description")
+  description               String?
+  emailReceivedHour         String?         @map("email_received_hour")
+  cutOffStatus              String?         @map("cut_off_status")
+  slaStartDate              DateTime?       @map("sla_start_date") @db.Date
+  slaState                  String?         @map("sla_state")
+  zone                      String?
+  tier                      String?
+  odaLocation               String?         @map("oda_location")
+  tat                       String?
+  deliveryTatDays           Int?            @map("delivery_tat_days")
+  actualDeliveryDate        DateTime?       @map("actual_delivery_date") @db.Date
+  slaStatus                 String?         @map("sla_status")
+  laptopAcceptanceDate      DateTime?       @map("laptop_acceptance_date") @db.Date
+  invoicedQuantity          Int?            @map("invoiced_quantity")
+  warrantyPeriod            String?         @map("warranty_period")
+  warrantyEndPeriod         DateTime?       @map("warranty_end_period") @db.Date
+  customerInstructionDoc    String?         @map("customer_instruction_doc")
+  adaptorAdded              String?         @map("adaptor_added")
+  accessoryHeadsetMouse     String?         @map("accessory_headset_mouse")
+  stickerColour             String?         @map("sticker_colour")
+  deliveryDate              DateTime?       @map("delivery_date") @db.Date
+  dc                        String?
+  vendor                    String?
+  deliveredLocation         String?         @map("delivered_location")
+  docketNumber              String?         @map("docket_number")
+  trackingStatus            String?         @map("tracking_status")
+  trackingSubStatus         String?         @map("tracking_sub_status")
+  pickupDate                DateTime?       @map("pickup_date") @db.Date
+  alternatePhoneNumber      String?         @map("alternate_phone_number")
+  processStatus             String?         @map("process_status")
+  machineWs1Status          String?         @map("machine_ws1_status")
+  serialNoInWs1             String?         @map("serial_no_in_ws1")
+  dateOfWs1Update           DateTime?       @map("date_of_ws1_update") @db.Date
+  servicesStartDate         DateTime?       @map("services_start_date") @db.Date
+  invoicingWarehouse        String?         @map("invoicing_warehouse")
+  boxSerialNo               String?         @map("box_serial_no")
+  checkField                String?         @map("check_field")
+  remark                    String?         @map("remark")
+  dcNumber                  String?         @map("dc_number")
+  date                      DateTime?       @map("date") @db.Date
+  csvStatus                 String?         @map("csv_status")
+  createdAt                 DateTime        @default(now()) @map("created_at")
+  updatedAt                 DateTime        @updatedAt @map("updated_at")
+
+  assets                    Asset[]
+  assignmentRecords         AssignmentRecord[]
+
+  @@map("inventory_items")
+}
+
+model AssignmentRecord {
+  id                   String    @id @default(uuid()) @db.Uuid
+  inventoryItemId      String    @map("inventory_item_id") @db.Uuid
+  employeeName         String?   @map("employee_name")
+  emailId              String?   @map("email_id")
+  mobileNumber         String?   @map("mobile_number")
+  alternatePhoneNumber String?   @map("alternate_phone_number")
+  shippingAddress      String?   @map("shipping_address")
+  landMark             String?   @map("land_mark")
+  city                 String?
+  state                String?
+  pinCode              String?   @map("pin_code")
+  purpose              String?
+  requestDate          DateTime? @map("request_date") @db.Date
+  userBaseLocation     String?   @map("user_base_location")
+  imageType            String?   @map("image_type")
+  count                Int?
+  pwcRemarks           String?   @map("pwc_remarks")
+  trackingStatus       String?   @map("tracking_status")
+  trackingSubStatus    String?   @map("tracking_sub_status")
+  assignedAt           DateTime  @default(now()) @map("assigned_at")
+
+  inventoryItem        InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryItemId])
+  @@map("assignment_records")
+}
+
+model DropdownOption {
+  id        String   @id @default(uuid()) @db.Uuid
+  category  String   // "entity" | "purpose" | "imageType"
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([category, value])
+  @@map("dropdown_options")
+}
+
+model Asset {
+  id              String         @id @default(uuid()) @db.Uuid
+  orderId         String         @map("order_id") @db.Uuid
+  inventoryItemId String?        @map("inventory_item_id") @db.Uuid
+  status          String         @default("pending") // pending, qc_pass, os_installed
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+
+  @@map("assets")
+}
+
+model DeliveryRecord {
+  id                        String    @id @default(uuid()) @db.Uuid
+  partner                   String?
+  sr                        Int?
+  entity                    String?
+  userBaseLocation          String?   @map("user_base_location")
+  imageType                 String?   @map("image_type")
+  purpose                   String?
+  requestDate               DateTime? @map("request_date") @db.Date
+  serialNumber              String?   @map("serial_number")
+  count                     Int?
+  employeeName              String?   @map("employee_name")
+  emailId                   String?   @map("email_id")
+  shippingAddress           String?   @map("shipping_address")
+  landMark                  String?   @map("land_mark")
+  city                      String?
+  state                     String?
+  pinCode                   String?   @map("pin_code")
+  mobileNumber              String?   @map("mobile_number")
+  pwcRemarks                String?   @map("pwc_remarks")
+  laptopMake                String?   @map("laptop_make")
+  laptopModel               String?   @map("laptop_model")
+  invoiceProductDescription String?   @map("invoice_product_description")
+  description               String?
+  emailReceivedHour         String?   @map("email_received_hour")
+  cutOffStatus              String?   @map("cut_off_status")
+  slaStartDate              DateTime? @map("sla_start_date") @db.Date
+  slaState                  String?   @map("sla_state")
+  zone                      String?
+  tier                      String?
+  odaLocation               String?   @map("oda_location")
+  tat                       String?
+  deliveryTatDays           Int?      @map("delivery_tat_days")
+  actualDeliveryDate        DateTime? @map("actual_delivery_date") @db.Date
+  slaStatus                 String?   @map("sla_status")
+  laptopAcceptanceDate      DateTime? @map("laptop_acceptance_date") @db.Date
+  invoicedQuantity          Int?      @map("invoiced_quantity")
+  warrantyPeriod            String?   @map("warranty_period")
+  warrantyEndPeriod         DateTime? @map("warranty_end_period") @db.Date
+  customerInstructionDoc    String?   @map("customer_instruction_doc")
+  adaptorAdded              String?   @map("adaptor_added")
+  accessoryHeadsetMouse     String?   @map("accessory_headset_mouse")
+  stickerColour             String?   @map("sticker_colour")
+  deliveryDate              DateTime? @map("delivery_date") @db.Date
+  dc                        String?
+  vendor                    String?
+  deliveredLocation         String?   @map("delivered_location")
+  docketNumber              String?   @map("docket_number")
+  trackingStatus            String?   @map("tracking_status")
+  pickupDate                DateTime? @map("pickup_date") @db.Date
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+
+  @@map("delivery_records")
+}
+
+model ProductMaster {
+  id          String   @id @default(uuid()) @db.Uuid
+  make        String
+  model       String
+  partNo      String?  @map("part_no")
+  description String?
+  hsnCode     String?  @map("hsn_code")
+  gstRate     Decimal? @map("gst_rate") @db.Decimal(5, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([make, model])
+  @@map("product_master")
+}
+
+model Docket {
+  id             String   @id @default(uuid()) @db.Uuid
+  orderId        String   @map("order_id") @db.Uuid
+  docketNumber   String?  @map("docket_number")
+  ewayBillNumber String?  @map("eway_bill_number")
+  podDocumentUrl String?  @map("pod_document_url")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("dockets")
+}

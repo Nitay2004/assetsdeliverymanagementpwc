@@ -1,65 +1,103 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useEffect } from "react";
+import { LoginForm } from "@/components/login-form";
+import { Package } from "lucide-react";
+
+// Unsplash CDN background images
+const BACKGROUND_PHOTOS = [
+  "https://images.unsplash.com/photo-1777836439057-f80dbde5703c?w=1920&auto=format&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1779881718730-e649656ebae1?w=1920&auto=format&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1778222013858-3fc072cd10c6?w=1920&auto=format&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1778510092958-c952c661b807?w=1920&auto=format&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1780049921469-4afa2c328d4e?w=1920&auto=format&fit=crop&q=80",
+  "https://images.unsplash.com/photo-1780552274859-b3a1e6effd50?w=1920&auto=format&fit=crop&q=80",
+];
+
+export default function LoginPage() {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [nextIndex, setNextIndex] = useState<number | null>(null);
+  const [fading, setFading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // Randomize starting image only on client after hydration
+  useEffect(() => {
+    setCurrentIndex(Math.floor(Math.random() * BACKGROUND_PHOTOS.length));
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const interval = setInterval(() => {
+      const next = (currentIndex + 1) % BACKGROUND_PHOTOS.length;
+      setNextIndex(next);
+      setFading(true);
+
+      setTimeout(() => {
+        setCurrentIndex(next);
+        setNextIndex(null);
+        setFading(false);
+      }, 1000); // crossfade duration
+    }, 6000); // change every 6 seconds
+
+    return () => clearInterval(interval);
+  }, [currentIndex, mounted]);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden">
+      {/* Current background */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000"
+        style={{
+          backgroundImage: `url(${BACKGROUND_PHOTOS[currentIndex]})`,
+          opacity: fading ? 0 : 1,
+        }}
+      />
+
+      {/* Next background (fades in underneath) */}
+      {nextIndex !== null && (
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: `url(${BACKGROUND_PHOTOS[nextIndex]})`,
+          }}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+      )}
+
+      {/* Dark overlay for readability */}
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px]" />
+
+      {/* Content */}
+      <div className="relative z-10 flex w-full max-w-sm flex-col gap-6 px-6 animate-fade-in-up">
+        {/* Brand */}
+        <a
+          href="#"
+          className="flex items-center justify-center gap-2.5 font-semibold text-white"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-black shadow-md">
+            <Package className="size-4" />
+          </div>
+          <span className="text-lg tracking-tight">Devit</span>
+        </a>
+
+        {/* Login card */}
+        <LoginForm />
+
+        {/* Image dots indicator */}
+        <div className="flex justify-center gap-1.5">
+          {BACKGROUND_PHOTOS.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrentIndex(i)}
+              className={`h-1 rounded-full transition-all duration-300 ${
+                i === currentIndex
+                  ? "w-6 bg-white"
+                  : "w-1.5 bg-white/40 hover:bg-white/60"
+              }`}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          ))}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

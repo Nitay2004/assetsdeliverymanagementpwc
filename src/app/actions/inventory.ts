@@ -1,0 +1,611 @@
+"use server";
+
+import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
+
+function parseDate(value: string | null): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function parseIntValue(value: string | null): number | null {
+  if (!value) return null;
+  const n = parseInt(value, 10);
+  return isNaN(n) ? null : n;
+}
+
+export async function addInventoryItem(formData: FormData) {
+  const user = await getSession();
+  if (!user || user.role !== "ADMIN") {
+    throw new Error("Unauthorized");
+  }
+
+  const serialNumber = formData.get("serialNumber") as string;
+  const model = formData.get("model") as string;
+
+  if (!serialNumber || !model) {
+    throw new Error("Serial number and model are required.");
+  }
+
+  const rawTrackingStatus = formData.get("trackingStatus") as string;
+  const trackingValue = rawTrackingStatus?.toLowerCase() || "";
+  const isDelivered = trackingValue.includes("delivered") || trackingValue.includes("confirmed") || trackingValue.includes("dispatched") || trackingValue.includes("invoiced") || trackingValue.includes("payment") || trackingValue.includes("warranty");
+  const effectiveStatus = isDelivered ? "ALLOCATED" : "AVAILABLE";
+
+  try {
+    await prisma.inventoryItem.create({
+      data: {
+        serialNumber,
+        model,
+        status: effectiveStatus,
+        specs: (formData.get("specs") as string) || null,
+        partner: (formData.get("partner") as string) || null,
+        sr: parseIntValue(formData.get("sr") as string),
+        entity: (formData.get("entity") as string) || null,
+        userBaseLocation: (formData.get("userBaseLocation") as string) || null,
+        imageType: (formData.get("imageType") as string) || null,
+        purpose: (formData.get("purpose") as string) || null,
+        requestDate: parseDate(formData.get("requestDate") as string),
+        count: parseIntValue(formData.get("count") as string),
+        employeeName: (formData.get("employeeName") as string) || null,
+        emailId: (formData.get("emailId") as string) || null,
+        shippingAddress: (formData.get("shippingAddress") as string) || null,
+        landMark: (formData.get("landMark") as string) || null,
+        city: (formData.get("city") as string) || null,
+        state: (formData.get("state") as string) || null,
+        pinCode: (formData.get("pinCode") as string) || null,
+        mobileNumber: (formData.get("mobileNumber") as string) || null,
+        pwcRemarks: (formData.get("pwcRemarks") as string) || null,
+        laptopMake: (formData.get("laptopMake") as string) || null,
+        laptopModel: (formData.get("laptopModel") as string) || null,
+        invoiceProductDescription: (formData.get("invoiceProductDescription") as string) || null,
+        description: (formData.get("description") as string) || null,
+        emailReceivedHour: (formData.get("emailReceivedHour") as string) || null,
+        cutOffStatus: (formData.get("cutOffStatus") as string) || null,
+        slaStartDate: parseDate(formData.get("slaStartDate") as string),
+        slaState: (formData.get("slaState") as string) || null,
+        zone: (formData.get("zone") as string) || null,
+        tier: (formData.get("tier") as string) || null,
+        odaLocation: (formData.get("odaLocation") as string) || null,
+        tat: (formData.get("tat") as string) || null,
+        deliveryTatDays: parseIntValue(formData.get("deliveryTatDays") as string),
+        actualDeliveryDate: parseDate(formData.get("actualDeliveryDate") as string),
+        slaStatus: (formData.get("slaStatus") as string) || null,
+        laptopAcceptanceDate: parseDate(formData.get("laptopAcceptanceDate") as string),
+        invoicedQuantity: parseIntValue(formData.get("invoicedQuantity") as string),
+        warrantyPeriod: (formData.get("warrantyPeriod") as string) || null,
+        warrantyEndPeriod: parseDate(formData.get("warrantyEndPeriod") as string),
+        customerInstructionDoc: (formData.get("customerInstructionDoc") as string) || null,
+        adaptorAdded: (formData.get("adaptorAdded") as string) || null,
+        accessoryHeadsetMouse: (formData.get("accessoryHeadsetMouse") as string) || null,
+        stickerColour: (formData.get("stickerColour") as string) || null,
+        deliveryDate: parseDate(formData.get("deliveryDate") as string),
+        dc: (formData.get("dc") as string) || null,
+        vendor: (formData.get("vendor") as string) || null,
+        deliveredLocation: (formData.get("deliveredLocation") as string) || null,
+        docketNumber: (formData.get("docketNumber") as string) || null,
+        trackingStatus: rawTrackingStatus || null,
+        trackingSubStatus: (formData.get("trackingSubStatus") as string) || null,
+        pickupDate: parseDate(formData.get("pickupDate") as string),
+        alternatePhoneNumber: (formData.get("alternatePhoneNumber") as string) || null,
+        processStatus: (formData.get("processStatus") as string) || null,
+        machineWs1Status: (formData.get("machineWs1Status") as string) || null,
+        serialNoInWs1: (formData.get("serialNoInWs1") as string) || null,
+        dateOfWs1Update: parseDate(formData.get("dateOfWs1Update") as string),
+        servicesStartDate: parseDate(formData.get("servicesStartDate") as string),
+        invoicingWarehouse: (formData.get("invoicingWarehouse") as string) || null,
+        boxSerialNo: (formData.get("boxSerialNo") as string) || null,
+        checkField: (formData.get("checkField") as string) || null,
+        remark: (formData.get("remark") as string) || null,
+        dcNumber: (formData.get("dcNumber") as string) || null,
+        date: parseDate(formData.get("date") as string),
+        csvStatus: (formData.get("csvStatus") as string) || null,
+      },
+    });
+  } catch (e) {
+    if ((e as any)?.code === "P2002") {
+      throw new Error("Serial number already exists.");
+    }
+    throw new Error("Failed to add item.");
+  }
+
+  revalidatePath("/dashboard/inventory");
+  redirect("/dashboard/inventory");
+}
+
+export async function updateInventoryItem(id: string, formData: FormData) {
+  const user = await getSession();
+  if (!user || user.role !== "ADMIN") {
+    throw new Error("Unauthorized");
+  }
+
+  const serialNumber = formData.get("serialNumber") as string;
+  const model = formData.get("model") as string;
+
+  if (!serialNumber || !model) {
+    throw new Error("Serial number and model are required.");
+  }
+
+  const rawTrackingStatus = formData.get("trackingStatus") as string;
+  const trackingValue = rawTrackingStatus?.toLowerCase() || "";
+  const isDelivered = trackingValue.includes("delivered") || trackingValue.includes("confirmed") || trackingValue.includes("dispatched") || trackingValue.includes("invoiced") || trackingValue.includes("payment") || trackingValue.includes("warranty");
+
+  const current = await prisma.inventoryItem.findUnique({ where: { id }, select: { status: true } });
+  let effectiveStatus = current?.status;
+  if (isDelivered && effectiveStatus === "AVAILABLE") {
+    effectiveStatus = "ALLOCATED";
+  }
+
+  try {
+    await prisma.inventoryItem.update({
+      where: { id },
+      data: {
+        serialNumber,
+        model,
+        specs: (formData.get("specs") as string) || null,
+        partner: (formData.get("partner") as string) || null,
+        sr: parseIntValue(formData.get("sr") as string),
+        entity: (formData.get("entity") as string) || null,
+        userBaseLocation: (formData.get("userBaseLocation") as string) || null,
+        imageType: (formData.get("imageType") as string) || null,
+        purpose: (formData.get("purpose") as string) || null,
+        requestDate: parseDate(formData.get("requestDate") as string),
+        count: parseIntValue(formData.get("count") as string),
+        employeeName: (formData.get("employeeName") as string) || null,
+        emailId: (formData.get("emailId") as string) || null,
+        shippingAddress: (formData.get("shippingAddress") as string) || null,
+        landMark: (formData.get("landMark") as string) || null,
+        city: (formData.get("city") as string) || null,
+        state: (formData.get("state") as string) || null,
+        pinCode: (formData.get("pinCode") as string) || null,
+        mobileNumber: (formData.get("mobileNumber") as string) || null,
+        pwcRemarks: (formData.get("pwcRemarks") as string) || null,
+        laptopMake: (formData.get("laptopMake") as string) || null,
+        laptopModel: (formData.get("laptopModel") as string) || null,
+        invoiceProductDescription: (formData.get("invoiceProductDescription") as string) || null,
+        description: (formData.get("description") as string) || null,
+        emailReceivedHour: (formData.get("emailReceivedHour") as string) || null,
+        cutOffStatus: (formData.get("cutOffStatus") as string) || null,
+        slaStartDate: parseDate(formData.get("slaStartDate") as string),
+        slaState: (formData.get("slaState") as string) || null,
+        zone: (formData.get("zone") as string) || null,
+        tier: (formData.get("tier") as string) || null,
+        odaLocation: (formData.get("odaLocation") as string) || null,
+        tat: (formData.get("tat") as string) || null,
+        deliveryTatDays: parseIntValue(formData.get("deliveryTatDays") as string),
+        actualDeliveryDate: parseDate(formData.get("actualDeliveryDate") as string),
+        slaStatus: (formData.get("slaStatus") as string) || null,
+        laptopAcceptanceDate: parseDate(formData.get("laptopAcceptanceDate") as string),
+        invoicedQuantity: parseIntValue(formData.get("invoicedQuantity") as string),
+        warrantyPeriod: (formData.get("warrantyPeriod") as string) || null,
+        warrantyEndPeriod: parseDate(formData.get("warrantyEndPeriod") as string),
+        customerInstructionDoc: (formData.get("customerInstructionDoc") as string) || null,
+        adaptorAdded: (formData.get("adaptorAdded") as string) || null,
+        accessoryHeadsetMouse: (formData.get("accessoryHeadsetMouse") as string) || null,
+        stickerColour: (formData.get("stickerColour") as string) || null,
+        deliveryDate: parseDate(formData.get("deliveryDate") as string),
+        dc: (formData.get("dc") as string) || null,
+        vendor: (formData.get("vendor") as string) || null,
+        deliveredLocation: (formData.get("deliveredLocation") as string) || null,
+        docketNumber: (formData.get("docketNumber") as string) || null,
+        status: effectiveStatus,
+        trackingStatus: rawTrackingStatus || null,
+        trackingSubStatus: (formData.get("trackingSubStatus") as string) || null,
+        pickupDate: parseDate(formData.get("pickupDate") as string),
+        alternatePhoneNumber: (formData.get("alternatePhoneNumber") as string) || null,
+        processStatus: (formData.get("processStatus") as string) || null,
+        machineWs1Status: (formData.get("machineWs1Status") as string) || null,
+        serialNoInWs1: (formData.get("serialNoInWs1") as string) || null,
+        dateOfWs1Update: parseDate(formData.get("dateOfWs1Update") as string),
+        servicesStartDate: parseDate(formData.get("servicesStartDate") as string),
+        invoicingWarehouse: (formData.get("invoicingWarehouse") as string) || null,
+        boxSerialNo: (formData.get("boxSerialNo") as string) || null,
+        checkField: (formData.get("checkField") as string) || null,
+        remark: (formData.get("remark") as string) || null,
+        dcNumber: (formData.get("dcNumber") as string) || null,
+        date: parseDate(formData.get("date") as string),
+        csvStatus: (formData.get("csvStatus") as string) || null,
+      },
+    });
+  } catch (e: any) {
+    if (e?.code === "P2002") {
+      throw new Error("Serial number already exists.");
+    }
+    throw new Error("Failed to update item.");
+  }
+
+  revalidatePath("/dashboard/inventory");
+  redirect("/dashboard/inventory");
+}
+
+export async function deleteInventoryItem(id: string) {
+  const user = await getSession();
+  if (!user || user.role !== "ADMIN") {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    await prisma.inventoryItem.delete({ where: { id } });
+  } catch {
+    throw new Error("Failed to delete item.");
+  }
+
+  revalidatePath("/dashboard/inventory");
+}
+
+export async function returnItemToStock(id: string) {
+  const user = await getSession();
+  if (!user || user.role !== "ADMIN") {
+    throw new Error("Unauthorized");
+  }
+
+  const existing = await prisma.inventoryItem.findUnique({ where: { id } });
+
+  // Save current assignment to history before clearing
+  if (existing?.employeeName) {
+    await prisma.assignmentRecord.create({
+      data: {
+        inventoryItemId: id,
+        employeeName: existing.employeeName,
+        emailId: existing.emailId,
+        mobileNumber: existing.mobileNumber,
+        alternatePhoneNumber: existing.alternatePhoneNumber,
+        shippingAddress: existing.shippingAddress,
+        landMark: existing.landMark,
+        city: existing.city,
+        state: existing.state,
+        pinCode: existing.pinCode,
+        purpose: existing.purpose,
+        requestDate: existing.requestDate,
+        userBaseLocation: existing.userBaseLocation,
+        imageType: existing.imageType,
+        count: existing.count,
+        pwcRemarks: existing.pwcRemarks,
+        trackingStatus: existing.trackingStatus,
+        trackingSubStatus: existing.trackingSubStatus,
+        assignedAt: new Date(),
+      },
+    });
+  }
+
+  await prisma.inventoryItem.update({
+    where: { id },
+    data: {
+      status: "AVAILABLE",
+      trackingStatus: null,
+      trackingSubStatus: null,
+      employeeName: null,
+      emailId: null,
+      mobileNumber: null,
+      alternatePhoneNumber: null,
+      shippingAddress: null,
+      landMark: null,
+      city: null,
+      state: null,
+      pinCode: null,
+      purpose: null,
+      requestDate: null,
+      userBaseLocation: null,
+      imageType: null,
+      count: null,
+      pwcRemarks: null,
+    },
+  });
+
+  revalidatePath("/dashboard/inventory");
+}
+
+export async function getDistinctFieldValues() {
+  const options = await prisma.dropdownOption.findMany({
+    orderBy: { value: "asc" },
+  });
+
+  return {
+    entities: options.filter((o) => o.category === "entity").map((o) => o.value),
+    purposes: options.filter((o) => o.category === "purpose").map((o) => o.value),
+    imageTypes: options.filter((o) => o.category === "imageType").map((o) => o.value),
+    adaptorAddeds: options.filter((o) => o.category === "adaptorAdded").map((o) => o.value),
+    accessoryHeadsetMouses: options.filter((o) => o.category === "accessoryHeadsetMouse").map((o) => o.value),
+    stickerColours: options.filter((o) => o.category === "stickerColour").map((o) => o.value),
+    allOptions: options.map((o) => ({ id: o.id, category: o.category, value: o.value })),
+  };
+}
+
+export async function seedDropdownOptions() {
+  const user = await getSession();
+  if (!user || user.role !== "ADMIN") return;
+
+  const [existingEntities, existingPurposes, existingImageTypes, existingAdaptors, existingHeadset, existingStickers] = await Promise.all([
+    prisma.inventoryItem.findMany({
+      where: { entity: { not: null } },
+      select: { entity: true },
+      distinct: ["entity"],
+    }),
+    prisma.inventoryItem.findMany({
+      where: { purpose: { not: null } },
+      select: { purpose: true },
+      distinct: ["purpose"],
+    }),
+    prisma.inventoryItem.findMany({
+      where: { imageType: { not: null } },
+      select: { imageType: true },
+      distinct: ["imageType"],
+    }),
+    prisma.inventoryItem.findMany({
+      where: { adaptorAdded: { not: null } },
+      select: { adaptorAdded: true },
+      distinct: ["adaptorAdded"],
+    }),
+    prisma.inventoryItem.findMany({
+      where: { accessoryHeadsetMouse: { not: null } },
+      select: { accessoryHeadsetMouse: true },
+      distinct: ["accessoryHeadsetMouse"],
+    }),
+    prisma.inventoryItem.findMany({
+      where: { stickerColour: { not: null } },
+      select: { stickerColour: true },
+      distinct: ["stickerColour"],
+    }),
+  ]);
+
+  const toInsert = [
+    ...existingEntities.map((e) => ({ category: "entity", value: e.entity! })),
+    ...existingPurposes.map((p) => ({ category: "purpose", value: p.purpose! })),
+    ...existingImageTypes.map((i) => ({ category: "imageType", value: i.imageType! })),
+    ...existingAdaptors.map((a) => ({ category: "adaptorAdded", value: a.adaptorAdded! })),
+    ...existingHeadset.map((h) => ({ category: "accessoryHeadsetMouse", value: h.accessoryHeadsetMouse! })),
+    ...existingStickers.map((s) => ({ category: "stickerColour", value: s.stickerColour! })),
+  ];
+
+  for (const { category, value } of toInsert) {
+    await prisma.dropdownOption.upsert({
+      where: { category_value: { category, value } },
+      update: {},
+      create: { category, value },
+    });
+  }
+}
+
+export async function addDropdownOption(category: string, value: string) {
+  const user = await getSession();
+  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+
+  await prisma.dropdownOption.upsert({
+    where: { category_value: { category, value } },
+    update: {},
+    create: { category, value },
+  });
+
+  revalidatePath("/dashboard/inventory");
+}
+
+export async function deleteDropdownOption(id: string) {
+  const user = await getSession();
+  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+
+  await prisma.dropdownOption.delete({ where: { id } });
+
+  revalidatePath("/dashboard/inventory");
+}
+
+export async function getInventoryItem(id: string) {
+  const item = await prisma.inventoryItem.findUnique({ where: { id } });
+  if (!item) return null;
+  return item;
+}
+
+export async function reassignItem(id: string, formData: FormData) {
+  const user = await getSession();
+  if (!user || user.role !== "ADMIN") {
+    throw new Error("Unauthorized");
+  }
+
+  const employeeName = (formData.get("employeeName") as string) || null;
+  const emailId = (formData.get("emailId") as string) || null;
+  const mobileNumber = (formData.get("mobileNumber") as string) || null;
+  const alternatePhoneNumber = (formData.get("alternatePhoneNumber") as string) || null;
+  const shippingAddress = (formData.get("shippingAddress") as string) || null;
+  const landMark = (formData.get("landMark") as string) || null;
+  const city = (formData.get("city") as string) || null;
+  const state = (formData.get("state") as string) || null;
+  const pinCode = (formData.get("pinCode") as string) || null;
+  const purpose = (formData.get("purpose") as string) || null;
+  const requestDate = parseDate(formData.get("requestDate") as string);
+  const userBaseLocation = (formData.get("userBaseLocation") as string) || null;
+  const imageType = (formData.get("imageType") as string) || null;
+  const count = parseIntValue(formData.get("count") as string);
+  const pwcRemarks = (formData.get("pwcRemarks") as string) || null;
+  const partner = (formData.get("partner") as string) || null;
+  const sr = parseIntValue(formData.get("sr") as string);
+  const entity = (formData.get("entity") as string) || null;
+
+  const emailReceivedHour = (formData.get("emailReceivedHour") as string) || null;
+  const cutOffStatus = (formData.get("cutOffStatus") as string) || null;
+  const slaStartDate = parseDate(formData.get("slaStartDate") as string);
+  const slaState = (formData.get("slaState") as string) || null;
+  const zone = (formData.get("zone") as string) || null;
+  const tier = (formData.get("tier") as string) || null;
+  const odaLocation = (formData.get("odaLocation") as string) || null;
+  const tat = (formData.get("tat") as string) || null;
+  const deliveryTatDays = parseIntValue(formData.get("deliveryTatDays") as string);
+  const actualDeliveryDate = parseDate(formData.get("actualDeliveryDate") as string);
+  const slaStatus = (formData.get("slaStatus") as string) || null;
+  const laptopAcceptanceDate = parseDate(formData.get("laptopAcceptanceDate") as string);
+  const adaptorAdded = (formData.get("adaptorAdded") as string) || null;
+  const accessoryHeadsetMouse = (formData.get("accessoryHeadsetMouse") as string) || null;
+  const stickerColour = (formData.get("stickerColour") as string) || null;
+
+  const assignmentData = {
+    employeeName,
+    emailId,
+    mobileNumber,
+    alternatePhoneNumber,
+    shippingAddress,
+    landMark,
+    city,
+    state,
+    pinCode,
+    purpose,
+    requestDate,
+    userBaseLocation,
+    imageType,
+    count,
+    pwcRemarks,
+  };
+
+  // Always save current assignment to history before applying the new one
+  const existing = await prisma.inventoryItem.findUnique({ where: { id } });
+
+  // Save the current assignment data as a history record (preserving tracking status)
+  if (existing?.employeeName) {
+    await prisma.assignmentRecord.create({
+      data: {
+        inventoryItemId: id,
+        employeeName: existing.employeeName,
+        emailId: existing.emailId,
+        mobileNumber: existing.mobileNumber,
+        alternatePhoneNumber: existing.alternatePhoneNumber,
+        shippingAddress: existing.shippingAddress,
+        landMark: existing.landMark,
+        city: existing.city,
+        state: existing.state,
+        pinCode: existing.pinCode,
+        purpose: existing.purpose,
+        requestDate: existing.requestDate,
+        userBaseLocation: existing.userBaseLocation,
+        imageType: existing.imageType,
+        count: existing.count,
+        pwcRemarks: existing.pwcRemarks,
+        trackingStatus: existing.trackingStatus,
+        trackingSubStatus: existing.trackingSubStatus,
+        assignedAt: new Date(),
+      },
+    });
+  }
+
+  await prisma.assignmentRecord.create({
+    data: { inventoryItemId: id, ...assignmentData },
+  });
+
+  await prisma.inventoryItem.update({
+    where: { id },
+    data: { 
+      status: "ALLOCATED", 
+      ...assignmentData,
+      partner,
+      sr,
+      entity,
+      emailReceivedHour,
+      cutOffStatus,
+      slaStartDate,
+      slaState,
+      zone,
+      tier,
+      odaLocation,
+      tat,
+      deliveryTatDays,
+      actualDeliveryDate,
+      slaStatus,
+      laptopAcceptanceDate,
+      adaptorAdded,
+      accessoryHeadsetMouse,
+      stickerColour,
+      invoicedQuantity: null,
+      customerInstructionDoc: null,
+      deliveryDate: null,
+      dc: null,
+      vendor: null,
+      deliveredLocation: null,
+      docketNumber: null,
+      trackingStatus: null,
+      trackingSubStatus: null,
+      pickupDate: null,
+      processStatus: null,
+      machineWs1Status: null,
+      serialNoInWs1: null,
+      dateOfWs1Update: null,
+      servicesStartDate: null,
+      invoicingWarehouse: null,
+      boxSerialNo: null,
+      checkField: null,
+      remark: null,
+      dcNumber: null,
+      csvStatus: null,
+    },
+  });
+
+  revalidatePath("/dashboard/inventory");
+}
+
+export async function getAssignmentHistory(itemId: string) {
+  const records = await prisma.assignmentRecord.findMany({
+    where: { inventoryItemId: itemId },
+    orderBy: { assignedAt: "desc" },
+  });
+  return records.map((r) => ({
+    ...r,
+    requestDate: r.requestDate?.toISOString() ?? null,
+    assignedAt: r.assignedAt.toISOString(),
+  }));
+}
+
+export async function sendToWarehouse(inventoryItemIds: string[]) {
+  const user = await getSession();
+  if (!user) {
+    throw new Error("Unauthorized");
+  }
+
+  const items = await prisma.inventoryItem.findMany({
+    where: { id: { in: inventoryItemIds }, status: { in: ["AVAILABLE", "ALLOCATED"] } },
+  });
+
+  if (items.length === 0) {
+    throw new Error("No available or allocated items selected.");
+  }
+
+  // Create an Order
+  const orderName = items.length === 1 
+    ? (items[0].employeeName || items[0].entity || "Individual Dispatch") 
+    : "Bulk Dispatch Batch";
+    
+  const orderLocation = items.length === 1 
+    ? ([items[0].city, items[0].state].filter(Boolean).join(", ") || "N/A") 
+    : "Multiple Locations";
+
+  const order = await prisma.order.create({
+    data: {
+      clientName: orderName,
+      intermediary: "Direct from Inventory",
+      totalQuantity: items.length,
+      deliveryLocation: orderLocation,
+      status: "ORDER_PLACED", // User requested it to start in Pending Allocation
+    },
+  });
+
+  // Create Asset slots and link to items
+  await prisma.asset.createMany({
+    data: items.map(item => ({
+      orderId: order.id,
+      status: "allocated",
+      inventoryItemId: item.id,
+    })),
+  });
+
+  // Update InventoryItems to ALLOCATED
+  await prisma.inventoryItem.updateMany({
+    where: { id: { in: items.map(i => i.id) } },
+    data: { status: "ALLOCATED" },
+  });
+
+  await syncOrderTrackingStatus(order.id, "ORDER_PLACED");
+
+  revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard/provisioning");
+  revalidatePath("/dashboard");
+  return { success: true, orderId: order.id };
+}

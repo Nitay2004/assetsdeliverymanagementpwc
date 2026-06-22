@@ -1,0 +1,287 @@
+"use client";
+
+import { useState } from "react";
+import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/hooks/use-toast";
+import { useAlert } from "@/hooks/use-alert";
+import { addProduct, updateProduct, deleteProduct } from "@/app/actions/product-master";
+
+interface Product {
+  id: string;
+  make: string;
+  model: string;
+  partNo: string | null;
+  description: string | null;
+  hsnCode: string | null;
+  gstRate: number | null;
+}
+
+export function ProductTable({ products, canManage }: { products: Product[]; canManage: boolean }) {
+  const { toast } = useToast();
+  const { showAlert } = useAlert();
+  const router = useRouter();
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const emptyForm = { make: "", model: "", partNo: "", description: "", hsnCode: "", gstRate: "" };
+  const [form, setForm] = useState(emptyForm);
+
+  function openAddModal() {
+    setForm(emptyForm);
+    setEditingId(null);
+    setShowModal(true);
+  }
+
+  function openEditModal(p: Product) {
+    setForm({
+      make: p.make,
+      model: p.model,
+      partNo: p.partNo ?? "",
+      description: p.description ?? "",
+      hsnCode: p.hsnCode ?? "",
+      gstRate: p.gstRate?.toString() ?? "",
+    });
+    setEditingId(p.id);
+    setShowModal(true);
+  }
+
+  function closeModal() {
+    setShowModal(false);
+    setEditingId(null);
+    setForm(emptyForm);
+  }
+
+  async function handleSave() {
+    if (!form.make.trim() || !form.model.trim()) {
+      toast({ title: "Validation", description: "Make and Model are required.", variant: "error" });
+      return;
+    }
+
+    const ok = await showAlert({
+      title: editingId ? "Save changes?" : "Add product?",
+      description: editingId ? "Update this product record." : "Add a new product to the catalog.",
+      confirmLabel: editingId ? "Save" : "Add",
+      cancelLabel: "Cancel",
+    });
+    if (!ok) return;
+
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      fd.set("make", form.make.trim());
+      fd.set("model", form.model.trim());
+      fd.set("partNo", form.partNo.trim());
+      fd.set("description", form.description.trim());
+      fd.set("hsnCode", form.hsnCode.trim());
+      fd.set("gstRate", form.gstRate);
+
+      if (editingId) {
+        await updateProduct(editingId, fd);
+        toast({ title: "Saved", description: "Product updated.", variant: "success" });
+      } else {
+        await addProduct(fd);
+        toast({ title: "Added", description: "Product added to catalog.", variant: "success" });
+      }
+      closeModal();
+      router.refresh();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string, label: string) {
+    const ok = await showAlert({
+      title: "Delete product?",
+      description: `Remove "${label}" from product master?`,
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+    });
+    if (!ok) return;
+
+    try {
+      await deleteProduct(id);
+      toast({ title: "Deleted", description: "Product removed.", variant: "success" });
+      router.refresh();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "error" });
+    }
+  }
+
+  return (
+    <>
+      <div className="rounded-xl glass shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
+              <tr>
+                <th className="px-6 py-4 font-semibold">Make</th>
+                <th className="px-6 py-4 font-semibold">Model</th>
+                <th className="px-6 py-4 font-semibold">Part No</th>
+                <th className="px-6 py-4 font-semibold">Description</th>
+                <th className="px-6 py-4 font-semibold">HSN Code</th>
+                <th className="px-6 py-4 font-semibold text-right">GST Rate</th>
+                {canManage && <th className="px-6 py-4 font-semibold">Actions</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {products.length === 0 ? (
+                <tr>
+                  <td colSpan={canManage ? 7 : 6} className="px-6 py-8 text-center text-muted-foreground text-sm">
+                    No products yet. Click "Add Product" to create one.
+                  </td>
+                </tr>
+              ) : (
+                products.map(p => (
+                  <tr key={p.id} className="hover:bg-muted/10 transition-colors">
+                    <td className="px-6 py-3 font-medium">{p.make}</td>
+                    <td className="px-6 py-3">{p.model}</td>
+                    <td className="px-6 py-3">{p.partNo || "—"}</td>
+                    <td className="px-6 py-3 max-w-[200px] truncate">{p.description || "—"}</td>
+                    <td className="px-6 py-3 font-mono text-xs">{p.hsnCode || "—"}</td>
+                    <td className="px-6 py-3 text-right">{p.gstRate != null ? `${p.gstRate}%` : "—"}</td>
+                    {canManage && (
+                      <td className="px-6 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => openEditModal(p)}
+                            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted"
+                            title="Edit"
+                          >
+                            <Pencil className="size-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.id, `${p.make} ${p.model}`)}
+                            className="p-1.5 rounded-md text-destructive hover:bg-destructive/10"
+                            title="Delete"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {canManage && !showModal && (
+          <div className="px-6 py-3 border-t">
+            <button
+              onClick={openAddModal}
+              className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+              <Plus className="size-4" />
+              Add Product
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/30" onClick={closeModal} />
+          <div className="relative bg-background rounded-xl shadow-2xl w-full max-w-lg mx-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="text-lg font-bold">
+                {editingId ? "Edit Product" : "Add Product"}
+              </h2>
+              <button onClick={closeModal} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Make <span className="text-destructive">*</span></label>
+                  <input
+                    value={form.make}
+                    onChange={e => setForm(f => ({ ...f, make: e.target.value }))}
+                    placeholder="e.g. HP, Dell"
+                    className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Model <span className="text-destructive">*</span></label>
+                  <input
+                    value={form.model}
+                    onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
+                    placeholder="e.g. EliteBook 840"
+                    className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Part No</label>
+                <input
+                  value={form.partNo}
+                  onChange={e => setForm(f => ({ ...f, partNo: e.target.value }))}
+                  placeholder="Part number"
+                  className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Description</label>
+                <textarea
+                  value={form.description}
+                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Product description"
+                  rows={3}
+                  className="flex w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">HSN Code</label>
+                  <input
+                    value={form.hsnCode}
+                    onChange={e => setForm(f => ({ ...f, hsnCode: e.target.value }))}
+                    placeholder="e.g. 84713000"
+                    className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">GST Rate (%)</label>
+                  <input
+                    value={form.gstRate}
+                    onChange={e => setForm(f => ({ ...f, gstRate: e.target.value }))}
+                    type="number"
+                    step="0.01"
+                    placeholder="e.g. 18"
+                    className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 px-6 py-4 border-t bg-muted/20">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                {saving ? "Saving..." : editingId ? "Save Changes" : "Add Product"}
+              </button>
+              <button
+                onClick={closeModal}
+                className="rounded-lg border px-4 py-2.5 text-sm font-medium hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
