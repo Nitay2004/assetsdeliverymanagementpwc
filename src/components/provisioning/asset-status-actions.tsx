@@ -7,8 +7,7 @@ export function AssetStatusActions({ assetId, currentStatus }: { assetId: string
   const { toast } = useToast();
 
   const nextStatuses: Record<string, { label: string; status: string }[]> = {
-    allocated: [{ label: "Mark QC Pass", status: "qc_pass" }],
-    qc_pass: [{ label: "Mark OS Installed", status: "os_installed" }],
+    allocated: [{ label: "Mark OS Installed", status: "os_installed" }],
   };
 
   const actions = nextStatuses[currentStatus] ?? [];

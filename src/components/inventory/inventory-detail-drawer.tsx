@@ -345,6 +345,7 @@ export function InventoryDetailDrawer({
           {/* Status badge */}
           <div>
             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+              displayItem.status === "NEW" ? "bg-purple-100 text-purple-700" :
               displayItem.status === "AVAILABLE" ? "bg-green-100 text-green-700" :
               displayItem.status === "ALLOCATED" ? "bg-blue-100 text-blue-700" :
               "bg-red-100 text-red-700"
@@ -578,9 +579,10 @@ export function InventoryDetailDrawer({
                         {field.label}
                       </span>
                       {isStatus && value !== "—" ? (
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                           fieldName === "status"
-                            ? value === "AVAILABLE" ? "bg-green-100 text-green-700"
+                            ? value === "NEW" ? "bg-purple-100 text-purple-700"
+                            : value === "AVAILABLE" ? "bg-green-100 text-green-700"
                             : value === "ALLOCATED" ? "bg-blue-100 text-blue-700"
                             : "bg-red-100 text-red-700"
                             : statusColor(value)

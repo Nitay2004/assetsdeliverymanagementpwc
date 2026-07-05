@@ -8,6 +8,7 @@ const orderStatusTrackingMap: Record<string, string> = {
   ORDER_PLACED: "Order Placed",
   ALLOCATED: "Allocated",
   IN_PROVISIONING: "In Provisioning",
+  DC_REQUESTED: "DC Requested",
   DC_GENERATED: "DC Generated",
   PACKED_AND_LABELLED: "Packed & Labelled",
   DOCKET_ASSIGNED: "Docket Assigned",
@@ -15,9 +16,13 @@ const orderStatusTrackingMap: Record<string, string> = {
   EWAY_BILL_GENERATED: "E-way Bill Generated",
   DISPATCHED: "Dispatched",
   DELIVERED: "Delivered",
+  RTO: "RTO - Return to Origin",
+  RTO_DC_REQUESTED: "RTO DC Requested",
+  RTO_DC_GENERATED: "RTO DC Generated",
+  RTO_EWAY_BILL_REQUESTED: "RTO E-Way Bill Requested",
+  RTO_EWAY_BILL_GENERATED: "RTO E-Way Bill Generated",
   DELIVERY_CONFIRMED: "Delivery Confirmed",
   INVOICED: "Invoiced",
-  PAYMENT_RECEIVED: "Payment Received",
   WARRANTY_UPDATED: "Warranty Updated",
 };
 
@@ -64,7 +69,7 @@ export async function allocateInventoryToOrder(
   // Mark inventory items as ALLOCATED
   await prisma.inventoryItem.updateMany({
     where: { id: { in: inventoryItemIds } },
-    data: { status: "ALLOCATED" },
+    data: { status: "ALLOCATED", trackingStatus: "Allocated" },
   });
 
   revalidatePath("/dashboard/warehouse");
@@ -78,7 +83,7 @@ export async function updateOrderStatus(orderId: string, status: string) {
   
   await prisma.order.update({
     where: { id: orderId },
-    data: { status },
+    data: { status: status as any },
   });
 
   await syncOrderTrackingStatus(orderId, status);

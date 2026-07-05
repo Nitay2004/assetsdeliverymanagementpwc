@@ -123,7 +123,7 @@ const intFields = new Set([
 ]);
 
 const validStatuses = new Set([
-  "AVAILABLE", "ALLOCATED", "DEFECTIVE", "RETIRED",
+  "NEW", "AVAILABLE", "ALLOCATED", "DEFECTIVE", "RETIRED",
 ]);
 
 function parseValue(value: string, field: string): unknown {

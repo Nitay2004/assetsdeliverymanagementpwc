@@ -15,6 +15,7 @@ interface Product {
   description: string | null;
   hsnCode: string | null;
   gstRate: number | null;
+  warranty: string | null;
 }
 
 export function ProductTable({ products, canManage }: { products: Product[]; canManage: boolean }) {
@@ -25,7 +26,7 @@ export function ProductTable({ products, canManage }: { products: Product[]; can
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const emptyForm = { make: "", model: "", partNo: "", description: "", hsnCode: "", gstRate: "" };
+  const emptyForm = { make: "", model: "", partNo: "", description: "", hsnCode: "", gstRate: "", warranty: "" };
   const [form, setForm] = useState(emptyForm);
 
   function openAddModal() {
@@ -42,6 +43,7 @@ export function ProductTable({ products, canManage }: { products: Product[]; can
       description: p.description ?? "",
       hsnCode: p.hsnCode ?? "",
       gstRate: p.gstRate?.toString() ?? "",
+      warranty: p.warranty ?? "",
     });
     setEditingId(p.id);
     setShowModal(true);
@@ -76,6 +78,7 @@ export function ProductTable({ products, canManage }: { products: Product[]; can
       fd.set("description", form.description.trim());
       fd.set("hsnCode", form.hsnCode.trim());
       fd.set("gstRate", form.gstRate);
+      fd.set("warranty", form.warranty.trim());
 
       if (editingId) {
         await updateProduct(editingId, fd);
@@ -124,13 +127,14 @@ export function ProductTable({ products, canManage }: { products: Product[]; can
                 <th className="px-6 py-4 font-semibold">Description</th>
                 <th className="px-6 py-4 font-semibold">HSN Code</th>
                 <th className="px-6 py-4 font-semibold text-right">GST Rate</th>
+                <th className="px-6 py-4 font-semibold">Warranty</th>
                 {canManage && <th className="px-6 py-4 font-semibold">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y">
               {products.length === 0 ? (
                 <tr>
-                  <td colSpan={canManage ? 7 : 6} className="px-6 py-8 text-center text-muted-foreground text-sm">
+                  <td colSpan={canManage ? 8 : 7} className="px-6 py-8 text-center text-muted-foreground text-sm">
                     No products yet. Click "Add Product" to create one.
                   </td>
                 </tr>
@@ -143,6 +147,7 @@ export function ProductTable({ products, canManage }: { products: Product[]; can
                     <td className="px-6 py-3 max-w-[200px] truncate">{p.description || "—"}</td>
                     <td className="px-6 py-3 font-mono text-xs">{p.hsnCode || "—"}</td>
                     <td className="px-6 py-3 text-right">{p.gstRate != null ? `${p.gstRate}%` : "—"}</td>
+                    <td className="px-6 py-3">{p.warranty || "—"}</td>
                     {canManage && (
                       <td className="px-6 py-3">
                         <div className="flex items-center gap-1.5">
@@ -237,6 +242,16 @@ export function ProductTable({ products, canManage }: { products: Product[]; can
                   placeholder="Product description"
                   rows={3}
                   className="flex w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-foreground">Warranty</label>
+                <input
+                  value={form.warranty}
+                  onChange={e => setForm(f => ({ ...f, warranty: e.target.value }))}
+                  placeholder="e.g. 1 Year, 3 Years"
+                  className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
 

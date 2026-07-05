@@ -5,6 +5,21 @@ import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
 
+async function syncInventoryWarehouseLocation(orderId: string, warehouseLocation: string) {
+  if (!warehouseLocation) return;
+  const assetItems = await prisma.asset.findMany({
+    where: { orderId, inventoryItemId: { not: null } },
+    select: { inventoryItemId: true },
+  });
+  const itemIds = assetItems.map(a => a.inventoryItemId).filter(Boolean) as string[];
+  if (itemIds.length > 0) {
+    await prisma.inventoryItem.updateMany({
+      where: { id: { in: itemIds } },
+      data: { invoicingWarehouse: warehouseLocation },
+    });
+  }
+}
+
 export async function updateAssetStatus(assetId: string, status: string) {
   const user = await getSession();
   if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING")) {
@@ -24,7 +39,7 @@ export async function advanceOrderToProvisioning(
   data: { warehouseLocation: string; provisioningLocation: string; engineerName: string }
 ) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING")) {
+  if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING" && user.role !== "WAREHOUSE")) {
     throw new Error("Unauthorized");
   }
 
@@ -33,6 +48,7 @@ export async function advanceOrderToProvisioning(
     include: { assets: true },
   });
   if (!order) throw new Error("Order not found.");
+  if (order.status !== "ORDER_PLACED") throw new Error("Order has already been advanced to provisioning.");
 
   const allAllocated = order.assets.every(a => a.inventoryItemId !== null);
   if (!allAllocated) throw new Error("Not all assets are allocated yet.");
@@ -47,10 +63,37 @@ export async function advanceOrderToProvisioning(
     },
   });
 
+  await syncInventoryWarehouseLocation(orderId, data.warehouseLocation);
   await syncOrderTrackingStatus(orderId, "IN_PROVISIONING");
 
   revalidatePath("/dashboard/provisioning");
   revalidatePath("/dashboard/warehouse");
+}
+
+export async function getOrderInventoryLocations(orderId: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      assets: {
+        include: {
+          inventoryItem: {
+            select: { invoicingWarehouse: true },
+          },
+        },
+      },
+    },
+  });
+  if (!order) return { warehouseLocation: "", provisioningLocation: "" };
+
+  const warehouseLocs = order.assets
+    .map(a => a.inventoryItem?.invoicingWarehouse)
+    .filter(Boolean) as string[];
+  const uniqueWarehouse = [...new Set(warehouseLocs)];
+
+  return {
+    warehouseLocation: uniqueWarehouse.length === 1 ? uniqueWarehouse[0] : (warehouseLocs[0] ?? ""),
+    provisioningLocation: "",
+  };
 }
 
 export async function getProvisioningDropdowns() {
@@ -111,7 +154,84 @@ export async function updateOrderProvisioningDetails(
     },
   });
 
+  await syncInventoryWarehouseLocation(orderId, data.warehouseLocation);
   revalidatePath("/dashboard/provisioning");
+}
+
+export async function bulkMarkOsInstalled(assetIds: string[]) {
+  const user = await getSession();
+  if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING")) {
+    throw new Error("Unauthorized");
+  }
+
+  await prisma.asset.updateMany({
+    where: { id: { in: assetIds }, status: "allocated" },
+    data: { status: "os_installed" },
+  });
+
+  revalidatePath("/dashboard/provisioning");
+}
+
+export async function bulkAdvanceOrdersToProvisioning(
+  orderIds: string[],
+  data: { warehouseLocation: string; provisioningLocation: string; engineerName: string }
+) {
+  const user = await getSession();
+  if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING" && user.role !== "WAREHOUSE")) {
+    throw new Error("Unauthorized");
+  }
+
+  const orders = await prisma.order.findMany({
+    where: { id: { in: orderIds } },
+    include: { assets: true },
+  });
+
+  for (const order of orders) {
+    if (order.status !== "ORDER_PLACED") continue;
+
+    const allAllocated = order.assets.every(a => a.inventoryItemId !== null);
+    if (!allAllocated) continue;
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        status: "IN_PROVISIONING",
+        warehouseLocation: data.warehouseLocation || null,
+        provisioningLocation: data.provisioningLocation || null,
+        engineerName: data.engineerName || null,
+      },
+    });
+
+    await syncInventoryWarehouseLocation(order.id, data.warehouseLocation);
+    await syncOrderTrackingStatus(order.id, "IN_PROVISIONING");
+  }
+
+  revalidatePath("/dashboard/provisioning");
+  revalidatePath("/dashboard/warehouse");
+}
+
+export async function handoverToLogistics(orderIds: string[]) {
+  const user = await getSession();
+  if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING")) {
+    throw new Error("Unauthorized");
+  }
+
+  // Update tracking status on inventory items to "Handed Over to Logistics"
+  const assets = await prisma.asset.findMany({
+    where: { orderId: { in: orderIds }, inventoryItemId: { not: null } },
+    select: { inventoryItemId: true },
+  });
+
+  const itemIds = assets.map(a => a.inventoryItemId).filter(Boolean) as string[];
+  if (itemIds.length > 0) {
+    await prisma.inventoryItem.updateMany({
+      where: { id: { in: itemIds } },
+      data: { trackingStatus: "Handed Over to Logistics" },
+    });
+  }
+
+  revalidatePath("/dashboard/provisioning");
+  revalidatePath("/dashboard/logistics");
 }
 
 export async function removeFromProvisioning(orderId: string) {

@@ -11,6 +11,7 @@ enum OrderStatus {
   ORDER_PLACED
   ALLOCATED
   IN_PROVISIONING
+  DC_REQUESTED
   DC_GENERATED
   PACKED_AND_LABELLED
   DOCKET_ASSIGNED
@@ -18,17 +19,40 @@ enum OrderStatus {
   EWAY_BILL_GENERATED
   DISPATCHED
   DELIVERED
+  RTO
+  RTO_DC_REQUESTED
+  RTO_DC_GENERATED
+  RTO_EWAY_BILL_REQUESTED
+  RTO_EWAY_BILL_GENERATED
+  RTO_IN_TRANSIT
+  RTO_DELIVERED_TO_WAREHOUSE
   DELIVERY_CONFIRMED
   INVOICED
-  PAYMENT_RECEIVED
   WARRANTY_UPDATED
 }
 
 enum InventoryStatus {
+  NEW
   AVAILABLE
   ALLOCATED
   DEFECTIVE
   RETIRED
+}
+
+enum ReversePickupStatus {
+  REQUESTED
+  PARTNER_ASSIGNED
+  DOCKET_REQUESTED
+  INSPECTED
+  PICKED_UP
+  RECEIVED_AT_WAREHOUSE
+  QC_COMPLETED
+  DC_REQUESTED
+  DC_GENERATED
+  EWAY_BILL_REQUESTED
+  EWAY_BILL_GENERATED
+  BLANCO_CERTIFIED
+  COMPLETED
 }
 
 enum UserRole {
@@ -38,6 +62,7 @@ enum UserRole {
   FINANCE
   LOGISTICS
   WARRANTY
+  REVERSE_PICKUP
 }
 
 model User {
@@ -84,14 +109,32 @@ model Order {
 
   assets               Asset[]
   dockets              Docket[]
+  deliveryChallans     DeliveryChallan[]
+  rtoRecords           RtoRecord[]
 
   @@map("orders")
+}
+
+model RtoRecord {
+  id              String    @id @default(uuid()) @db.Uuid
+  orderId         String    @unique @map("order_id") @db.Uuid
+  warehouseId     String?   @map("warehouse_id") @db.Uuid
+  receivedBy      String?   @map("received_by")
+  rtoDocketNumber String?   @map("rto_docket_number")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  order           Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  warehouse       Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+
+  @@map("rto_records")
 }
 
 model InventoryItem {
   id                        String          @id @default(uuid()) @db.Uuid
   serialNumber              String          @unique @map("serial_number")
   model                     String
+  partNo                    String?         @map("part_no")
   specs                     String?
   status                    InventoryStatus @default(AVAILABLE)
   partner                   String?
@@ -160,6 +203,7 @@ model InventoryItem {
 
   assets                    Asset[]
   assignmentRecords         AssignmentRecord[]
+  reversePickupRequests     ReversePickupRequest[]
 
   @@map("inventory_items")
 }
@@ -271,6 +315,140 @@ model DeliveryRecord {
   @@map("delivery_records")
 }
 
+model ReversePickupRequest {
+  id                    String               @id @default(uuid()) @db.Uuid
+  requestNumber         String               @unique
+
+  // ── Request Info ──
+  year                  Int?                 // Automatic
+  type                  String?              // DD
+  srNo                  String?              @map("sr_no")
+  requestDateHp         DateTime?            @map("request_date_hp") @db.Date
+  employeeId            String?              @map("employee_id")
+  alternateId           String?              @map("alternate_id")
+  lastWorkingDay        DateTime?            @map("last_working_day") @db.Date
+
+  // ── User Details ──
+  employeeName          String               @map("employee_name")
+  emailId               String?              @map("email_id")
+  mobileNumber          String?              @map("mobile_number")
+  contact               String?              // Manual - additional contact
+
+  // ── Asset Details ──
+  serialNumber          String               @map("serial_number")
+  model                 String               // Laptop Model (Automatic)
+  entity                String?              // DD
+  imageType             String?              @map("image_type") // DD
+  accessories           String?              // Manual
+  reason                String?              // DD
+
+  // ── Pickup Location ──
+  pickupAddress         String               @map("pickup_address")
+  landmark              String?              @map("land_mark")
+  city                  String?
+  state                 String?
+  pinCode               String?              @map("pin_code")
+
+  // ── Warehouse / Logistics ──
+  warehouseLocation     String?              @map("warehouse_location") // DD
+  receiverSerialNo      String?              @map("receiver_serial_no")
+  receiverSnEntity      String?              @map("receiver_sn_entity") // Automatic
+  displayStatus         String?              @map("display_status") // DD
+  eta                   DateTime?            @map("eta") @db.Date
+  futureDatePickup      DateTime?            @map("future_date_pickup") @db.Date
+  dependency            String?              // DD
+  remarks               String?              // Manual (general remarks)
+
+  // ── SLA / TAT (mostly Automatic) ──
+  emailReceivedHour     String?              @map("email_received_hour")
+  cutOffStatus          String?              @map("cut_off_status") // Automatic
+  slaStartDate          DateTime?            @map("sla_start_date") // Automatic
+  slaState              String?              @map("sla_state") // Automatic
+  zone1                 String?              @map("zone_1") // Automatic
+  tier1                 String?              @map("tier_1") // Automatic
+  odaLocation           String?              @map("oda_location") // Automatic
+  tat                   String?              // Automatic
+  deliveryTat           String?              @map("delivery_tat") // Automatic
+  actualDeliveryPodDate DateTime?            @map("actual_delivery_pod_date") @db.Date
+  sla                   String?              // Automatic
+  laptopAcceptanceDate  DateTime?            @map("laptop_acceptance_date") // Automatic
+
+  // ── Courier / Tracking ──
+  courierName           String?              @map("courier_name") // DD
+  docketNumber          String?              @map("docket_number")
+  pickupDate            DateTime?            @map("pickup_date") @db.Date
+
+  dcNo                  String?              @map("dc_no") // Automatic
+  srnNo                 String?              @map("srn_no")
+  eWayBillNo            String?              @map("e_way_bill_no") // Automatic
+  etaForUnitReceived    DateTime?            @map("eta_for_unit_received") @db.Date
+  caseAge               String?              @map("case_age") // Automatic
+
+  // ── Partner ──
+  partnerName           String?              @map("partner_name")
+  partnerReference      String?              @map("partner_reference")
+
+  // ── Inspection ──
+  inspectionRemarks     String?              @map("inspection_remarks")
+  inspectionDate        DateTime?            @map("inspection_date") @db.Date
+
+  // ── Warehouse Receipt ──
+  receivedDate          DateTime?            @map("received_date") @db.Date
+  receivedBy            String?              @map("received_by")
+
+  // ── QC ──
+  qcRemarks             String?              @map("qc_remarks")
+  qcDate                DateTime?            @map("qc_date") @db.Date
+  qcPerformedBy         String?              @map("qc_performed_by")
+  qcResult              String?              @map("qc_result")
+
+  // ── Blancco ──
+  blanccoYesNo          String?              @map("blancco_yes_no") // DD
+  blanccoDate           DateTime?            @map("blancco_date") @db.Date
+  blancoCertificateUrl  String?              @map("blanco_certificate_url")
+  blancoCertificateDate DateTime?            @map("blanco_certificate_date") @db.Date
+
+  // ── Case Info ──
+  caseId                String?              @map("case_id")
+  issueReported         String?              @map("issue_reported")
+  replacementPart       String?              @map("replacement_part")
+  exceptionRemarks      String?              @map("exception_remarks")
+  remark                String?
+
+  // ── Disposition ──
+  finalDisposition      String?              @map("final_disposition")
+
+  // ── Workflow ──
+  status                ReversePickupStatus   @default(REQUESTED)
+
+  inventoryItemId       String?              @map("inventory_item_id") @db.Uuid
+  inventoryItem         InventoryItem?       @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+
+  createdBy             String?              @map("created_by")
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+
+  deliveryChallans      DeliveryChallan[]
+
+  @@map("reverse_pickup_requests")
+}
+
+model VendorMaster {
+  id            String   @id @default(uuid()) @db.Uuid
+  grnNumber     String   @unique @map("grn_number")
+  name          String
+  email         String?
+  phone         String?
+  address       String?
+  contactPerson String?  @map("contact_person")
+  gstNumber     String?  @map("gst_number")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("vendor_master")
+}
+
 model ProductMaster {
   id          String   @id @default(uuid()) @db.Uuid
   make        String
@@ -279,6 +457,7 @@ model ProductMaster {
   description String?
   hsnCode     String?  @map("hsn_code")
   gstRate     Decimal? @map("gst_rate") @db.Decimal(5, 2)
+  warranty    String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -297,4 +476,70 @@ model Docket {
   order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("dockets")
+}
+
+model Warehouse {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  location  String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  deliveryChallans DeliveryChallan[]
+  rtoRecords       RtoRecord[]
+
+  @@map("warehouses")
+}
+
+model DeliveryChallan {
+  id                      String                @id @default(uuid()) @db.Uuid
+  orderId                 String?               @map("order_id") @db.Uuid
+  reversePickupRequestId  String?               @map("reverse_pickup_request_id") @db.Uuid
+  dcNumber                String                @unique @map("dc_number")
+  dcDate                  DateTime              @map("dc_date") @db.Date
+  warehouseId             String?               @map("warehouse_id") @db.Uuid
+  shipToLocation          String?               @map("ship_to_location")
+  billToLocation          String?               @map("bill_to_location")
+  modeOfPayment           String?               @map("mode_of_payment")
+  referenceNo             String?               @map("reference_no")
+  referenceDate           DateTime?             @map("reference_date") @db.Date
+  otherReferences         String?               @map("other_references")
+  buyersOrderNo           String?               @map("buyers_order_no")
+  buyersOrderDate         DateTime?             @map("buyers_order_date") @db.Date
+  dispatchDocNo           String?               @map("dispatch_doc_no")
+  dispatchedThrough       String?               @map("dispatched_through")
+  destination             String?               @map("destination")
+  termsOfDelivery         String?               @map("terms_of_delivery")
+  amountInWords           String?               @map("amount_in_words")
+  taxableValue            Decimal?              @map("taxable_value") @db.Decimal(12, 2)
+  igst                    Decimal?              @map("igst") @db.Decimal(12, 2)
+  totalTaxAmount          Decimal?              @map("total_tax_amount") @db.Decimal(12, 2)
+  taxAmountInWords        String?               @map("tax_amount_in_words")
+  createdAt               DateTime              @default(now()) @map("created_at")
+  updatedAt               DateTime              @updatedAt @map("updated_at")
+
+  order                   Order?                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  reversePickupRequest    ReversePickupRequest? @relation(fields: [reversePickupRequestId], references: [id], onDelete: Cascade)
+  warehouse               Warehouse?            @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  items                   DeliveryChallanItem[]
+
+  @@map("delivery_challans")
+}
+
+model DeliveryChallanItem {
+  id                String           @id @default(uuid()) @db.Uuid
+  deliveryChallanId String           @map("delivery_challan_id") @db.Uuid
+  description       String
+  hsnSac            String?          @map("hsn_sac")
+  quantity          Int
+  rate              Decimal          @db.Decimal(12, 2)
+  amount            Decimal          @db.Decimal(12, 2)
+  taxableValue      Decimal?         @map("taxable_value") @db.Decimal(12, 2)
+  igstRate          Decimal?         @map("igst_rate") @db.Decimal(5, 2)
+  igstAmount        Decimal?         @map("igst_amount") @db.Decimal(12, 2)
+  createdAt         DateTime         @default(now()) @map("created_at")
+
+  deliveryChallan   DeliveryChallan  @relation(fields: [deliveryChallanId], references: [id], onDelete: Cascade)
+
+  @@map("delivery_challan_items")
 }

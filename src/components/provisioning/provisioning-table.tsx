@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { Edit3, Undo2, User, MapPin } from "lucide-react";
-import { updateAssetStatus, removeFromProvisioning, updateOrderProvisioningDetails, getProvisioningDropdowns, addProvisioningDropdownOption, deleteProvisioningDropdownOption } from "@/app/actions/provisioning";
+import { useState, useCallback, useEffect } from "react";
+import { Edit3, Undo2, User, MapPin, Loader2, CheckSquare } from "lucide-react";
+import { updateAssetStatus, removeFromProvisioning, bulkMarkOsInstalled, handoverToLogistics, getProvisioningDropdowns, addProvisioningDropdownOption, deleteProvisioningDropdownOption } from "@/app/actions/provisioning";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { ProvisioningEditModal } from "./provisioning-edit-modal";
+import { ScrollToItem } from "@/components/shared/scroll-to-item";
 
 const ASSET_STATUS_STYLES: Record<string, string> = {
   pending:     "bg-yellow-100 text-yellow-700",
   allocated:   "bg-blue-100 text-blue-700",
-  qc_pass:     "bg-green-100 text-green-700",
-  os_installed:"bg-purple-100 text-purple-700",
+  os_installed:"bg-green-100 text-green-700",
 };
 
 const STICKER_COLORS: Record<string, { dot: string; bg: string; text: string }> = {
@@ -35,6 +35,7 @@ interface InventoryItem {
   model: string;
   imageType: string | null;
   stickerColour: string | null;
+  trackingStatus: string | null;
 }
 
 interface Asset {
@@ -59,17 +60,73 @@ interface Props {
   orders: Order[];
   canManage: boolean;
   engineers: string[];
+  selectedId?: string;
 }
 
-export function ProvisioningTable({ orders, canManage, engineers }: Props) {
+export function ProvisioningTable({ orders, canManage, engineers, selectedId }: Props) {
   const { toast } = useToast();
   const router = useRouter();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editOrderId, setEditOrderId] = useState<string | null>(null);
   const [editDefaults, setEditDefaults] = useState<{ warehouseLocation: string; provisioningLocation: string; engineerName: string } | null>(null);
 
   const rows = orders.flatMap(order =>
     order.assets.map(asset => ({ order, asset }))
   );
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === rows.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(rows.map(r => r.asset.id)));
+    }
+  };
+
+  const uniqueOrderIdsFromSelection = [...new Set(
+    rows.filter(r => selectedIds.has(r.asset.id)).map(r => r.order.id)
+  )];
+
+  async function handleBulkOsInstall() {
+    const assetIds = rows
+      .filter(r => selectedIds.has(r.asset.id) && r.asset.status === "allocated")
+      .map(r => r.asset.id);
+    if (assetIds.length === 0) {
+      toast({ title: "Nothing to update", description: "No allocated assets selected.", variant: "error" });
+      return;
+    }
+    try {
+      await bulkMarkOsInstalled(assetIds);
+      toast({ title: "Updated", description: `${assetIds.length} asset(s) marked OS Installed.`, variant: "success" });
+      setSelectedIds(new Set());
+      router.refresh();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "error" });
+    }
+  }
+
+  async function handleHandoverToLogistics(orderIds?: string[]) {
+    const ids = orderIds ?? uniqueOrderIdsFromSelection;
+    if (ids.length === 0) {
+      toast({ title: "Nothing to handover", description: "No orders selected.", variant: "error" });
+      return;
+    }
+    try {
+      await handoverToLogistics(ids);
+      toast({ title: "Handed Over", description: `${ids.length} order(s) sent to logistics.`, variant: "success" });
+      setSelectedIds(new Set());
+      router.refresh();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "error" });
+    }
+  }
 
   async function handleStatusUpdate(assetId: string, newStatus: string) {
     try {
@@ -110,11 +167,51 @@ export function ProvisioningTable({ orders, canManage, engineers }: Props) {
 
   return (
     <>
+      {/* Bulk action bar */}
+      {canManage && selectedIds.size > 0 && (
+        <div className="sticky top-16 z-30 -mt-4 mb-4 flex items-center justify-between gap-4 px-5 py-3 rounded-xl glass shadow-md border bg-background/95 backdrop-blur">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <CheckSquare className="size-4 text-primary" />
+            {selectedIds.size} selected
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleBulkOsInstall}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors"
+            >
+              Mark OS Installed
+            </button>
+            <button
+              onClick={() => handleHandoverToLogistics()}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            >
+              Handed over to Logistics
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-muted transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-xl glass shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
               <tr>
+                {canManage && (
+                  <th className="px-4 py-4 w-10">
+                    <input
+                      type="checkbox"
+                      className="accent-primary size-4"
+                      checked={selectedIds.size === rows.length && rows.length > 0}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-4 font-semibold">Serial No</th>
                 <th className="px-4 py-4 font-semibold">Model</th>
                 <th className="px-4 py-4 font-semibold">Image Type</th>
@@ -128,19 +225,29 @@ export function ProvisioningTable({ orders, canManage, engineers }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {rows.map(({ order, asset }) => {
+              <ScrollToItem selectedId={selectedId} prefix="prov" />
+              {orders.flatMap(order =>
+                order.assets.map((asset, idx) => {
                 const inv = asset.inventoryItem;
                 const sColor = inv?.stickerColour
                   ? STICKER_COLORS[inv.stickerColour.toLowerCase()]
                   : null;
                 const nextStatus = asset.status === "allocated"
-                  ? { label: "Mark QC Pass", status: "qc_pass" }
-                  : asset.status === "qc_pass"
                   ? { label: "Mark OS Installed", status: "os_installed" }
                   : null;
 
                 return (
-                  <tr key={asset.id} className="hover:bg-muted/10 transition-colors">
+                  <tr key={asset.id} id={idx === 0 ? `prov-${order.id}` : undefined} className={`hover:bg-muted/10 transition-colors ${selectedIds.has(asset.id) ? "bg-primary/5" : ""}`}>
+                    {canManage && (
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          className="accent-primary size-4"
+                          checked={selectedIds.has(asset.id)}
+                          onChange={() => toggleSelect(asset.id)}
+                        />
+                      </td>
+                    )}
                     <td className="px-4 py-3 font-mono text-xs">{inv?.serialNumber ?? "—"}</td>
                     <td className="px-4 py-3">{inv?.model ?? "—"}</td>
                     <td className="px-4 py-3">
@@ -173,22 +280,18 @@ export function ProvisioningTable({ orders, canManage, engineers }: Props) {
                         <span className="inline-flex items-center gap-1">
                           <MapPin className="size-3" /> {order.warehouseLocation}
                         </span>
-                      ) : (
-                        "—"
-                      )}
+                      ) : "—"}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {order.provisioningLocation ? (
                         <span className="inline-flex items-center gap-1">
                           <MapPin className="size-3" /> {order.provisioningLocation}
                         </span>
-                      ) : (
-                        "—"
-                      )}
+                      ) : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${ASSET_STATUS_STYLES[asset.status] ?? "bg-gray-100 text-gray-600"}`}>
-                        {asset.status === "os_installed" ? "OS Installed" : asset.status === "qc_pass" ? "QC Pass" : asset.status.charAt(0).toUpperCase() + asset.status.slice(1)}
+                        {asset.status === "os_installed" ? "OS Installed" : asset.status.charAt(0).toUpperCase() + asset.status.slice(1)}
                       </span>
                     </td>
                     {canManage && (
@@ -202,29 +305,29 @@ export function ProvisioningTable({ orders, canManage, engineers }: Props) {
                               {nextStatus.label}
                             </button>
                           )}
-                          {asset.status === "os_installed" && (
-                            <span className="text-xs text-green-600 font-semibold">Done</span>
+                          {asset.status === "os_installed" && inv?.trackingStatus !== "Handed Over to Logistics" && order.status !== "DOCKET_ASSIGNED" && (
+                            <button
+                              onClick={() => handleHandoverToLogistics([order.id])}
+                              className="px-2 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap"
+                            >
+                              Handed over to Logistics
+                            </button>
                           )}
-                          <button
-                            onClick={() => openEdit(order)}
-                            className="p-1 rounded hover:bg-muted transition-colors"
-                            title="Edit provisioning details"
-                          >
-                            <Edit3 className="size-3.5 text-muted-foreground" />
-                          </button>
-                          <button
-                            onClick={() => handleRemove(order.id)}
-                            className="p-1 rounded hover:bg-destructive/10 transition-colors"
-                            title="Remove from provisioning"
-                          >
-                            <Undo2 className="size-3.5 text-destructive" />
-                          </button>
+                          {asset.status === "os_installed" && (inv?.trackingStatus === "Handed Over to Logistics" || order.status === "DOCKET_ASSIGNED") && (
+                            <span className="text-xs text-green-600 font-semibold">Handed Over</span>
+                          )}
+                          <button onClick={() => openEdit(order)}
+                            className="p-1 rounded hover:bg-muted transition-colors" title="Edit provisioning details"
+                          ><Edit3 className="size-3.5 text-muted-foreground" /></button>
+                          <button onClick={() => handleRemove(order.id)}
+                            className="p-1 rounded hover:bg-destructive/10 transition-colors" title="Remove from provisioning"
+                          ><Undo2 className="size-3.5 text-destructive" /></button>
                         </div>
                       </td>
                     )}
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>

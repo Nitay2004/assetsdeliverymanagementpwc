@@ -11,10 +11,14 @@ import {
   Layers,
   AlertTriangle,
 } from "lucide-react";
+import type { OrderStatus } from "@prisma/client";
 import Link from "next/link";
 import { QuickStat } from "@/components/dashboard/quick-stat";
 import { OrderPipeline } from "@/components/dashboard/order-pipeline";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
+import { TotalStockCard } from "@/components/dashboard/total-stock-card";
+import { DateRangePicker } from "@/components/dashboard/date-range-picker";
+import { OrderStatCard } from "@/components/dashboard/order-stat-card";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   ORDER_PLACED: { label: "Order Placed", color: "#eab308" },
@@ -29,7 +33,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   DELIVERED: { label: "Delivered", color: "#22c55e" },
   DELIVERY_CONFIRMED: { label: "Confirmed", color: "#16a34a" },
   INVOICED: { label: "Invoiced", color: "#0ea5e9" },
-  PAYMENT_RECEIVED: { label: "Paid", color: "#059669" },
   WARRANTY_UPDATED: { label: "Warranty", color: "#7c3aed" },
 };
 
@@ -45,45 +48,78 @@ function timeAgo(date: Date): string {
   return `${days}d ago`;
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage(props: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await getSession();
+  const searchParams = await props.searchParams;
+  const fromRaw = typeof searchParams.from === "string" ? searchParams.from : undefined;
+  const toRaw = typeof searchParams.to === "string" ? searchParams.to : undefined;
+
+  const dateFilter: Record<string, Date> = {};
+  if (fromRaw) dateFilter.gte = new Date(fromRaw);
+  if (toRaw) {
+    const end = new Date(toRaw);
+    end.setDate(end.getDate() + 1);
+    dateFilter.lt = end;
+  }
+  const createdAt = Object.keys(dateFilter).length ? dateFilter : undefined;
+  const orderWhere = createdAt ? { createdAt } : undefined;
+  const inventoryWhere = createdAt ? { createdAt } : undefined;
+  const reverseWhere = createdAt ? { createdAt } : undefined;
 
   // Fetch all data in parallel
-  const [orders, inventoryItems, recentOrders, recentInventory] = await Promise.all([
+  const [orders, inventoryItems, recentOrders, recentInventory, reversePickupCount] = await Promise.all([
     prisma.order.findMany({
+      where: orderWhere,
       include: { assets: true },
     }),
-    prisma.inventoryItem.findMany(),
+    prisma.inventoryItem.findMany({
+      where: inventoryWhere,
+    }),
     prisma.order.findMany({
+      where: orderWhere,
       orderBy: { updatedAt: "desc" },
       take: 5,
     }),
     prisma.inventoryItem.findMany({
-      where: { status: "ALLOCATED" },
+      where: { ...(inventoryWhere ?? {}), status: "ALLOCATED" },
       orderBy: { updatedAt: "desc" },
       take: 5,
+    }),
+    prisma.reversePickupRequest.count({
+      where: reverseWhere,
     }),
   ]);
 
   // Compute stats
-  const totalOrders = orders.length;
-  const activeOrders = orders.filter(
-    (o) => !["DELIVERED", "DELIVERY_CONFIRMED", "INVOICED", "PAYMENT_RECEIVED", "WARRANTY_UPDATED"].includes(o.status)
-  ).length;
-  const deliveredOrders = orders.filter(
-    (o) => ["DELIVERED", "DELIVERY_CONFIRMED"].includes(o.status)
-  ).length;
-  const pendingAllocation = orders.filter((o) => o.status === "ORDER_PLACED").length;
-  const inTransit = orders.filter(
-    (o) => o.status === "DISPATCHED"
-  ).length;
+  const inProvisioningCount = orders.filter(o => o.status === "IN_PROVISIONING").length;
+  const pendingAllocationCount = orders.filter(o => o.status === "ORDER_PLACED").length;
+  const inTransitCount = orders.filter(o => o.status === "DISPATCHED").length;
+  const deliveredCount = orders.filter(o => ["DELIVERED", "DELIVERY_CONFIRMED"].includes(o.status)).length;
+  const rtoCount = orders.filter(o => ["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"].includes(o.status)).length;
 
   const totalInventory = inventoryItems.length;
+  const newStock = inventoryItems.filter((i) => i.status === "NEW").length;
   const availableStock = inventoryItems.filter((i) => i.status === "AVAILABLE").length;
   const allocatedStock = inventoryItems.filter((i) => i.status === "ALLOCATED").length;
-  const defectiveStock = inventoryItems.filter((i) => i.status === "DEFECTIVE").length;
 
   const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
+
+  // Group inventory items by invoicing warehouse
+  const warehouseMap = new Map<string, number>();
+  let unallocatedCount = 0;
+  for (const item of inventoryItems) {
+    const wh = item.invoicingWarehouse?.trim();
+    if (wh) {
+      warehouseMap.set(wh, (warehouseMap.get(wh) || 0) + 1);
+    } else {
+      unallocatedCount++;
+    }
+  }
+
+  const stockByWarehouse = Array.from(warehouseMap.entries())
+    .sort((a, b) => b[1] - a[1]);
 
   // Pipeline data
   const statusCounts = orders.reduce<Record<string, number>>((acc, o) => {
@@ -132,7 +168,7 @@ export default async function DashboardPage() {
   // Quick-links for modules
   const modules = [
     { label: "Inventory", href: "/dashboard/inventory", icon: <Package className="size-4" />, count: totalInventory, desc: "Total items" },
-    { label: "Warehouse", href: "/dashboard/warehouse", icon: <Layers className="size-4" />, count: pendingAllocation, desc: "Pending allocation" },
+    { label: "Warehouse", href: "/dashboard/warehouse", icon: <Layers className="size-4" />, count: pendingAllocationCount, desc: "Pending allocation" },
     { label: "Provisioning", href: "/dashboard/provisioning", icon: <Laptop className="size-4" />, count: orders.filter((o) => ["ALLOCATED", "IN_PROVISIONING"].includes(o.status)).length, desc: "In progress" },
     { label: "Finance", href: "/dashboard/finance", icon: <CheckCircle className="size-4" />, count: orders.filter((o) => ["IN_PROVISIONING", "DC_GENERATED", "INVOICED"].includes(o.status)).length, desc: "Pending finance" },
     { label: "Logistics", href: "/dashboard/logistics", icon: <Truck className="size-4" />, count: orders.filter((o) => ["DC_GENERATED", "PACKED_AND_LABELLED", "DISPATCHED"].includes(o.status)).length, desc: "In logistics" },
@@ -142,80 +178,116 @@ export default async function DashboardPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Welcome header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Welcome back{user?.name ? `, ${user.name}` : ""}! 👋
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Here&apos;s an overview of your asset delivery pipeline.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Welcome back{user?.name ? `, ${user.name}` : ""}! 👋
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Here&apos;s an overview of your asset delivery pipeline.
+          </p>
+        </div>
+        <DateRangePicker />
       </div>
 
       {/* Top stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <QuickStat
-          icon={<Package className="size-5 text-blue-600" />}
-          iconBg="bg-blue-100"
-          label="Total Orders"
-          value={totalOrders}
-          subtitle={`${activeOrders} active`}
+        <OrderStatCard
+          icon={<Clock className="size-5 text-purple-600" />}
+          iconBg="bg-purple-100"
+          label="In Provisioning"
+          value={inProvisioningCount}
+          subtitle="Awaiting OS install"
+          modalTitle="In Provisioning Orders"
+          modalIcon={<Clock className="size-5 text-purple-600" />}
+          modalIconBg="bg-purple-100"
+          statuses={["IN_PROVISIONING"]}
         />
-        <QuickStat
+        <OrderStatCard
           icon={<Clock className="size-5 text-yellow-600" />}
           iconBg="bg-yellow-100"
           label="Pending Allocation"
-          value={pendingAllocation}
+          value={pendingAllocationCount}
           subtitle="Awaiting warehouse"
+          modalTitle="Pending Allocation Orders"
+          modalIcon={<Clock className="size-5 text-yellow-600" />}
+          modalIconBg="bg-yellow-100"
+          statuses={["ORDER_PLACED"]}
         />
-        <QuickStat
+        <OrderStatCard
           icon={<Truck className="size-5 text-orange-600" />}
           iconBg="bg-orange-100"
           label="In Transit"
-          value={inTransit}
+          value={inTransitCount}
           subtitle="Currently dispatched"
+          modalTitle="In Transit Orders"
+          modalIcon={<Truck className="size-5 text-orange-600" />}
+          modalIconBg="bg-orange-100"
+          statuses={["DISPATCHED"]}
         />
-        <QuickStat
+        <OrderStatCard
           icon={<CheckCircle className="size-5 text-green-600" />}
           iconBg="bg-green-100"
           label="Delivered"
-          value={deliveredOrders}
+          value={deliveredCount}
           subtitle="Successfully delivered"
+          modalTitle="Delivered Orders"
+          modalIcon={<CheckCircle className="size-5 text-green-600" />}
+          modalIconBg="bg-green-100"
+          statuses={["DELIVERED", "DELIVERY_CONFIRMED"]}
         />
       </div>
 
-      {/* Inventory row */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* Inventory & Status row */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <TotalStockCard totalInventory={totalInventory} stockByWarehouse={stockByWarehouse} unallocatedCount={unallocatedCount} href="/dashboard/inventory" />
+        <QuickStat
+          icon={<Laptop className="size-5 text-purple-600" />}
+          iconBg="bg-purple-50"
+          label="New Stock"
+          value={newStock}
+          subtitle="Brand new laptops"
+          href="/dashboard/inventory"
+        />
         <QuickStat
           icon={<Laptop className="size-5 text-blue-600" />}
           iconBg="bg-blue-50"
-          label="Available Stock"
+          label="Available for Assignment"
           value={availableStock}
           subtitle={`of ${totalInventory} total`}
+          href="/dashboard/inventory"
         />
         <QuickStat
           icon={<Layers className="size-5 text-indigo-600" />}
           iconBg="bg-indigo-50"
-          label="Allocated"
+          label="Assets Allocated to Users"
           value={allocatedStock}
           subtitle={`${totalAssets} order assets`}
+          href="/dashboard/inventory"
         />
-        {defectiveStock > 0 ? (
-          <QuickStat
-            icon={<AlertTriangle className="size-5 text-red-500" />}
-            iconBg="bg-red-50"
-            label="Defective"
-            value={defectiveStock}
-            subtitle="Needs attention"
-          />
-        ) : (
-          <QuickStat
-            icon={<ShieldCheck className="size-5 text-green-600" />}
-            iconBg="bg-green-50"
-            label="Defective"
-            value={0}
-            subtitle="All clear ✓"
-          />
-        )}
+        <OrderStatCard
+          icon={<AlertTriangle className="size-5 text-red-500" />}
+          iconBg="bg-red-50"
+          label="RTO"
+          value={rtoCount}
+          subtitle="Return to origin"
+          modalTitle="RTO Orders"
+          modalIcon={<AlertTriangle className="size-5 text-red-500" />}
+          modalIconBg="bg-red-50"
+          statuses={["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"]}
+        />
+      </div>
+
+      {/* Reverse Pickup row */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <QuickStat
+          icon={<ArrowRight className="size-5 text-cyan-600" />}
+          iconBg="bg-cyan-50"
+          label="Reverse Pickup"
+          value={reversePickupCount}
+          subtitle="Requests in pipeline"
+          href="/dashboard/reverse-pickup"
+        />
       </div>
 
       {/* Pipeline + Activity */}
@@ -230,7 +302,7 @@ export default async function DashboardPage() {
             {pipelineData.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">No orders to display.</p>
             ) : (
-              <OrderPipeline data={pipelineData} total={totalOrders} />
+              <OrderPipeline data={pipelineData} total={orders.length} />
             )}
           </div>
         </div>

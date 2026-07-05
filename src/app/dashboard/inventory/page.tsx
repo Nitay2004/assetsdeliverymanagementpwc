@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { Package, ShieldCheck, Laptop, Database, Upload, Plus } from "lucide-react";
-import Link from "next/link";
+import { Package, ShieldCheck, Laptop, Database } from "lucide-react";
 import { InventoryTable } from "@/components/inventory/inventory-table";
+import { InventoryHeader } from "@/components/inventory/inventory-header";
 
 export default async function InventoryPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
@@ -15,7 +15,7 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
   const pageSize = Math.max(1, Math.min(100, parseInt(searchParams.limit as string) || 25));
   const skip = (page - 1) * pageSize;
 
-  const [inventoryItems, totalCount, availableCount, allocatedCount] = await Promise.all([
+  const [inventoryItems, totalCount, newCount, availableCount, allocatedCount] = await Promise.all([
     prisma.inventoryItem.findMany({
       skip,
       take: pageSize,
@@ -28,6 +28,7 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
       orderBy: { createdAt: 'desc' },
     }),
     prisma.inventoryItem.count(),
+    prisma.inventoryItem.count({ where: { status: "NEW" } }),
     prisma.inventoryItem.count({ where: { status: "AVAILABLE" } }),
     prisma.inventoryItem.count({ where: { status: "ALLOCATED" } }),
   ]);
@@ -41,13 +42,20 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
         </p>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-3 mt-8">
+      <div className="grid gap-6 sm:grid-cols-4 mt-8">
         <div className="p-6 rounded-xl glass shadow-sm flex flex-col gap-2">
           <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm uppercase tracking-wider">
             <Package className="size-4" />
             Total Stock
           </div>
           <p className="text-3xl font-bold text-primary">{totalCount}</p>
+        </div>
+        <div className="p-6 rounded-xl glass shadow-sm flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm uppercase tracking-wider">
+            <Database className="size-4" />
+            New
+          </div>
+          <p className="text-3xl font-bold text-purple-600">{newCount}</p>
         </div>
         <div className="p-6 rounded-xl glass shadow-sm flex flex-col gap-2">
           <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm uppercase tracking-wider">
@@ -66,28 +74,7 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
       </div>
 
       <div className="rounded-xl glass shadow-sm mt-6 overflow-hidden">
-        <div className="p-6 border-b flex items-center gap-2 bg-muted/20 border-b-black/5 dark:border-b-white/5">
-          <Database className="size-5 text-primary" />
-          <h2 className="text-xl font-semibold">Inventory Pool</h2>
-          <div className="ml-auto flex items-center gap-2">
-            {isAdmin && (
-              <Link
-                href="/dashboard/inventory/add"
-                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-px"
-              >
-                <Plus className="size-3.5" />
-                Add Item
-              </Link>
-            )}
-            <Link
-              href="/dashboard/inventory/import"
-              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-px"
-            >
-              <Upload className="size-3.5" />
-              Import CSV
-            </Link>
-          </div>
-        </div>
+        <InventoryHeader isAdmin={isAdmin} />
         <InventoryTable
           isAdmin={isAdmin}
           selectedId={selectedId}

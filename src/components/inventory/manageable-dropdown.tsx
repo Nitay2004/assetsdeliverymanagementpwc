@@ -10,8 +10,8 @@ interface ManageableDropdownProps {
   onChange: (val: string) => void;
   options: string[];
   allOptions: { id: string; category: string; value: string }[];
-  category: "entity" | "purpose" | "imageType" | "adaptorAdded" | "accessoryHeadsetMouse" | "stickerColour";
-  onAdd: (category: "entity" | "purpose" | "imageType" | "adaptorAdded" | "accessoryHeadsetMouse" | "stickerColour", val: string) => Promise<void>;
+  category: string;
+  onAdd: (category: string, val: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   required?: boolean;
 }
@@ -165,7 +165,7 @@ export function useDropdownData() {
     loadData();
   }, []);
 
-  async function handleAddOption(category: "entity" | "purpose" | "imageType", value: string) {
+  async function handleAddOption(category: string, value: string) {
     if (!value.trim()) return;
     await addDropdownOption(category, value.trim());
     await loadData();

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Trash2, Send } from "lucide-react";
-import { deleteInventoryItem, sendToWarehouse } from "@/app/actions/inventory";
+import { deleteInventoryItem, sendToWarehouse, getInventoryItem } from "@/app/actions/inventory";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { InventoryDetailDrawer } from "./inventory-detail-drawer";
@@ -108,15 +108,19 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
 
   // Auto-open drawer when selectedId is set (from search)
   useEffect(() => {
-    if (selectedId) {
-      const match = items.find(i => i.id === selectedId);
-      if (match) {
-        setSelectedItem(match);
-        // Clean URL param after opening
-        const url = new URL(window.location.href);
-        url.searchParams.delete("selected");
-        window.history.replaceState({}, "", url.pathname);
-      }
+    if (!selectedId) return;
+    const match = items.find(i => i.id === selectedId);
+    if (match) {
+      setSelectedItem(match);
+      cleanupUrl();
+      return;
+    }
+    // Item not on current page — fetch from server
+    getInventoryItem(selectedId).then(item => { if (item) { setSelectedItem(item as unknown as InventoryItem); cleanupUrl(); } });
+    function cleanupUrl() {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("selected");
+      window.history.replaceState({}, "", url.pathname);
     }
   }, [selectedId, items]);
 
@@ -239,6 +243,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
               <th className="px-4 py-4 font-semibold">Serial Number</th>
               <th className="px-4 py-4 font-semibold">Model</th>
               <th className="px-4 py-4 font-semibold">Status</th>
+              <th className="px-4 py-4 font-semibold">Warehouse Location</th>
               <th className="px-4 py-4 font-semibold">Employee Name</th>
               <th className="px-4 py-4 font-semibold">Tracking Status</th>
               <th className="px-4 py-4 font-semibold text-right">Actions</th>
@@ -247,7 +252,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
           <tbody className="divide-y">
             {items.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
+                <td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">
                   No inventory found.
                 </td>
               </tr>
@@ -279,12 +284,16 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                   <td className="px-4 py-4 whitespace-nowrap">{item.model}</td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                      item.status === 'NEW' ? 'bg-purple-100 text-purple-700' :
                       item.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
                       item.status === 'ALLOCATED' ? 'bg-blue-100 text-blue-700' :
                       'bg-red-100 text-red-700'
                     }`}>
                       {item.status}
                     </span>
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-muted-foreground">
+                    {item.invoicingWarehouse || "—"}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">{a?.employeeName ?? item.employeeName}</td>
                   <td className="px-4 py-4 whitespace-nowrap">

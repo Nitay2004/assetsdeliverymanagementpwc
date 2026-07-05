@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { X, ChevronDown, Plus, Trash2, Loader2 } from "lucide-react";
-import { advanceOrderToProvisioning, getProvisioningDropdowns, addProvisioningDropdownOption, deleteProvisioningDropdownOption } from "@/app/actions/provisioning";
+import { advanceOrderToProvisioning, getProvisioningDropdowns, addProvisioningDropdownOption, deleteProvisioningDropdownOption, getOrderInventoryLocations } from "@/app/actions/provisioning";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 
@@ -155,19 +155,26 @@ export function AdvanceProvisioningModal({ orderId, open, onClose }: Props) {
   const [provisioningLocation, setProvisioningLocation] = useState("");
   const [engineerName, setEngineerName] = useState("");
 
-  const loadDropdowns = useCallback(async () => {
-    const data = await getProvisioningDropdowns();
+  const loadData = useCallback(async () => {
+    const [data, locs] = await Promise.all([
+      getProvisioningDropdowns(),
+      getOrderInventoryLocations(orderId),
+    ]);
     setDropdownData(data);
-  }, []);
+    if (locs.warehouseLocation) {
+      setWarehouseLocation(locs.warehouseLocation);
+      setProvisioningLocation(locs.warehouseLocation);
+    }
+  }, [orderId]);
 
   useEffect(() => {
     if (open) {
-      loadDropdowns();
       setWarehouseLocation("");
       setProvisioningLocation("");
       setEngineerName("");
+      loadData();
     }
-  }, [open, loadDropdowns]);
+  }, [open, loadData]);
 
   async function handleSubmit() {
     if (!warehouseLocation || !provisioningLocation || !engineerName) {
@@ -196,12 +203,12 @@ export function AdvanceProvisioningModal({ orderId, open, onClose }: Props) {
 
   async function handleAdd(cat: string, val: string) {
     await addProvisioningDropdownOption(cat, val);
-    await loadDropdowns();
+    await loadData();
   }
 
   async function handleDelete(id: string) {
     await deleteProvisioningDropdownOption(id);
-    await loadDropdowns();
+    await loadData();
   }
 
   const dd = dropdownData;

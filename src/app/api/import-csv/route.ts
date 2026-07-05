@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { parse } from "csv-parse/sync";
+import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 
 function normalize(s: string): string {
@@ -94,7 +95,6 @@ for (const [raw, col] of Object.entries(baseMapping)) {
   normLookup[normalize(raw)] = col;
 }
 for (const [alias, col] of Object.entries(aliases)) {
-  // Already normalized
   normLookup[alias] = col;
 }
 
@@ -124,7 +124,7 @@ const intFields = new Set([
 ]);
 
 const validStatuses = new Set([
-  "AVAILABLE", "ALLOCATED", "DEFECTIVE", "RETIRED",
+  "NEW", "AVAILABLE", "ALLOCATED", "DEFECTIVE", "RETIRED",
 ]);
 
 function parseValue(value: string, field: string): unknown {
@@ -162,6 +162,39 @@ function buildPrismaData(
   return data;
 }
 
+async function parseFile(file: File): Promise<{ headers: string[]; records: string[][] }> {
+  const name = file.name.toLowerCase();
+
+  if (name.endsWith(".csv")) {
+    const text = await file.text();
+    const parsed = parse(text, { skip_empty_lines: true }) as string[][];
+    if (parsed.length < 2) {
+      throw new Error("File must have a header row and at least one data row.");
+    }
+    return { headers: parsed[0], records: parsed.slice(1) };
+  }
+
+  if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (!sheet) throw new Error("Excel file has no sheets.");
+
+    const json = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
+    if (json.length < 2) {
+      throw new Error("File must have a header row and at least one data row.");
+    }
+
+    const headers = (json[0] as string[]).map(h => String(h ?? ""));
+    const records = json.slice(1).map((row: any) =>
+      (row as any[]).map((cell: any) => cell?.toString() ?? "")
+    );
+    return { headers, records };
+  }
+
+  throw new Error("Unsupported file format. Please upload a .csv or .xlsx file.");
+}
+
 export async function POST(request: Request) {
   const user = await getSession();
   if (!user || user.role !== "ADMIN") {
@@ -181,54 +214,64 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!file.name.endsWith(".csv")) {
+  const name = file.name.toLowerCase();
+  if (!name.endsWith(".csv") && !name.endsWith(".xlsx") && !name.endsWith(".xls")) {
     return NextResponse.json(
-      { success: false, error: "Only .csv files are supported." },
+      { success: false, error: "Only .csv and .xlsx files are supported." },
       { status: 400 }
     );
   }
 
-  const text = await file.text();
+  let headers: string[];
   let records: string[][];
   try {
-    records = parse(text, { skip_empty_lines: true }) as string[][];
-  } catch {
+    ({ headers, records } = await parseFile(file));
+  } catch (e: any) {
     return NextResponse.json(
-      { success: false, error: "Failed to parse CSV file. Check the file format." },
+      { success: false, error: e.message || "Failed to parse file." },
       { status: 400 }
     );
   }
 
-  if (records.length < 2) {
-    return NextResponse.json(
-      { success: false, error: "CSV must have a header row and at least one data row." },
-      { status: 400 }
-    );
+  const requiredFields = ["serialNumber", "employeeName", "invoicingWarehouse", "stickerColour"];
+  const fieldLabels: Record<string, string> = {
+    serialNumber: "Serial Number",
+    employeeName: "Employee Name",
+    invoicingWarehouse: "Invoicing Warehouse",
+    stickerColour: "Sticker Colour",
+  };
+
+  // Build reverse lookup to find which header maps to each required field
+  const headerToField: Record<number, string> = {};
+  for (let i = 0; i < headers.length; i++) {
+    const col = resolveColumn(headers[i].trim());
+    if (col) headerToField[i] = col;
   }
 
-  const headers = records[0];
   const unknownHeaders: string[] = [];
   let imported = 0;
   const errors: string[] = [];
 
-  for (let r = 1; r < records.length; r++) {
+  for (let r = 0; r < records.length; r++) {
     const row = records[r];
     if (row.length === 0 || row.every(c => c.trim() === "")) continue;
 
     const data = buildPrismaData(headers, row, unknownHeaders);
 
-    if (!data.serialNumber) {
-      errors.push(`Row ${r + 1}: missing Serial Number, skipped`);
+    // Check required fields
+    const missing: string[] = [];
+    for (const field of requiredFields) {
+      if (!data[field] || String(data[field]).trim() === "") {
+        missing.push(fieldLabels[field]);
+      }
+    }
+    if (missing.length > 0) {
+      errors.push(`Row ${r + 2}: missing required fields: ${missing.join(", ")}`);
       continue;
     }
 
     if (!data.model && data.laptopModel) {
       data.model = data.laptopModel;
-    }
-
-    if (!data.model) {
-      errors.push(`Row ${r + 1}: missing Model, skipped`);
-      continue;
     }
 
     const cleanData = Object.fromEntries(
@@ -240,9 +283,9 @@ export async function POST(request: Request) {
       imported++;
     } catch (e: any) {
       if (e?.code === "P2002") {
-        errors.push(`Row ${r + 1}: Serial Number "${data.serialNumber}" already exists, skipped`);
+        errors.push(`Row ${r + 2}: Serial Number "${data.serialNumber}" already exists, skipped`);
       } else {
-        errors.push(`Row ${r + 1}: ${e?.message ?? "Unknown error"}`);
+        errors.push(`Row ${r + 2}: ${e?.message ?? "Unknown error"}`);
       }
     }
   }

@@ -12,6 +12,15 @@ export async function getProducts() {
   }));
 }
 
+export async function getAllPartNumbers() {
+  const products = await prisma.productMaster.findMany({
+    where: { partNo: { not: null } },
+    select: { partNo: true, make: true, model: true },
+    orderBy: { partNo: "asc" },
+  });
+  return products;
+}
+
 export async function addProduct(formData: FormData) {
   const user = await getSession();
   if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
@@ -24,6 +33,7 @@ export async function addProduct(formData: FormData) {
       description: (formData.get("description") as string) || null,
       hsnCode: (formData.get("hsnCode") as string) || null,
       gstRate: formData.get("gstRate") ? Number(formData.get("gstRate")) : null,
+      warranty: (formData.get("warranty") as string) || null,
     },
   });
 
@@ -43,10 +53,32 @@ export async function updateProduct(id: string, formData: FormData) {
       description: (formData.get("description") as string) || null,
       hsnCode: (formData.get("hsnCode") as string) || null,
       gstRate: formData.get("gstRate") ? Number(formData.get("gstRate")) : null,
+      warranty: (formData.get("warranty") as string) || null,
     },
   });
 
   revalidatePath("/dashboard/product-master");
+}
+
+export async function getProductByPartNo(partNo: string) {
+  const product = await prisma.productMaster.findFirst({
+    where: { partNo },
+    select: {
+      id: true,
+      make: true,
+      model: true,
+      partNo: true,
+      description: true,
+      hsnCode: true,
+      gstRate: true,
+      warranty: true,
+    },
+  });
+  if (!product) return null;
+  return {
+    ...product,
+    gstRate: product.gstRate ? Number(product.gstRate) : null,
+  };
 }
 
 export async function getProductsForDropdown() {

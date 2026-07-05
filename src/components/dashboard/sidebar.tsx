@@ -12,6 +12,8 @@ import {
   LayoutDashboard,
   PanelLeftClose,
   Database,
+  ArrowLeftRight,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,8 +24,10 @@ const navItems = [
   { href: "/dashboard/provisioning", label: "Provisioning", icon: Laptop },
   { href: "/dashboard/finance", label: "Finance", icon: Wallet },
   { href: "/dashboard/logistics", label: "Logistics", icon: Truck },
+  { href: "/dashboard/reverse-pickup", label: "Reverse Pickup", icon: ArrowLeftRight },
   { href: "/dashboard/warranty", label: "Warranty", icon: ShieldCheck },
   { href: "/dashboard/product-master", label: "Product Master", icon: Database },
+  { href: "/dashboard/vendor-master", label: "Vendor Master", icon: Building2 },
 ];
 
 export function Sidebar() {

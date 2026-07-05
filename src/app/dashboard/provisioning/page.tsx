@@ -1,25 +1,53 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { CheckCircle, Clock, Wrench, User } from "lucide-react";
 import { ProvisioningTable } from "@/components/provisioning/provisioning-table";
+import { ProvisioningPagination } from "@/components/provisioning/provisioning-pagination";
 
 export default async function ProvisioningPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const searchParams = await props.searchParams;
+  const page = Math.max(1, parseInt(typeof searchParams.page === "string" ? searchParams.page : "1", 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(typeof searchParams.limit === "string" ? searchParams.limit : "25", 10) || 25));
+  const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "PROVISIONING"));
 
-  const orders = await prisma.order.findMany({
-    where: { status: { in: ["ALLOCATED", "IN_PROVISIONING"] } },
-    include: {
-      assets: {
-        include: { inventoryItem: true },
-        orderBy: { createdAt: "asc" },
+  if (selectedId) {
+    const selOrder = await prisma.order.findUnique({
+      where: { id: selectedId },
+      select: { updatedAt: true, status: true },
+    });
+    if (selOrder && selOrder.status !== "ORDER_PLACED") {
+      const pos = await prisma.order.count({
+        where: { status: { not: "ORDER_PLACED" }, updatedAt: { gt: selOrder.updatedAt } },
+      });
+      const correctPage = Math.floor(pos / limit) + 1;
+      if (correctPage !== page) {
+        redirect(`/dashboard/provisioning?page=${correctPage}&limit=${limit}&selected=${selectedId}`);
+      }
+    }
+  }
+
+  const [totalCount, orders] = await Promise.all([
+    prisma.order.count({ where: { status: { not: "ORDER_PLACED" } } }),
+    prisma.order.findMany({
+      where: { status: { not: "ORDER_PLACED" } },
+      include: {
+        assets: {
+          include: { inventoryItem: true },
+          orderBy: { createdAt: "asc" },
+        },
       },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+      orderBy: { updatedAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
 
   const engineers = [...new Set(orders.map(o => o.engineerName).filter(Boolean))] as string[];
-  const completedCount = orders.filter(o => o.status === "IN_PROVISIONING").length;
+  const inProvisioningCount = orders.filter(o => o.status === "ALLOCATED" || o.status === "IN_PROVISIONING").length;
+  const provisionedCount = orders.length - inProvisioningCount;
   const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
 
   // Group data by engineer for sections
@@ -52,8 +80,8 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
             <Clock className="size-5 text-yellow-600" />
           </div>
           <div>
-            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Pending</p>
-            <p className="text-2xl font-bold text-primary mt-1">{orders.length - completedCount}</p>
+            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">In Provisioning</p>
+            <p className="text-2xl font-bold text-primary mt-1">{inProvisioningCount}</p>
           </div>
         </div>
         <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
@@ -61,8 +89,8 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
             <CheckCircle className="size-5 text-green-600" />
           </div>
           <div>
-            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">In Provisioning</p>
-            <p className="text-2xl font-bold text-primary mt-1">{completedCount}</p>
+            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Provisioned</p>
+            <p className="text-2xl font-bold text-primary mt-1">{provisionedCount}</p>
           </div>
         </div>
         <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
@@ -94,10 +122,13 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
               orders={section.orders}
               canManage={canManage}
               engineers={engineers}
+              selectedId={selectedId}
             />
           </section>
         ))
       )}
+
+      <ProvisioningPagination totalCount={totalCount} currentPage={page} pageSize={limit} />
     </div>
   );
 }

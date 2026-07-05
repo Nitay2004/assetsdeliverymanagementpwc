@@ -29,10 +29,12 @@ export const fields: Record<string, { label: string; type: string; required?: bo
     { label: "Pin Code", type: "text" },
   ],
   "Laptop Info": [
+    { label: "Part No", type: "text" },
     { label: "Laptop Make", type: "text" },
     { label: "Laptop Model", type: "text" },
     { label: "Invoice Product Description", type: "text" },
     { label: "Description", type: "text" },
+    { label: "Warranty Period", type: "text" },
     { label: "PwC Remarks", type: "text" },
   ],
   "Timeline & SLA": [

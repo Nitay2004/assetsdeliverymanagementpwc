@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 interface QuickStatProps {
   icon: React.ReactNode;
   label: string;
@@ -7,11 +9,13 @@ interface QuickStatProps {
   subtitle?: string;
   iconBg: string;
   trend?: { value: string; positive: boolean };
+  href?: string;
+  onClick?: () => void;
 }
 
-export function QuickStat({ icon, label, value, subtitle, iconBg, trend }: QuickStatProps) {
-  return (
-    <div className="p-5 rounded-xl glass shadow-sm flex items-start gap-4 group hover:shadow-md transition-all duration-300">
+export function QuickStat({ icon, label, value, subtitle, iconBg, trend, href, onClick }: QuickStatProps) {
+  const content = (
+    <div className="p-5 rounded-xl glass shadow-sm flex items-start gap-4 group hover:shadow-md transition-all duration-300 cursor-pointer">
       <div className={`p-3 rounded-xl ${iconBg} shrink-0 group-hover:scale-105 transition-transform duration-300`}>
         {icon}
       </div>
@@ -29,4 +33,14 @@ export function QuickStat({ icon, label, value, subtitle, iconBg, trend }: Quick
       </div>
     </div>
   );
+
+  if (href) {
+    return <Link href={href}>{content}</Link>;
+  }
+
+  if (onClick) {
+    return <button onClick={onClick} className="w-full text-left">{content}</button>;
+  }
+
+  return content;
 }

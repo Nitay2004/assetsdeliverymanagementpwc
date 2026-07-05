@@ -34,13 +34,15 @@ export async function addInventoryItem(formData: FormData) {
   const rawTrackingStatus = formData.get("trackingStatus") as string;
   const trackingValue = rawTrackingStatus?.toLowerCase() || "";
   const isDelivered = trackingValue.includes("delivered") || trackingValue.includes("confirmed") || trackingValue.includes("dispatched") || trackingValue.includes("invoiced") || trackingValue.includes("payment") || trackingValue.includes("warranty");
-  const effectiveStatus = isDelivered ? "ALLOCATED" : "AVAILABLE";
+  const hasEmployee = !!(formData.get("employeeName") as string);
+  const effectiveStatus = isDelivered || hasEmployee ? "ALLOCATED" : "NEW";
 
   try {
     await prisma.inventoryItem.create({
       data: {
         serialNumber,
         model,
+        partNo: (formData.get("partNo") as string) || null,
         status: effectiveStatus,
         specs: (formData.get("specs") as string) || null,
         partner: (formData.get("partner") as string) || null,
@@ -146,6 +148,7 @@ export async function updateInventoryItem(id: string, formData: FormData) {
       data: {
         serialNumber,
         model,
+        partNo: (formData.get("partNo") as string) || null,
         specs: (formData.get("specs") as string) || null,
         partner: (formData.get("partner") as string) || null,
         sr: parseIntValue(formData.get("sr") as string),
@@ -439,24 +442,6 @@ export async function reassignItem(id: string, formData: FormData) {
   const accessoryHeadsetMouse = (formData.get("accessoryHeadsetMouse") as string) || null;
   const stickerColour = (formData.get("stickerColour") as string) || null;
 
-  const assignmentData = {
-    employeeName,
-    emailId,
-    mobileNumber,
-    alternatePhoneNumber,
-    shippingAddress,
-    landMark,
-    city,
-    state,
-    pinCode,
-    purpose,
-    requestDate,
-    userBaseLocation,
-    imageType,
-    count,
-    pwcRemarks,
-  };
-
   // Always save current assignment to history before applying the new one
   const existing = await prisma.inventoryItem.findUnique({ where: { id } });
 
@@ -488,53 +473,48 @@ export async function reassignItem(id: string, formData: FormData) {
   }
 
   await prisma.assignmentRecord.create({
-    data: { inventoryItemId: id, ...assignmentData },
+    data: {
+      inventoryItemId: id,
+      employeeName,
+      emailId,
+      mobileNumber,
+      alternatePhoneNumber,
+      shippingAddress,
+      landMark,
+      city,
+      state,
+      pinCode,
+      purpose,
+      requestDate,
+      userBaseLocation,
+      imageType,
+      count,
+      pwcRemarks,
+    },
   });
 
   await prisma.inventoryItem.update({
     where: { id },
-    data: { 
-      status: "ALLOCATED", 
-      ...assignmentData,
+    data: {
+      status: "ALLOCATED",
+      employeeName,
+      emailId,
+      mobileNumber,
+      alternatePhoneNumber,
+      shippingAddress,
+      landMark,
+      city,
+      state,
+      pinCode,
+      purpose,
+      requestDate,
+      userBaseLocation,
+      imageType,
+      count,
+      pwcRemarks,
       partner,
       sr,
       entity,
-      emailReceivedHour,
-      cutOffStatus,
-      slaStartDate,
-      slaState,
-      zone,
-      tier,
-      odaLocation,
-      tat,
-      deliveryTatDays,
-      actualDeliveryDate,
-      slaStatus,
-      laptopAcceptanceDate,
-      adaptorAdded,
-      accessoryHeadsetMouse,
-      stickerColour,
-      invoicedQuantity: null,
-      customerInstructionDoc: null,
-      deliveryDate: null,
-      dc: null,
-      vendor: null,
-      deliveredLocation: null,
-      docketNumber: null,
-      trackingStatus: null,
-      trackingSubStatus: null,
-      pickupDate: null,
-      processStatus: null,
-      machineWs1Status: null,
-      serialNoInWs1: null,
-      dateOfWs1Update: null,
-      servicesStartDate: null,
-      invoicingWarehouse: null,
-      boxSerialNo: null,
-      checkField: null,
-      remark: null,
-      dcNumber: null,
-      csvStatus: null,
     },
   });
 
@@ -565,6 +545,18 @@ export async function sendToWarehouse(inventoryItemIds: string[]) {
 
   if (items.length === 0) {
     throw new Error("No available or allocated items selected.");
+  }
+
+  const alreadyInOrder = await prisma.asset.findFirst({
+    where: {
+      inventoryItemId: { in: items.map(i => i.id) },
+      order: { status: { notIn: ["DELIVERED", "DELIVERY_CONFIRMED", "WARRANTY_UPDATED"] } },
+    },
+    include: { order: { select: { id: true, status: true } } },
+  });
+
+  if (alreadyInOrder) {
+    throw new Error(`One or more items are already assigned to an active order (${alreadyInOrder.order.status}).`);
   }
 
   // Create an Order

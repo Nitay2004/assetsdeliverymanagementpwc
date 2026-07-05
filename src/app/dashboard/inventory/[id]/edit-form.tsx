@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Search } from "lucide-react";
 import { updateInventoryItem } from "@/app/actions/inventory";
 import { fields, toFieldName } from "@/lib/inventory-form-config";
 import { useDropdownData, SmartDropdownField } from "@/components/inventory/manageable-dropdown";
 import { PincodeInput } from "@/components/shared/pincode-input";
-import { getProductsForDropdown } from "@/app/actions/product-master";
+import { getProductsForDropdown, getProductByPartNo } from "@/app/actions/product-master";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 
@@ -16,6 +16,7 @@ interface Item {
   id: string;
   serialNumber: string;
   model: string;
+  partNo: string | null;
   specs: string | null;
   status: string;
   partner: string | null;
@@ -85,12 +86,14 @@ export function EditInventoryForm({ item }: { item: Item }) {
   const { toast } = useToast();
   const { showAlert } = useAlert();
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [sections, setSections] = useState<Record<string, boolean>>(
     Object.fromEntries(Object.keys(fields).map(k => [k, true]))
   );
   const { data: dropdownData, handleAddOption, handleDeleteOption } = useDropdownData();
   const [products, setProducts] = useState<{ id: string; make: string; model: string; partNo: string | null }[]>([]);
   const [selectedMake, setSelectedMake] = useState(item.laptopMake ?? "");
+  const [partNo, setPartNo] = useState(item.partNo ?? "");
 
   useEffect(() => {
     getProductsForDropdown().then(setProducts);
@@ -98,6 +101,29 @@ export function EditInventoryForm({ item }: { item: Item }) {
 
   const makes = [...new Set(products.map(p => p.make))].sort();
   const filteredModels = products.filter(p => p.make === selectedMake);
+
+  function setFormValue(name: string, value: string) {
+    const el = formRef.current?.elements.namedItem(name);
+    if (!el || el instanceof RadioNodeList) return;
+    (el as HTMLInputElement | HTMLSelectElement).value = value;
+  }
+
+  async function handlePartNoLookup(val: string) {
+    setPartNo(val);
+    if (val.length < 2) return;
+    const product = await getProductByPartNo(val);
+    if (!product) return;
+
+    setSelectedMake(product.make);
+
+    setTimeout(() => {
+      setFormValue("laptopModel", product.model);
+      setFormValue("description", product.description || "");
+      setFormValue("warrantyPeriod", product.warranty || "");
+      setFormValue("invoiceProductDescription", product.description || "");
+      setFormValue("specs", product.description || "");
+    }, 50);
+  }
 
   function formatDate(value: Date | string | null): string {
     if (!value) return "";
@@ -155,7 +181,7 @@ export function EditInventoryForm({ item }: { item: Item }) {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
         {Object.entries(fields).map(([section, sectionFields]) => (
           <div key={section} className="rounded-xl glass shadow-sm">
             <button
@@ -182,6 +208,27 @@ export function EditInventoryForm({ item }: { item: Item }) {
                           defaultCity={String(getValue("city") ?? "")}
                           defaultState={String(getValue("state") ?? "")}
                         />
+                      </div>
+                    );
+                  }
+
+                  if (fieldName === "partNo") {
+                    return (
+                      <div key={f.label} className="space-y-1.5">
+                        <label htmlFor={fieldName} className="text-xs font-medium text-foreground">
+                          Part No <span className="text-xs text-muted-foreground">(type to auto-fill)</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            id={fieldName}
+                            name={fieldName}
+                            value={partNo}
+                            onChange={e => handlePartNoLookup(e.target.value)}
+                            placeholder="e.g. PCH-840-G5"
+                            className="flex h-9 w-full rounded-lg border bg-background pl-3 pr-9 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                          />
+                          <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+                        </div>
                       </div>
                     );
                   }

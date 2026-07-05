@@ -51,17 +51,22 @@ export default function ImportInventoryPage() {
           <ArrowLeft className="size-4" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Import Inventory via CSV</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Bulk Import Inventory</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Upload a CSV file to bulk-import inventory items.
+            Upload a CSV or Excel file to bulk-import inventory items.
           </p>
         </div>
+      </div>
+
+      <div className="rounded-xl glass shadow-sm p-4 text-sm text-muted-foreground space-y-1">
+        <p className="font-medium text-foreground">Required columns:</p>
+        <p>Serial Number, Employee Name, Invoicing Warehouse, Sticker Colour</p>
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-xl glass shadow-sm p-6 space-y-5">
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
-            CSV File
+            CSV / Excel File
           </label>
           <div
             className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
@@ -70,17 +75,17 @@ export default function ImportInventoryPage() {
             <Upload className="size-8 text-muted-foreground" />
             <div>
               <p className="text-sm font-medium text-foreground">
-                {file ? file.name : "Click to select a CSV file"}
+                {file ? file.name : "Click to select a file"}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                CSV must have headers matching the inventory table columns
+                CSV or Excel file with headers matching inventory columns
               </p>
             </div>
           </div>
           <input
             id="file-input"
             type="file"
-            accept=".csv"
+            accept=".csv,.xlsx,.xls"
             className="hidden"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
@@ -97,7 +102,7 @@ export default function ImportInventoryPage() {
               Importing...
             </>
           ) : (
-            "Import CSV"
+            "Import"
           )}
         </button>
       </form>
