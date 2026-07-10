@@ -2,10 +2,11 @@
 
 import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X, Search, Loader2, Plus } from "lucide-react";
-import { addInventoryItem } from "@/app/actions/inventory";
+import { X, Search, Loader2, Plus, ChevronDown } from "lucide-react";
+import { addInventoryItem, checkSerialNumber } from "@/app/actions/inventory";
 import { getProductByPartNo } from "@/app/actions/product-master";
 import { useToast } from "@/hooks/use-toast";
+import { useDropdownData, ManageableDropdown } from "@/components/inventory/manageable-dropdown";
 
 interface Props {
   open: boolean;
@@ -35,6 +36,21 @@ export function NewAssetModal({ open, onClose }: Props) {
   const [warrantyStart, setWarrantyStart] = useState(formatDate(new Date()));
   const [warrantyPeriod, setWarrantyPeriod] = useState("");
   const [loadingLookup, setLoadingLookup] = useState(false);
+  const [warehouseLocation, setWarehouseLocation] = useState("");
+  const { data: dropdownData, handleAddOption, handleDeleteOption } = useDropdownData();
+  const [serialNoError, setSerialNoError] = useState("");
+
+  let checkTimeout: ReturnType<typeof setTimeout>;
+  async function handleSerialNoChange(val: string) {
+    setSerialNo(val);
+    setSerialNoError("");
+    clearTimeout(checkTimeout);
+    if (val.trim().length < 2) return;
+    checkTimeout = setTimeout(async () => {
+      const { exists } = await checkSerialNumber(val.trim());
+      if (exists) setSerialNoError("Serial number already exists in inventory.");
+    }, 500);
+  }
 
   const warrantyEnd = warrantyStart ? formatDate(addMonths(new Date(warrantyStart), 36)) : "";
 
@@ -64,15 +80,30 @@ export function NewAssetModal({ open, onClose }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!serialNo.trim() || !model.trim()) {
-      toast({ title: "Error", description: "Serial number and model are required.", variant: "error" });
+    if (!partNo.trim() || !model.trim()) {
+      toast({ title: "Error", description: "Part number and model are required.", variant: "error" });
       return;
+    }
+
+    let finalSerial = serialNo.trim();
+    if (!finalSerial) {
+      finalSerial = `TEMP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    } else {
+      if (serialNoError) {
+        toast({ title: "Error", description: "Fix errors before submitting.", variant: "error" });
+        return;
+      }
+      const { exists } = await checkSerialNumber(finalSerial);
+      if (exists) {
+        toast({ title: "Error", description: "Serial number already exists.", variant: "error" });
+        return;
+      }
     }
 
     setSaving(true);
     try {
       const fd = new FormData();
-      fd.set("serialNumber", serialNo.trim());
+      fd.set("serialNumber", finalSerial);
       fd.set("model", model);
       fd.set("partNo", partNo.trim());
       fd.set("specs", specs);
@@ -82,13 +113,13 @@ export function NewAssetModal({ open, onClose }: Props) {
       fd.set("invoiceProductDescription", description);
       fd.set("warrantyPeriod", warrantyPeriod);
       fd.set("warrantyEndPeriod", warrantyEnd);
+      fd.set("invoicingWarehouse", warehouseLocation);
 
       await addInventoryItem(fd);
       toast({ title: "Added", description: "New asset added to inventory.", variant: "success" });
       resetForm();
       onClose();
     } catch (err: any) {
-      if (err?.digest?.startsWith("NEXT_REDIRECT")) return;
       toast({ title: "Error", description: err.message, variant: "error" });
     } finally {
       setSaving(false);
@@ -129,7 +160,7 @@ export function NewAssetModal({ open, onClose }: Props) {
         <form ref={formRef} onSubmit={handleSubmit} className="overflow-auto p-6 space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-foreground">
-              Part No <span className="text-xs text-muted-foreground">(type to auto-fill)</span>
+              Part No <span className="text-destructive">*</span> <span className="text-xs text-muted-foreground">(type to auto-fill)</span>
             </label>
             <div className="relative">
               <input
@@ -148,15 +179,17 @@ export function NewAssetModal({ open, onClose }: Props) {
 
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-foreground">
-              Serial No <span className="text-destructive">*</span>
+              Serial No
             </label>
             <input
               value={serialNo}
-              onChange={e => setSerialNo(e.target.value)}
-              required
+              onChange={e => handleSerialNoChange(e.target.value)}
               placeholder="e.g. 5CG12345WW"
               className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
+            {serialNoError && (
+              <p className="text-xs text-destructive mt-1">{serialNoError}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -210,6 +243,28 @@ export function NewAssetModal({ open, onClose }: Props) {
               placeholder="From Product Master"
               className="flex h-9 w-full rounded-lg border bg-muted px-3 py-2 text-sm text-muted-foreground focus:outline-none"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">Warehouse Location</label>
+            {dropdownData ? (
+              <ManageableDropdown
+                name="invoicingWarehouse"
+                placeholder="Select warehouse location"
+                value={warehouseLocation}
+                onChange={setWarehouseLocation}
+                options={dropdownData.warehouseLocations}
+                allOptions={dropdownData.allOptions}
+                category="warehouseLocation"
+                onAdd={handleAddOption}
+                onDelete={handleDeleteOption}
+              />
+            ) : (
+              <div className="flex h-9 w-full rounded-lg border bg-muted px-3 py-2 text-sm text-muted-foreground items-center gap-2">
+                <ChevronDown className="size-4" />
+                Loading...
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">

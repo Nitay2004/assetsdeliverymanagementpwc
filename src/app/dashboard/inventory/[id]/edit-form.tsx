@@ -273,7 +273,7 @@ export function EditInventoryForm({ item }: { item: Item }) {
                     );
                   }
 
-                  const isDropdown = fieldName === "entity" || fieldName === "purpose" || fieldName === "imageType";
+                  const isDropdown = fieldName === "entity" || fieldName === "purpose" || fieldName === "imageType" || fieldName === "invoicingWarehouse";
 
                   return (
                     <div key={f.label} className="space-y-1.5">
@@ -285,8 +285,8 @@ export function EditInventoryForm({ item }: { item: Item }) {
                           name={fieldName}
                           defaultValue={getValue(fieldName)}
                           placeholder={f.label}
-                          category={fieldName}
-                          options={dropdownData[fieldName === "entity" ? "entities" : fieldName === "purpose" ? "purposes" : "imageTypes"]}
+                          category={fieldName === "invoicingWarehouse" ? "warehouseLocation" : fieldName}
+                          options={dropdownData[fieldName === "entity" ? "entities" : fieldName === "purpose" ? "purposes" : fieldName === "imageType" ? "imageTypes" : "warehouseLocations"]}
                           allOptions={dropdownData.allOptions}
                           onAdd={handleAddOption}
                           onDelete={handleDeleteOption}

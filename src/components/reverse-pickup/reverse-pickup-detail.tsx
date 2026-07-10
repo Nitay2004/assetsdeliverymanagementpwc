@@ -139,17 +139,17 @@ export function ReversePickupDetail({ request, availableItems, userRole, dcId }:
   const { toast } = useToast();
   const [loading, setLoading] = useState<string | null>(null);
   const [dropdownData, setDropdownData] = useState<{
-    warehouseLocations: string[];
-    partnerNames: string[];
-    dispositions: string[];
-    types: string[];
-    entities: string[];
-    imageTypes: string[];
-    reasons: string[];
-    displayStatuses: string[];
-    dependencies: string[];
-    courierNames: string[];
-    blanccoYesNos: string[];
+    warehouseLocation: string[];
+    partnerName: string[];
+    disposition: string[];
+    type: string[];
+    entity: string[];
+    imageType: string[];
+    reason: string[];
+    displayStatus: string[];
+    dependency: string[];
+    courierName: string[];
+    blanccoYesNo: string[];
     allOptions: { id: string; category: string; value: string }[];
   } | null>(null);
 
@@ -159,7 +159,7 @@ export function ReversePickupDetail({ request, availableItems, userRole, dcId }:
 
   const loadDropdowns = useCallback(async () => {
     let data = await getReversePickupDropdowns();
-    if (data.types.length === 0) {
+    if (data.type.length === 0) {
       await seedReversePickupDropdowns();
       data = await getReversePickupDropdowns();
     }
@@ -460,7 +460,7 @@ export function ReversePickupDetail({ request, availableItems, userRole, dcId }:
                         placeholder="Select partner..."
                         value={partnerName}
                         onChange={setPartnerName}
-                        options={dropdownData?.partnerNames ?? []}
+                        options={dropdownData?.partnerName ?? []}
                         allOptions={dropdownData?.allOptions ?? []}
                         category="partnerName"
                         onAdd={handleAdd}
@@ -553,7 +553,7 @@ export function ReversePickupDetail({ request, availableItems, userRole, dcId }:
                         placeholder="Select warehouse..."
                         value={warehouseLocation}
                         onChange={setWarehouseLocation}
-                        options={dropdownData?.warehouseLocations ?? []}
+                        options={dropdownData?.warehouseLocation ?? []}
                         allOptions={dropdownData?.allOptions ?? []}
                         category="warehouseLocation"
                         onAdd={handleAdd}
@@ -734,7 +734,7 @@ export function ReversePickupDetail({ request, availableItems, userRole, dcId }:
                     placeholder="Select disposition..."
                     value={finalDisposition}
                     onChange={setFinalDisposition}
-                    options={dropdownData?.dispositions ?? []}
+                    options={dropdownData?.disposition ?? []}
                     allOptions={dropdownData?.allOptions ?? []}
                     category="disposition"
                     onAdd={handleAdd}

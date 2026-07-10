@@ -129,7 +129,12 @@ export async function GET() {
   }
 
   const [items, allAssignments] = await Promise.all([
-    prisma.inventoryItem.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.inventoryItem.findMany({
+      include: {
+        assignmentRecords: { orderBy: { assignedAt: "desc" } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
     prisma.assignmentRecord.findMany({
       include: { inventoryItem: { select: { serialNumber: true } } },
       orderBy: { assignedAt: "desc" },
@@ -154,6 +159,60 @@ export async function GET() {
     return row;
   });
 
+  // Sheet 3: User Chain Report — Serial #, Current User + Date, Previous User 1 + Date, ...
+  interface ChainEntry {
+    name: string;
+    date: string;
+  }
+  interface UserChain {
+    serialNumber: string;
+    entries: ChainEntry[];
+  }
+  const chains: UserChain[] = [];
+  let maxChainLen = 1;
+
+  for (const item of items) {
+    const entries: ChainEntry[] = [];
+    // Current user (from inventory item itself)
+    if (item.employeeName) {
+      entries.push({
+        name: item.employeeName,
+        date: getVal(item, "updatedAt") as string,
+      });
+    }
+    // Walk through assignment records (newest first) and append unique names
+    for (const rec of item.assignmentRecords) {
+      if (!rec.employeeName) continue;
+      const last = entries[entries.length - 1];
+      if (rec.employeeName !== last?.name) {
+        entries.push({
+          name: rec.employeeName,
+          date: getVal(rec, "assignedAt") as string,
+        });
+      }
+    }
+    if (entries.length > 0) {
+      chains.push({ serialNumber: item.serialNumber, entries });
+      if (entries.length > maxChainLen) maxChainLen = entries.length;
+    }
+  }
+
+  const userChainLabels = ["Serial Number"];
+  for (let i = 0; i < maxChainLen; i++) {
+    const prefix = i === 0 ? "Current User" : `Previous User ${i}`;
+    userChainLabels.push(`${prefix}`, `${prefix} Assigned Date`);
+  }
+
+  const userChainRows = chains.map(c => {
+    const row: Record<string, unknown> = { "Serial Number": c.serialNumber };
+    for (let i = 0; i < maxChainLen; i++) {
+      const entry = c.entries[i];
+      row[userChainLabels[i * 2 + 1]] = entry?.name ?? "";
+      row[userChainLabels[i * 2 + 2]] = entry?.date ?? "";
+    }
+    return row;
+  });
+
   const wb = XLSX.utils.book_new();
 
   const itemSheet = XLSX.utils.json_to_sheet(itemRows);
@@ -161,6 +220,9 @@ export async function GET() {
 
   const historySheet = XLSX.utils.json_to_sheet(historyRows);
   XLSX.utils.book_append_sheet(wb, historySheet, "Assignment History");
+
+  const userChainSheet = XLSX.utils.json_to_sheet(userChainRows);
+  XLSX.utils.book_append_sheet(wb, userChainSheet, "User Chain Report");
 
   const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 

@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronDown, ChevronRight, Search } from "lucide-react";
-import { addInventoryItem } from "@/app/actions/inventory";
+import { addInventoryItem, checkSerialNumber } from "@/app/actions/inventory";
 import { fields, toFieldName } from "@/lib/inventory-form-config";
 import { useDropdownData, SmartDropdownField } from "@/components/inventory/manageable-dropdown";
 import { PincodeInput } from "@/components/shared/pincode-input";
@@ -14,6 +15,7 @@ import { useAlert } from "@/hooks/use-alert";
 export default function AddInventoryPage() {
   const { toast } = useToast();
   const { showAlert } = useAlert();
+  const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [sections, setSections] = useState<Record<string, boolean>>(
     Object.fromEntries(Object.keys(fields).map(k => [k, true]))
@@ -22,6 +24,8 @@ export default function AddInventoryPage() {
   const [products, setProducts] = useState<{ id: string; make: string; model: string; partNo: string | null }[]>([]);
   const [selectedMake, setSelectedMake] = useState("");
   const [partNo, setPartNo] = useState("");
+  const [serialNo, setSerialNo] = useState("");
+  const [serialNoError, setSerialNoError] = useState("");
 
   useEffect(() => {
     getProductsForDropdown().then(setProducts);
@@ -34,6 +38,18 @@ export default function AddInventoryPage() {
     const el = formRef.current?.elements.namedItem(name);
     if (!el || el instanceof RadioNodeList) return;
     (el as HTMLInputElement | HTMLSelectElement).value = value;
+  }
+
+  let checkTimeout: ReturnType<typeof setTimeout>;
+  async function handleSerialNoChange(val: string) {
+    setSerialNo(val);
+    setSerialNoError("");
+    clearTimeout(checkTimeout);
+    if (val.trim().length < 2) return;
+    checkTimeout = setTimeout(async () => {
+      const { exists } = await checkSerialNumber(val.trim());
+      if (exists) setSerialNoError("Serial number already exists in inventory.");
+    }, 500);
   }
 
   async function handlePartNoLookup(val: string) {
@@ -63,11 +79,21 @@ export default function AddInventoryPage() {
       cancelLabel: "Review",
     });
     if (!ok) return;
+    if (serialNoError) {
+      toast({ title: "Error", description: "Fix errors before submitting.", variant: "error" });
+      return;
+    }
+    const { exists } = await checkSerialNumber(serialNo.trim());
+    if (exists) {
+      toast({ title: "Error", description: "Serial number already exists.", variant: "error" });
+      return;
+    }
     const fd = new FormData(form);
     try {
       await addInventoryItem(fd);
+      toast({ title: "Added", description: "Item added to inventory.", variant: "success" });
+      router.push("/dashboard/inventory");
     } catch (err: any) {
-      if (err?.digest?.startsWith("NEXT_REDIRECT")) throw err;
       toast({ title: "Error", description: err.message, variant: "error" });
     }
   }
@@ -134,6 +160,28 @@ export default function AddInventoryPage() {
                     );
                   }
 
+                  if (fieldName === "serialNumber") {
+                    return (
+                      <div key={f.label} className="space-y-1.5">
+                        <label htmlFor={fieldName} className="text-xs font-medium text-foreground">
+                          {f.label}{f.required ? <span className="text-destructive"> *</span> : ""}
+                        </label>
+                        <input
+                          id={fieldName}
+                          name={fieldName}
+                          value={serialNo}
+                          onChange={e => handleSerialNoChange(e.target.value)}
+                          required={f.required}
+                          placeholder="e.g. 5CG12345WW"
+                          className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                        {serialNoError && (
+                          <p className="text-xs text-destructive mt-1">{serialNoError}</p>
+                        )}
+                      </div>
+                    );
+                  }
+
                   if (fieldName === "laptopMake") {
                     return (
                       <div key={f.label} className="space-y-1.5">
@@ -173,7 +221,7 @@ export default function AddInventoryPage() {
                     );
                   }
 
-                  const isDropdown = fieldName === "entity" || fieldName === "purpose" || fieldName === "imageType";
+                  const isDropdown = fieldName === "entity" || fieldName === "purpose" || fieldName === "imageType" || fieldName === "invoicingWarehouse";
 
                   return (
                     <div key={f.label} className="space-y-1.5">
@@ -184,8 +232,8 @@ export default function AddInventoryPage() {
                         <SmartDropdownField
                           name={fieldName}
                           placeholder={f.label}
-                          category={fieldName}
-                          options={dropdownData[fieldName === "entity" ? "entities" : fieldName === "purpose" ? "purposes" : "imageTypes"]}
+                          category={fieldName === "invoicingWarehouse" ? "warehouseLocation" : fieldName}
+                          options={dropdownData[fieldName === "entity" ? "entities" : fieldName === "purpose" ? "purposes" : fieldName === "imageType" ? "imageTypes" : "warehouseLocations"]}
                           allOptions={dropdownData.allOptions}
                           onAdd={handleAddOption}
                           onDelete={handleDeleteOption}

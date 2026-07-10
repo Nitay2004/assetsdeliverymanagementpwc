@@ -439,6 +439,35 @@ export async function deleteReversePickupRequest(id: string) {
   revalidatePath("/dashboard/reverse-pickup");
 }
 
+export async function lookupInventoryBySerial(serialNumber: string) {
+  const user = await getSession();
+  if (!user) throw new Error("Unauthorized");
+
+  if (!serialNumber || serialNumber.trim().length === 0) return null;
+
+  const item = await prisma.inventoryItem.findUnique({
+    where: { serialNumber: serialNumber.trim() },
+    select: {
+      model: true,
+      entity: true,
+      imageType: true,
+      employeeName: true,
+      emailId: true,
+      mobileNumber: true,
+      shippingAddress: true,
+      landMark: true,
+      city: true,
+      state: true,
+      pinCode: true,
+      adaptorAdded: true,
+      accessoryHeadsetMouse: true,
+      stickerColour: true,
+    },
+  });
+
+  return item;
+}
+
 // ─── Dropdown management (synced via DropdownOption table) ───
 
 const RP_CATEGORIES = [
@@ -457,17 +486,17 @@ export async function getReversePickupDropdowns() {
   });
 
   return {
-    types: options.filter(o => o.category === "type").map(o => o.value),
-    entities: options.filter(o => o.category === "entity").map(o => o.value),
-    imageTypes: options.filter(o => o.category === "imageType").map(o => o.value),
-    reasons: options.filter(o => o.category === "reason").map(o => o.value),
-    warehouseLocations: options.filter(o => o.category === "warehouseLocation").map(o => o.value),
-    displayStatuses: options.filter(o => o.category === "displayStatus").map(o => o.value),
-    dependencies: options.filter(o => o.category === "dependency").map(o => o.value),
-    courierNames: options.filter(o => o.category === "courierName").map(o => o.value),
-    blanccoYesNos: options.filter(o => o.category === "blanccoYesNo").map(o => o.value),
-    partnerNames: options.filter(o => o.category === "partnerName").map(o => o.value),
-    dispositions: options.filter(o => o.category === "disposition").map(o => o.value),
+    type: options.filter(o => o.category === "type").map(o => o.value),
+    entity: options.filter(o => o.category === "entity").map(o => o.value),
+    imageType: options.filter(o => o.category === "imageType").map(o => o.value),
+    reason: options.filter(o => o.category === "reason").map(o => o.value),
+    warehouseLocation: options.filter(o => o.category === "warehouseLocation").map(o => o.value),
+    displayStatus: options.filter(o => o.category === "displayStatus").map(o => o.value),
+    dependency: options.filter(o => o.category === "dependency").map(o => o.value),
+    courierName: options.filter(o => o.category === "courierName").map(o => o.value),
+    blanccoYesNo: options.filter(o => o.category === "blanccoYesNo").map(o => o.value),
+    partnerName: options.filter(o => o.category === "partnerName").map(o => o.value),
+    disposition: options.filter(o => o.category === "disposition").map(o => o.value),
     allOptions: options.map(o => ({ id: o.id, category: o.category, value: o.value })),
   };
 }

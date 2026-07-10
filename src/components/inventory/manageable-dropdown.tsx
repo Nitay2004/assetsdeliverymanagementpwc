@@ -149,7 +149,7 @@ import { getDistinctFieldValues, addDropdownOption, deleteDropdownOption, seedDr
 import { useToast } from "@/hooks/use-toast";
 
 export function useDropdownData() {
-  const [data, setData] = useState<{ entities: string[]; purposes: string[]; imageTypes: string[]; allOptions: any[] } | null>(null);
+  const [data, setData] = useState<{ entities: string[]; purposes: string[]; imageTypes: string[]; warehouseLocations: string[]; allOptions: any[] } | null>(null);
   const { toast } = useToast();
 
   async function loadData() {

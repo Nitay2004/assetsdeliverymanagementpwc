@@ -3,19 +3,20 @@
 import { useState, useCallback, useEffect } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { createReversePickupRequest, getReversePickupDropdowns, addReversePickupDropdownOption, deleteReversePickupDropdownOption, seedReversePickupDropdowns } from "@/app/actions/reverse-pickup";
+import { createReversePickupRequest, getReversePickupDropdowns, addReversePickupDropdownOption, deleteReversePickupDropdownOption, seedReversePickupDropdowns, lookupInventoryBySerial } from "@/app/actions/reverse-pickup";
 import { useToast } from "@/hooks/use-toast";
 import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
 
 type DropdownData = {
-  types: string[]; entities: string[]; imageTypes: string[]; reasons: string[];
-  warehouseLocations: string[]; displayStatuses: string[]; dependencies: string[];
-  courierNames: string[]; blanccoYesNos: string[]; partnerNames: string[]; dispositions: string[];
+  type: string[]; entity: string[]; imageType: string[]; reason: string[];
+  warehouseLocation: string[]; displayStatus: string[]; dependency: string[];
+  courierName: string[]; blanccoYesNo: string[]; partnerName: string[]; disposition: string[];
   allOptions: { id: string; category: string; value: string }[];
 };
 
-function ManualInput({ name, label, type = "text", placeholder, required, colSpan }: {
+function ManualInput({ name, label, type = "text", placeholder, required, colSpan, value, onChange }: {
   name: string; label: string; type?: string; placeholder?: string; required?: boolean; colSpan?: boolean;
+  value?: string; onChange?: (val: string) => void;
 }) {
   return (
     <div className={colSpan ? "space-y-1.5 md:col-span-2" : "space-y-1.5"}>
@@ -26,23 +27,28 @@ function ManualInput({ name, label, type = "text", placeholder, required, colSpa
         <textarea id={name} name={name} rows={2}
           className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
           placeholder={placeholder}
+          value={value} onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         />
       ) : (
         <input id={name} name={name} type={type} required={required}
           className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           placeholder={placeholder}
+          value={value} onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         />
       )}
     </div>
   );
 }
 
-function DDField({ name, label, category, placeholder, required, dd, onAdd, onDelete }: {
+function DDField({ name, label, category, placeholder, required, dd, onAdd, onDelete, value, onChange }: {
   name: string; label: string; category: string; placeholder?: string; required?: boolean;
   dd: DropdownData | null; onAdd: (cat: string, val: string) => Promise<void>; onDelete: (id: string) => Promise<void>;
+  value?: string; onChange?: (val: string) => void;
 }) {
   const opts = dd?.[category as keyof DropdownData] as string[] | undefined;
-  const [val, setVal] = useState("");
+  const [internalVal, setInternalVal] = useState("");
+  const val = value ?? internalVal;
+  const setVal = onChange ?? setInternalVal;
   return (
     <div className="space-y-1.5">
       <label className="text-sm font-medium text-foreground">
@@ -73,10 +79,25 @@ export function ReversePickupForm() {
   const { toast } = useToast();
   const [pending, setPending] = useState(false);
   const [dd, setDd] = useState<DropdownData | null>(null);
+  const [serialNumber, setSerialNumber] = useState("");
+  const [model, setModel] = useState("");
+  const [entity, setEntity] = useState("");
+  const [imageType, setImageType] = useState("");
+  const [employeeName, setEmployeeName] = useState("");
+  const [emailId, setEmailId] = useState("");
+  const [mobileNumber, setMobileNumber] = useState("");
+  const [pickupAddress, setPickupAddress] = useState("");
+  const [landmark, setLandmark] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [pinCode, setPinCode] = useState("");
+  const [accessories, setAccessories] = useState("");
+  const [lookupPending, setLookupPending] = useState(false);
+  const [pincodeLoading, setPincodeLoading] = useState(false);
 
   const loadDd = useCallback(async () => {
     let data = await getReversePickupDropdowns();
-    if (data.types.length === 0 && data.entities.length === 0) {
+    if (data.type.length === 0 && data.entity.length === 0) {
       await seedReversePickupDropdowns();
       data = await getReversePickupDropdowns();
     }
@@ -93,6 +114,64 @@ export function ReversePickupForm() {
     await deleteReversePickupDropdownOption(id);
     await loadDd();
   }
+
+  useEffect(() => {
+    if (!serialNumber || serialNumber.trim().length === 0) return;
+    const timer = setTimeout(async () => {
+      setLookupPending(true);
+      try {
+        const result = await lookupInventoryBySerial(serialNumber.trim());
+        if (result) {
+          setModel(result.model || "");
+          setEntity(result.entity || "");
+          setImageType(result.imageType || "");
+          setEmployeeName(result.employeeName || "");
+          setEmailId(result.emailId || "");
+          setMobileNumber(result.mobileNumber || "");
+          setPickupAddress(result.shippingAddress || "");
+          setLandmark(result.landMark || "");
+          setCity(result.city || "");
+          setState(result.state || "");
+          setPinCode(result.pinCode || "");
+          function hasAccessory(val: string | null | undefined): boolean {
+            if (!val) return false;
+            return !["—", "-", "--", "no", "n/a", "none", "nil", "na", "—"].includes(val.trim().toLowerCase());
+          }
+          const parts: string[] = [];
+          if (hasAccessory(result.adaptorAdded)) parts.push("Adapter");
+          if (hasAccessory(result.accessoryHeadsetMouse)) parts.push("Headset");
+          setAccessories(parts.join(", "));
+        }
+      } catch {
+        // ignore lookup errors
+      } finally {
+        setLookupPending(false);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [serialNumber]);
+
+  // Pincode auto-fetch city/state
+  useEffect(() => {
+    const digits = pinCode.replace(/\D/g, "");
+    if (digits.length !== 6) return;
+    const timer = setTimeout(async () => {
+      setPincodeLoading(true);
+      try {
+        const res = await fetch(`/api/pincode/${digits}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.city) setCity(data.city);
+          if (data.state) setState(data.state);
+        }
+      } catch {
+        // silent
+      } finally {
+        setPincodeLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [pinCode]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -115,8 +194,8 @@ export function ReversePickupForm() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <AutoField label="Year" value={String(new Date().getFullYear())} />
           <input type="hidden" name="year" value={new Date().getFullYear()} />
-          <DDField name="type" label="Type" category="types" placeholder="Select type..." dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
-          <ManualInput name="srNo" label="Sr #" placeholder="Serial number" />
+          <DDField name="type" label="Type" category="type" placeholder="Select type..." dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
+          <ManualInput name="srNo" label="Hp Sr No" placeholder="HP serial number" />
           <ManualInput name="requestDateHp" label="Request Date (HP)" type="date" />
           <ManualInput name="employeeId" label="Employee ID" placeholder="EMP-001" />
           <ManualInput name="alternateId" label="Alternate ID" placeholder="Alt ID" />
@@ -128,9 +207,9 @@ export function ReversePickupForm() {
       <div className="rounded-xl glass shadow-sm p-6 space-y-4">
         <h2 className="text-lg font-semibold text-foreground">User Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ManualInput name="employeeName" label="Name of User" required colSpan />
-          <ManualInput name="emailId" label="Email ID" type="email" placeholder="john@example.com" />
-          <ManualInput name="mobileNumber" label="User Contact Details" placeholder="+91 9876543210" />
+          <ManualInput name="employeeName" label="Name of User" required colSpan value={employeeName} onChange={setEmployeeName} />
+          <ManualInput name="emailId" label="Email ID" type="email" placeholder="john@example.com" value={emailId} onChange={setEmailId} />
+          <ManualInput name="mobileNumber" label="User Contact Details" placeholder="+91 9876543210" value={mobileNumber} onChange={setMobileNumber} />
           <ManualInput name="contact" label="Contact" placeholder="Alternate contact" />
         </div>
       </div>
@@ -139,12 +218,12 @@ export function ReversePickupForm() {
       <div className="rounded-xl glass shadow-sm p-6 space-y-4">
         <h2 className="text-lg font-semibold text-foreground">Asset Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ManualInput name="model" label="Laptop Model" required placeholder="e.g. HP EliteBook" />
-          <ManualInput name="serialNumber" label="Serial Number" required placeholder="SN-12345" />
-          <DDField name="entity" label="Entity" category="entities" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
-          <DDField name="imageType" label="Image Type" category="imageTypes" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
-          <ManualInput name="accessories" label="Accessories" placeholder="Charger, mouse, etc." colSpan />
-          <DDField name="reason" label="Reason" category="reasons" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
+          <ManualInput name="model" label="Laptop Model" required placeholder="e.g. HP EliteBook" value={model} onChange={setModel} />
+          <ManualInput name="serialNumber" label="Serial Number" required placeholder="SN-12345" value={serialNumber} onChange={setSerialNumber} />
+          <DDField name="entity" label="Entity" category="entity" dd={dd} onAdd={handleAdd} onDelete={handleDelete} value={entity} onChange={setEntity} />
+          <DDField name="imageType" label="Image Type" category="imageType" dd={dd} onAdd={handleAdd} onDelete={handleDelete} value={imageType} onChange={setImageType} />
+          <ManualInput name="accessories" label="Accessories" placeholder="Charger, mouse, etc." colSpan value={accessories} onChange={setAccessories} />
+          <DDField name="reason" label="Reason" category="reason" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
         </div>
       </div>
 
@@ -152,11 +231,24 @@ export function ReversePickupForm() {
       <div className="rounded-xl glass shadow-sm p-6 space-y-4">
         <h2 className="text-lg font-semibold text-foreground">Pickup Location</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ManualInput name="pickupAddress" label="Location Address" required colSpan type="textarea" placeholder="123, Main Street, ..." />
-          <ManualInput name="landmark" label="Land Mark" placeholder="Near ..." />
-          <ManualInput name="city" label="City" placeholder="Mumbai" />
-          <ManualInput name="state" label="State" placeholder="Maharashtra" />
-          <ManualInput name="pinCode" label="Pin Code" placeholder="400001" />
+          <ManualInput name="pickupAddress" label="Location Address" required colSpan type="textarea" placeholder="123, Main Street, ..." value={pickupAddress} onChange={setPickupAddress} />
+          <ManualInput name="landmark" label="Land Mark" placeholder="Near ..." value={landmark} onChange={setLandmark} />
+          <ManualInput name="city" label="City" value={city} onChange={setCity} placeholder="Mumbai" />
+          <ManualInput name="state" label="State" value={state} onChange={setState} placeholder="Maharashtra" />
+          <div className="space-y-1.5">
+            <label htmlFor="pinCode" className="text-sm font-medium text-foreground">Pin Code</label>
+            <div className="relative">
+              <input id="pinCode" name="pinCode" type="text" inputMode="numeric" maxLength={6}
+                value={pinCode}
+                onChange={e => setPinCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="400001"
+                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+              {pincodeLoading && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground animate-pulse">...</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -164,13 +256,13 @@ export function ReversePickupForm() {
       <div className="rounded-xl glass shadow-sm p-6 space-y-4">
         <h2 className="text-lg font-semibold text-foreground">Warehouse &amp; Logistics</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <DDField name="warehouseLocation" label="Warehouse" category="warehouseLocations" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
+          <DDField name="warehouseLocation" label="Warehouse" category="warehouseLocation" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
           <ManualInput name="receiverSerialNo" label="Receiver Serial No" placeholder="Receiver SN" />
           <AutoField label="Receiver S NO Entity" value="(auto)" />
-          <DDField name="displayStatus" label="Status" category="displayStatuses" placeholder="Select status..." dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
+          <DDField name="displayStatus" label="Status" category="displayStatus" placeholder="Select status..." dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
           <ManualInput name="eta" label="ETA" type="date" />
           <ManualInput name="futureDatePickup" label="Future Date Pickup" type="date" />
-          <DDField name="dependency" label="Dependency" category="dependencies" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
+          <DDField name="dependency" label="Dependency" category="dependency" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
           <ManualInput name="remarks" label="Remarks" colSpan type="textarea" placeholder="General remarks..." />
         </div>
       </div>
@@ -198,7 +290,7 @@ export function ReversePickupForm() {
       <div className="rounded-xl glass shadow-sm p-6 space-y-4">
         <h2 className="text-lg font-semibold text-foreground">Courier &amp; Tracking</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <DDField name="courierName" label="Courier Name" category="courierNames" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
+          <DDField name="courierName" label="Courier Name" category="courierName" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
           <ManualInput name="docketNumber" label="Docket No" placeholder="Docket / AWB" />
           <ManualInput name="pickupDate" label="Pickup Date" type="date" />
           <AutoField label="DC No" value="(auto)" />
@@ -213,7 +305,7 @@ export function ReversePickupForm() {
       <div className="rounded-xl glass shadow-sm p-6 space-y-4">
         <h2 className="text-lg font-semibold text-foreground">Blancco</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <DDField name="blanccoYesNo" label="Blancco Yes/No" category="blanccoYesNos" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
+          <DDField name="blanccoYesNo" label="Blancco Yes/No" category="blanccoYesNo" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
           <ManualInput name="blanccoDate" label="Blancco Date" type="date" />
         </div>
       </div>

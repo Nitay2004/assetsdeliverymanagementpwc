@@ -116,7 +116,6 @@ export async function addInventoryItem(formData: FormData) {
   }
 
   revalidatePath("/dashboard/inventory");
-  redirect("/dashboard/inventory");
 }
 
 export async function updateInventoryItem(id: string, formData: FormData) {
@@ -314,15 +313,25 @@ export async function getDistinctFieldValues() {
     adaptorAddeds: options.filter((o) => o.category === "adaptorAdded").map((o) => o.value),
     accessoryHeadsetMouses: options.filter((o) => o.category === "accessoryHeadsetMouse").map((o) => o.value),
     stickerColours: options.filter((o) => o.category === "stickerColour").map((o) => o.value),
+    warehouseLocations: options.filter((o) => o.category === "warehouseLocation").map((o) => o.value),
     allOptions: options.map((o) => ({ id: o.id, category: o.category, value: o.value })),
   };
+}
+
+export async function checkSerialNumber(serialNumber: string) {
+  if (!serialNumber.trim()) return { exists: false };
+  const item = await prisma.inventoryItem.findUnique({
+    where: { serialNumber: serialNumber.trim() },
+    select: { id: true },
+  });
+  return { exists: !!item };
 }
 
 export async function seedDropdownOptions() {
   const user = await getSession();
   if (!user || user.role !== "ADMIN") return;
 
-  const [existingEntities, existingPurposes, existingImageTypes, existingAdaptors, existingHeadset, existingStickers] = await Promise.all([
+  const [existingEntities, existingPurposes, existingImageTypes, existingAdaptors, existingHeadset, existingStickers, existingWarehouseLocs] = await Promise.all([
     prisma.inventoryItem.findMany({
       where: { entity: { not: null } },
       select: { entity: true },
@@ -353,7 +362,14 @@ export async function seedDropdownOptions() {
       select: { stickerColour: true },
       distinct: ["stickerColour"],
     }),
+    prisma.inventoryItem.findMany({
+      where: { invoicingWarehouse: { not: null } },
+      select: { invoicingWarehouse: true },
+      distinct: ["invoicingWarehouse"],
+    }),
   ]);
+
+  const defaultWarehouseLocs = ["Kolkata", "Bangalore", "Gurgaon"];
 
   const toInsert = [
     ...existingEntities.map((e) => ({ category: "entity", value: e.entity! })),
@@ -362,6 +378,8 @@ export async function seedDropdownOptions() {
     ...existingAdaptors.map((a) => ({ category: "adaptorAdded", value: a.adaptorAdded! })),
     ...existingHeadset.map((h) => ({ category: "accessoryHeadsetMouse", value: h.accessoryHeadsetMouse! })),
     ...existingStickers.map((s) => ({ category: "stickerColour", value: s.stickerColour! })),
+    ...existingWarehouseLocs.map((w) => ({ category: "warehouseLocation", value: w.invoicingWarehouse! })),
+    ...defaultWarehouseLocs.map((v) => ({ category: "warehouseLocation", value: v })),
   ];
 
   for (const { category, value } of toInsert) {
