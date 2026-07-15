@@ -181,7 +181,7 @@ export default async function DashboardPage(props: {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Welcome back{user?.name ? `, ${user.name}` : ""}! 👋
+            Welcome back{user?.name ? `, ${user.name}` : ""}!
           </h1>
           <p className="text-muted-foreground mt-1">
             Here&apos;s an overview of your asset delivery pipeline.
