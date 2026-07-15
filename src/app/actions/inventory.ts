@@ -629,3 +629,39 @@ export async function sendToWarehouse(inventoryItemIds: string[]) {
   revalidatePath("/dashboard");
   return { success: true, orderId: order.id };
 }
+
+export async function fixInventoryStatusConsistency() {
+  const user = await getSession();
+  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+
+  const r1 = await prisma.inventoryItem.updateMany({
+    where: { status: "AVAILABLE", employeeName: { not: null } },
+    data: { status: "ALLOCATED" },
+  });
+
+  const r2 = await prisma.inventoryItem.updateMany({
+    where: {
+      status: "AVAILABLE",
+      OR: [
+        { trackingStatus: { contains: "Delivered", mode: "insensitive" } },
+        { trackingStatus: { contains: "Dispatched", mode: "insensitive" } },
+        { trackingStatus: { contains: "Invoiced", mode: "insensitive" } },
+        { trackingStatus: { contains: "Allocated", mode: "insensitive" } },
+      ],
+    },
+    data: { status: "ALLOCATED" },
+  });
+
+  const r3 = await prisma.inventoryItem.updateMany({
+    where: {
+      status: "AVAILABLE",
+      assets: { some: { status: "allocated" } },
+    },
+    data: { status: "ALLOCATED" },
+  });
+
+  const total = r1.count + r2.count + r3.count;
+  revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
+  return { fixed: total };
+}

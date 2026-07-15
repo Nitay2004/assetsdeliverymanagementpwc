@@ -258,6 +258,12 @@ export async function POST(request: Request) {
       Object.entries(data).filter(([_, v]) => v !== null && v !== undefined)
     );
 
+    const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
+    const hasTracking = cleanData.trackingStatus && String(cleanData.trackingStatus).trim() !== "";
+    if ((hasEmployee || hasTracking) && !cleanData.status) {
+      cleanData.status = "ALLOCATED";
+    }
+
     rows.push({ data: cleanData, rowNum: r + 2 });
   }
 
