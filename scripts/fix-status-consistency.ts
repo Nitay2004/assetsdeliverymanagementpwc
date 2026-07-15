@@ -1,50 +1,40 @@
-import { PrismaClient } from "@prisma/client";
+import "dotenv/config";
 import { Pool } from "pg";
-import { PrismaPg } from "@prisma/adapter-pg";
-
-const connectionString = process.env.DATABASE_URL!;
-const pool = new Pool({ connectionString });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  // Fix 1: Items with employee name assigned but status still AVAILABLE
-  const r1 = await prisma.inventoryItem.updateMany({
-    where: {
-      status: "AVAILABLE",
-      employeeName: { not: null },
-    },
-    data: { status: "ALLOCATED" },
+  console.log("Connecting to database...");
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
   });
-  console.log(`Fixed ${r1.count} items with employeeName but AVAILABLE status.`);
 
-  // Fix 2: Items with delivered-like tracking status but still AVAILABLE
-  const r2 = await prisma.inventoryItem.updateMany({
-    where: {
-      status: "AVAILABLE",
-      OR: [
-        { trackingStatus: { contains: "Delivered", mode: "insensitive" } },
-        { trackingStatus: { contains: "Dispatched", mode: "insensitive" } },
-        { trackingStatus: { contains: "Invoiced", mode: "insensitive" } },
-        { trackingStatus: { contains: "Payment", mode: "insensitive" } },
-        { trackingStatus: { contains: "Confirmed", mode: "insensitive" } },
-        { trackingStatus: { contains: "Warranty", mode: "insensitive" } },
-        { trackingStatus: { contains: "Allocated", mode: "insensitive" } },
-      ],
-    },
-    data: { status: "ALLOCATED" },
-  });
-  console.log(`Fixed ${r2.count} items with tracking status but AVAILABLE status.`);
+  const client = await pool.connect();
+  console.log("Connected!");
+  try {
+    // Fix 1: Items with employee name but AVAILABLE
+    const r1 = await client.query(
+      "UPDATE inventory_items SET status = 'ALLOCATED' WHERE status = 'AVAILABLE' AND employee_name IS NOT NULL"
+    );
+    console.log("Fixed " + r1.rowCount + " items with employeeName but AVAILABLE status.");
 
-  // Fix 3: Items linked to assets (orders) but still AVAILABLE
-  const r3 = await prisma.inventoryItem.updateMany({
-    where: {
-      status: "AVAILABLE",
-      assets: { some: { status: "allocated" } },
-    },
-    data: { status: "ALLOCATED" },
-  });
-  console.log(`Fixed ${r3.count} items linked to allocated assets but AVAILABLE status.`);
+    // Fix 2: Items with tracking status but AVAILABLE
+    const r2 = await client.query(
+      "UPDATE inventory_items SET status = 'ALLOCATED' WHERE status = 'AVAILABLE' AND tracking_status IS NOT NULL AND tracking_status != ''"
+    );
+    console.log("Fixed " + r2.rowCount + " items with tracking status but AVAILABLE status.");
+
+    // Fix 3: Items linked to allocated assets
+    const r3 = await client.query(
+      "UPDATE inventory_items SET status = 'ALLOCATED' WHERE status = 'AVAILABLE' AND id IN (SELECT inventory_item_id FROM assets WHERE status = 'allocated' AND inventory_item_id IS NOT NULL)"
+    );
+    console.log("Fixed " + r3.rowCount + " items linked to allocated assets but AVAILABLE status.");
+
+    const total = (r1.rowCount || 0) + (r2.rowCount || 0) + (r3.rowCount || 0);
+    console.log("\nTotal items fixed: " + total);
+  } finally {
+    client.release();
+    await pool.end();
+  }
 }
 
-main().catch(console.error).finally(() => prisma.$disconnect());
+main().catch(function(e) { console.error("ERROR:", e.message); process.exit(1); });

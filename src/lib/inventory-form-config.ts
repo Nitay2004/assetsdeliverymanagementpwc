@@ -88,7 +88,15 @@ export const fields: Record<string, { label: string; type: string; required?: bo
   ],
 };
 
+const labelOverride: Record<string, string> = {
+  "State (SLA)": "slaState",
+  "SLA Missed/Met": "slaStatus",
+  "Check": "checkField",
+  "Status_1": "csvStatus",
+};
+
 export function toFieldName(label: string): string {
+  if (labelOverride[label]) return labelOverride[label];
   return label
     .replace(/[#()/]/g, "")
     .replace(/[ _-]+/g, " ")
