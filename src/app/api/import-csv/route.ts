@@ -78,86 +78,185 @@ const baseMapping: Record<string, string> = {
 };
 
 const aliases: Record<string, string> = {
+  // Serial Number
   "serial no": "serialNumber",
   "serial no.": "serialNumber",
   "serial number": "serialNumber",
+  "s no": "serialNumber",
+
+  // Employee
   "employee name": "employeeName",
   "name of the employee": "employeeName",
   "emp name": "employeeName",
+  "engineer name": "employeeName",
+
+  // Model / Product
+  "product": "model",
+
+  // Owner / Entity / Partner
+  "owner of the asset": "partner",
+  "pwcentity": "entity",
+  "pwc entity": "entity",
+
+  // Provisioning
+  "provisioning location": "userBaseLocation",
+  "provisioned date": "requestDate",
+  "lot received date": "requestDate",
+
+  // Provision Status
+  "master provision status 1": "processStatus",
+  "provision status 1": "processStatus",
+  "master provision sub status": "trackingSubStatus",
+  "provisioned sub status": "trackingSubStatus",
+
+  // Warehouse
+  "current warehouse location": "invoicingWarehouse",
+  "warehouse location": "invoicingWarehouse",
+
+  // Remarks
+  "asset remarks": "remark",
+  "remarks": "remark",
+
+  // Image
+  "pwc image": "imageType",
+
+  // Shipping / Delivery
+  "shipping date": "deliveryDate",
+
+  // Storage
+  "storage status": "status",
+
+  // Courier / Vendor
+  "courier name": "vendor",
+
+  // Docket
+  "docket #": "docketNumber",
+  "docket no": "docketNumber",
+  "docket number": "docketNumber",
+
+  // City
+  "location city": "city",
+  "location - city": "city",
+
+  // Delivery Challan
+  "delivey challan": "dcNumber",
+  "delivery challan": "dcNumber",
+  "dc number": "dcNumber",
+  "dc no": "dcNumber",
+
+  // Warranty
+  "warranty end date": "warrantyEndPeriod",
+
+  // WS1
   "serial no in ws1": "serialNoInWs1",
   "ws1 serial no": "serialNoInWs1",
   "ws1 serial": "serialNoInWs1",
   "date of ws1 update": "dateOfWs1Update",
   "ws1 update date": "dateOfWs1Update",
+  "machine ws1 status": "machineWs1Status",
+  "ws1 status": "machineWs1Status",
+
+  // Invoice Product
   "invoice product discription": "invoiceProductDescription",
   "invoice product description": "invoiceProductDescription",
   "product description": "invoiceProductDescription",
+
+  // Email
   "email recieved hour": "emailReceivedHour",
   "email received hour": "emailReceivedHour",
+  "email id": "emailId",
+
+  // Delivery TAT
   "delivery tat in days": "deliveryTatDays",
   "delivery tat": "deliveryTatDays",
   "tat days": "deliveryTatDays",
+
+  // Actual Delivery
   "actual delivery pod date": "actualDeliveryDate",
   "actual delivery date": "actualDeliveryDate",
   "pod date": "actualDeliveryDate",
+
+  // Customer Instruction
   "customer instruction doc": "customerInstructionDoc",
   "customer instructions": "customerInstructionDoc",
+
+  // Accessory
   "accessory headset mouse yes no": "accessoryHeadsetMouse",
   "accessory headset mouse": "accessoryHeadsetMouse",
+
+  // Pickup
   "pick up date": "pickupDate",
   "pickup date": "pickupDate",
+
+  // Laptop
   "laptop make": "laptopMake",
   "laptop model": "laptopModel",
+
+  // Warranty
   "warranty period": "warrantyPeriod",
   "warranty end period": "warrantyEndPeriod",
-  "warranty end date": "warrantyEndPeriod",
+
+  // Sticker
   "sticker colour": "stickerColour",
   "sticker color": "stickerColour",
+
+  // Invoicing Warehouse
   "invoicing warehouse": "invoicingWarehouse",
+
+  // Tracking
   "tracking status": "trackingStatus",
   "tracking sub status": "trackingSubStatus",
-  "docket number": "docketNumber",
-  "docket no": "docketNumber",
+
+  // Delivered Location
   "delivered location": "deliveredLocation",
   "delivery location": "deliveredLocation",
+
+  // Delivery Date
   "delivery date": "deliveryDate",
   "request date": "requestDate",
-  "machine ws1 status": "machineWs1Status",
-  "ws1 status": "machineWs1Status",
+
+  // SLA
   "sla start date": "slaStartDate",
   "cut off status": "cutOffStatus",
   "cut-off status": "cutOffStatus",
   "oda location": "odaLocation",
+  "sla missed met": "slaStatus",
+  "sla missed or met": "slaStatus",
+  "sla miss met": "slaStatus",
+  "state sla": "slaState",
+  "state (sla)": "slaState",
+
+  // Pincode / Address
   "pin code": "pinCode",
   "pincode": "pinCode",
   "land mark": "landMark",
   "landmark": "landMark",
+  "shipping address": "shippingAddress",
   "user base location": "userBaseLocation",
   "base location": "userBaseLocation",
+
+  // Image
   "image type": "imageType",
-  "email id": "emailId",
+
+  // Mobile
   "mobile number": "mobileNumber",
   "phone number": "mobileNumber",
   "alternate phone number": "alternatePhoneNumber",
   "alt phone number": "alternatePhoneNumber",
   "alternate phone": "alternatePhoneNumber",
   "alternate mobile number": "alternatePhoneNumber",
-  "shipping address": "shippingAddress",
-  "laptop acceptance date": "laptopAcceptanceDate",
-  "acceptance date": "laptopAcceptanceDate",
-  "services start date": "servicesStartDate",
+
+  // Invoiced
   "invoiced quantity": "invoicedQuantity",
+  "acceptance date": "laptopAcceptanceDate",
+  "laptop acceptance date": "laptopAcceptanceDate",
+  "services start date": "servicesStartDate",
+
+  // Box / Check / Status
   "box serial no": "boxSerialNo",
   "box serial": "boxSerialNo",
-  "dc number": "dcNumber",
-  "dc no": "dcNumber",
-  "status 1": "csvStatus",
-  "sla missed met": "slaStatus",
-  "sla missed or met": "slaStatus",
-  "sla miss met": "slaStatus",
-  "state sla": "slaState",
-  "state (sla)": "slaState",
   "check": "checkField",
+  "status 1": "csvStatus",
 };
 
 const normLookup: Record<string, string> = {};
