@@ -58,11 +58,6 @@ export default function ImportInventoryPage() {
         </div>
       </div>
 
-      <div className="rounded-xl glass shadow-sm p-4 text-sm text-muted-foreground space-y-1">
-        <p className="font-medium text-foreground">Required columns:</p>
-        <p>Serial Number, Employee Name, Invoicing Warehouse, Sticker Colour</p>
-      </div>
-
       <form onSubmit={handleSubmit} className="rounded-xl glass shadow-sm p-6 space-y-5">
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">
