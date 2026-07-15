@@ -243,6 +243,10 @@ export async function POST(request: Request) {
 
     const data = buildPrismaData(headers, row, unknownHeaders);
 
+    if (!data.serialNumber || String(data.serialNumber).trim() === "") {
+      data.serialNumber = `AUTO-${Date.now()}-${r + 2}`;
+    }
+
     if (!data.model && data.laptopModel) {
       data.model = data.laptopModel;
     }
