@@ -6,7 +6,134 @@ import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 
 function normalize(s: string): string {
-  return s.toLowerCase().replace(/[-/()]+/g, " ").replace(/\s+/g, " ").trim();
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+const fieldKeywords: [string, string[]][] = [
+  // PRIORITY ORDER MATTERS — more specific fields first
+  ["serialNumber",     ["serial", "s no", "s.no", "sn", "serial number", "serial no", "serial no."]],
+  ["serialNoInWs1",    ["ws1 serial", "serial ws1", "serial in ws1"]],
+  ["boxSerialNo",      ["box serial", "box sn", "box number"]],
+  ["laptopModel",      ["laptop model"]],
+  ["laptopMake",       ["laptop make", "laptop brand", "laptop manufacturer"]],
+  ["invoiceProductDescription", ["invoice product", "invoice description", "product description", "invoice discription", "invoice product description", "invoice product discription"]],
+  ["employeeName",     ["employee", "emp name", "engineer", "user name", "assigned to", "owner name", "name of the employee", "engineer name"]],
+  ["emailId",          ["email", "email id", "email address", "mail id", "e mail"]],
+  ["emailReceivedHour",["email received", "received hour", "email hour", "email recieved"]],
+  ["mobileNumber",     ["mobile", "phone number", "contact number", "mobile number", "mobile no", "contact no", "phone no", "cell"]],
+  ["alternatePhoneNumber", ["alternate phone", "alt phone", "alternate number", "alternate mobile", "alt mobile", "secondary phone", "secondary mobile"]],
+  ["shippingAddress",  ["shipping address", "delivery address", "ship to address", "ship to", "address line"]],
+  ["landMark",         ["landmark", "land mark", "near", "nearby"]],
+  ["city",             ["city", "town", "location city", "location city"]],
+  ["state",            ["state", "region"]],
+  ["pinCode",          ["pin", "pincode", "pin code", "postal code", "zip", "zip code"]],
+  ["partner",          ["partner", "owner of the asset", "asset owner", "owner"]],
+  ["entity",           ["entity", "pwc entity", "pwcentity", "company"]],
+  ["model",            ["model", "product", "product name", "machine", "device"]],
+  ["specs",            ["spec", "specs", "specification", "configuration", "config"]],
+  ["purpose",          ["purpose", "usage", "reason", "why"]],
+  ["count",            ["count", "qty", "quantity", "no of", "num", "total"]],
+
+  // Status fields (must be before generic status)
+  ["processStatus",    ["process status", "master provision status", "provision status", "master provision", "provisioning status"]],
+  ["trackingSubStatus",["tracking sub", "sub status", "sub-status", "provisioned sub status", "sub status"]],
+  ["trackingStatus",   ["tracking status", "tracking", "shipment status", "current tracking"]],
+  ["csvStatus",        ["status 1", "status_1", "csv status"]],
+  ["cutOffStatus",     ["cut off", "cut-off", "cutoff", "cut off status"]],
+  ["slaStatus",        ["sla missed", "sla met", "missed met", "miss met", "sla miss", "sla status", "sla missed met"]],
+  ["machineWs1Status", ["ws1 status", "ws1", "machine ws1", "workspace one"]],
+  ["status",           ["status", "storage status", "storage", "condition", "current status", "asset status"]],
+
+  // Dates
+  ["warrantyEndPeriod",     ["warranty end", "warranty expiry", "warranty till", "warranty valid till", "warranty upto"]],
+  ["warrantyPeriod",        ["warranty period", "warranty term", "warranty", "warranty months", "warranty years"]],
+  ["actualDeliveryDate",    ["actual delivery", "pod date", "proof of delivery", "pod"]],
+  ["deliveryDate",          ["delivery date", "shipping date", "dispatch date", "deliver date", "ship date"]],
+  ["requestDate",           ["request date", "received date", "lot received", "provisioned date", "provision date", "inward date", "request"]],
+  ["slaStartDate",          ["sla start", "sla date"]],
+  ["laptopAcceptanceDate",  ["acceptance date", "laptop acceptance", "accept date"]],
+  ["pickupDate",            ["pickup", "pick up date", "pickup date", "pick up"]],
+  ["dateOfWs1Update",       ["ws1 date", "ws1 update", "date of ws1", "ws1 update date"]],
+  ["servicesStartDate",     ["services start", "service start", "service begin"]],
+  ["date",                  ["date"]],
+
+  // SLA / Location / Zone
+  ["userBaseLocation",  ["location", "base location", "provisioning location", "provision location", "work location", "user location", "user base location"]],
+  ["deliveredLocation", ["delivered location", "delivery location", "delivered at", "delivery at", "delivered to"]],
+  ["invoicingWarehouse",["warehouse", "warehouse location", "invoicing warehouse", "current warehouse", "warehouse loc", "warehouse name"]],
+  ["odaLocation",       ["oda", "oda location"]],
+  ["zone",              ["zone", "area zone", "region zone"]],
+  ["tier",              ["tier", "level", "service tier"]],
+  ["tat",               ["tat", "turn around", "turnaround"]],
+  ["deliveryTatDays",   ["tat days", "delivery tat", "tat in days", "delivery tat in days"]],
+
+  // Vendor / Docket / DC
+  ["vendor",            ["vendor", "courier", "courier name", "service provider", "logistics partner", "carrier", "transporter"]],
+  ["docketNumber",      ["docket", "docket number", "docket no", "tracking number", "docket #", "docket no.", "awb", "awb number", "consignment"]],
+  ["dcNumber",          ["dc number", "dc no", "dc #", "delivery challan", "delivey challan", "challan number", "challan no", "challan"]],
+  ["dc",                ["dc"]],
+
+  // WS1 / Warehouse
+  ["dateOfWs1Update",       ["ws1 date", "ws1 update", "date of ws1"]],
+
+  // Remarks
+  ["remark",            ["remark", "remarks", "asset remarks", "comments", "notes", "observation"]],
+  ["pwcRemarks",        ["pwc remark", "pwc comments", "pwc notes"]],
+
+  // Additional
+  ["imageType",         ["image", "pwc image", "image type", "laptop image", "photo"]],
+  ["adaptorAdded",      ["adaptor", "adapter", "adaptor added", "adapter added"]],
+  ["accessoryHeadsetMouse", ["accessory", "headset", "mouse", "accessory headset", "accessory mouse"]],
+  ["stickerColour",     ["sticker", "sticker colour", "sticker color", "sticker col", "sticker shade"]],
+  ["checkField",        ["check", "verified", "confirmation", "confirm", "checked"]],
+  ["customerInstructionDoc", ["customer instruction", "instruction doc", "customer doc", "instruction"]],
+  ["invoicedQuantity",  ["invoiced qty", "invoiced quantity", "invoice qty", "quantity invoiced", "invoiced", "invoice quantity"]],
+  ["sr",                ["sr", "sr no", "sequence", "lot no", "inward lot", "lot number", "dev it inward lot", "hp lot", "hp lot number"]],
+];
+
+// Score a header against a field's keywords
+function scoreHeader(headerNorm: string, keywords: string[]): number {
+  let best = 0;
+  for (const kw of keywords) {
+    if (headerNorm === kw) {
+      // Exact match = highest score
+      best = Math.max(best, 1000);
+    } else if (headerNorm.includes(kw)) {
+      // Contains keyword — score by keyword length (longer = more specific = better)
+      best = Math.max(best, kw.length * 10);
+    } else if (kw.includes(headerNorm) && headerNorm.length >= 3) {
+      // Keyword contains header (header is a subset of keyword)
+      best = Math.max(best, headerNorm.length * 5);
+    }
+  }
+  return best;
+}
+
+function intelligentResolve(header: string): string | undefined {
+  const n = normalize(header);
+  if (!n) return undefined;
+
+  // 1. Exact match from baseMapping + aliases
+  const exact = normLookup[n];
+  if (exact) return exact;
+
+  // 2. Keyword-based scoring
+  let bestField: string | undefined;
+  let bestScore = 0;
+  for (const [field, keywords] of fieldKeywords) {
+    const score = scoreHeader(n, keywords);
+    if (score > bestScore) {
+      bestScore = score;
+      bestField = field;
+    }
+  }
+
+  // Require a minimum score to avoid false positives
+  if (bestScore >= 20 && bestField) {
+    return bestField;
+  }
+
+  return undefined;
 }
 
 const baseMapping: Record<string, string> = {
@@ -78,76 +205,43 @@ const baseMapping: Record<string, string> = {
 };
 
 const aliases: Record<string, string> = {
-  // Serial Number
   "serial no": "serialNumber",
   "serial no.": "serialNumber",
   "serial number": "serialNumber",
   "s no": "serialNumber",
-
-  // Employee
   "employee name": "employeeName",
   "name of the employee": "employeeName",
   "emp name": "employeeName",
   "engineer name": "employeeName",
-
-  // Model / Product
   "product": "model",
-
-  // Owner / Entity / Partner
   "owner of the asset": "partner",
   "pwcentity": "entity",
   "pwc entity": "entity",
-
-  // Provisioning
   "provisioning location": "userBaseLocation",
   "provisioned date": "requestDate",
   "lot received date": "requestDate",
-
-  // Provision Status
   "master provision status 1": "processStatus",
   "provision status 1": "processStatus",
   "master provision sub status": "trackingSubStatus",
   "provisioned sub status": "trackingSubStatus",
-
-  // Warehouse
   "current warehouse location": "invoicingWarehouse",
   "warehouse location": "invoicingWarehouse",
-
-  // Remarks
   "asset remarks": "remark",
   "remarks": "remark",
-
-  // Image
   "pwc image": "imageType",
-
-  // Shipping / Delivery
   "shipping date": "deliveryDate",
-
-  // Storage
   "storage status": "status",
-
-  // Courier / Vendor
   "courier name": "vendor",
-
-  // Docket
   "docket #": "docketNumber",
   "docket no": "docketNumber",
   "docket number": "docketNumber",
-
-  // City
   "location city": "city",
   "location - city": "city",
-
-  // Delivery Challan
   "delivey challan": "dcNumber",
   "delivery challan": "dcNumber",
   "dc number": "dcNumber",
   "dc no": "dcNumber",
-
-  // Warranty
   "warranty end date": "warrantyEndPeriod",
-
-  // WS1
   "serial no in ws1": "serialNoInWs1",
   "ws1 serial no": "serialNoInWs1",
   "ws1 serial": "serialNoInWs1",
@@ -155,78 +249,41 @@ const aliases: Record<string, string> = {
   "ws1 update date": "dateOfWs1Update",
   "machine ws1 status": "machineWs1Status",
   "ws1 status": "machineWs1Status",
-
-  // Invoice Product
   "invoice product discription": "invoiceProductDescription",
   "invoice product description": "invoiceProductDescription",
   "product description": "invoiceProductDescription",
-
-  // Email
   "email recieved hour": "emailReceivedHour",
   "email received hour": "emailReceivedHour",
   "email id": "emailId",
-
-  // Delivery TAT
   "delivery tat in days": "deliveryTatDays",
   "delivery tat": "deliveryTatDays",
   "tat days": "deliveryTatDays",
-
-  // Actual Delivery
   "actual delivery pod date": "actualDeliveryDate",
   "actual delivery date": "actualDeliveryDate",
   "pod date": "actualDeliveryDate",
-
-  // Customer Instruction
   "customer instruction doc": "customerInstructionDoc",
   "customer instructions": "customerInstructionDoc",
-
-  // Accessory
   "accessory headset mouse yes no": "accessoryHeadsetMouse",
   "accessory headset mouse": "accessoryHeadsetMouse",
-
-  // Pickup
   "pick up date": "pickupDate",
   "pickup date": "pickupDate",
-
-  // Laptop
   "laptop make": "laptopMake",
   "laptop model": "laptopModel",
-
-  // Warranty
   "warranty period": "warrantyPeriod",
   "warranty end period": "warrantyEndPeriod",
-
-  // Sticker
   "sticker colour": "stickerColour",
   "sticker color": "stickerColour",
-
-  // Invoicing Warehouse
   "invoicing warehouse": "invoicingWarehouse",
-
-  // Tracking
   "tracking status": "trackingStatus",
   "tracking sub status": "trackingSubStatus",
-
-  // Delivered Location
   "delivered location": "deliveredLocation",
   "delivery location": "deliveredLocation",
-
-  // Delivery Date
   "delivery date": "deliveryDate",
   "request date": "requestDate",
-
-  // SLA
   "sla start date": "slaStartDate",
   "cut off status": "cutOffStatus",
   "cut-off status": "cutOffStatus",
   "oda location": "odaLocation",
-  "sla missed met": "slaStatus",
-  "sla missed or met": "slaStatus",
-  "sla miss met": "slaStatus",
-  "state sla": "slaState",
-  "state (sla)": "slaState",
-
-  // Pincode / Address
   "pin code": "pinCode",
   "pincode": "pinCode",
   "land mark": "landMark",
@@ -234,29 +291,26 @@ const aliases: Record<string, string> = {
   "shipping address": "shippingAddress",
   "user base location": "userBaseLocation",
   "base location": "userBaseLocation",
-
-  // Image
   "image type": "imageType",
-
-  // Mobile
   "mobile number": "mobileNumber",
   "phone number": "mobileNumber",
   "alternate phone number": "alternatePhoneNumber",
   "alt phone number": "alternatePhoneNumber",
   "alternate phone": "alternatePhoneNumber",
   "alternate mobile number": "alternatePhoneNumber",
-
-  // Invoiced
   "invoiced quantity": "invoicedQuantity",
   "acceptance date": "laptopAcceptanceDate",
   "laptop acceptance date": "laptopAcceptanceDate",
   "services start date": "servicesStartDate",
-
-  // Box / Check / Status
   "box serial no": "boxSerialNo",
   "box serial": "boxSerialNo",
   "check": "checkField",
   "status 1": "csvStatus",
+  "sla missed met": "slaStatus",
+  "sla missed or met": "slaStatus",
+  "sla miss met": "slaStatus",
+  "state sla": "slaState",
+  "state (sla)": "slaState",
 };
 
 const normLookup: Record<string, string> = {};
@@ -268,8 +322,7 @@ for (const [alias, col] of Object.entries(aliases)) {
 }
 
 function resolveColumn(header: string): string | undefined {
-  const n = normalize(header);
-  return normLookup[n];
+  return intelligentResolve(header);
 }
 
 const dateFields = new Set([
@@ -316,12 +369,13 @@ function parseValue(value: string, field: string): unknown {
 function buildPrismaData(
   headers: string[],
   row: string[],
-  unknownHeaders: string[]
+  unknownHeaders: string[],
+  resolvedMap: Map<number, string>
 ): Record<string, unknown> {
   const data: Record<string, unknown> = {};
   for (let i = 0; i < headers.length; i++) {
     const header = headers[i].trim();
-    const column = resolveColumn(header);
+    const column = resolvedMap.get(i);
     if (!column) {
       unknownHeaders.push(header);
       continue;
@@ -402,7 +456,23 @@ export async function POST(request: Request) {
     );
   }
 
+  // Resolve all headers upfront — intelligently
+  const resolvedMap = new Map<number, string>();
+  const headerMapping: { header: string; field: string | undefined }[] = [];
   const unknownHeaders: string[] = [];
+
+  for (let i = 0; i < headers.length; i++) {
+    const header = headers[i].trim();
+    const column = intelligentResolve(header);
+    if (column) {
+      resolvedMap.set(i, column);
+      headerMapping.push({ header, field: column });
+    } else {
+      unknownHeaders.push(header);
+      headerMapping.push({ header, field: undefined });
+    }
+  }
+
   let imported = 0;
   const errors: string[] = [];
   const BATCH_SIZE = 500;
@@ -412,7 +482,7 @@ export async function POST(request: Request) {
     const row = records[r];
     if (row.length === 0 || row.every(c => c.trim() === "")) continue;
 
-    const data = buildPrismaData(headers, row, unknownHeaders);
+    const data = buildPrismaData(headers, row, unknownHeaders, resolvedMap);
 
     if (!data.serialNumber || String(data.serialNumber).trim() === "") {
       data.serialNumber = `AUTO-${Date.now()}-${r + 2}`;
@@ -467,9 +537,12 @@ export async function POST(request: Request) {
     warning = `Unrecognized columns ignored: ${uniqueUnknown.join(", ")}.`;
   }
 
+  const matchedHeaders = headerMapping.filter(h => h.field).map(h => `${h.header} → ${h.field}`);
+
   return NextResponse.json({
     success: true,
     imported,
+    matched: matchedHeaders,
     errors: errors.length > 0 ? errors : null,
     warning: warning || null,
   });
