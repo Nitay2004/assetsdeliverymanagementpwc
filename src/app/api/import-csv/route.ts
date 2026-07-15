@@ -237,7 +237,9 @@ export async function POST(request: Request) {
   const unknownHeaders: string[] = [];
   let imported = 0;
   const errors: string[] = [];
+  const BATCH_SIZE = 500;
 
+  const rows: { data: Record<string, unknown>; rowNum: number }[] = [];
   for (let r = 0; r < records.length; r++) {
     const row = records[r];
     if (row.length === 0 || row.every(c => c.trim() === "")) continue;
@@ -256,14 +258,29 @@ export async function POST(request: Request) {
       Object.entries(data).filter(([_, v]) => v !== null && v !== undefined)
     );
 
+    rows.push({ data: cleanData, rowNum: r + 2 });
+  }
+
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
     try {
-      await prisma.inventoryItem.create({ data: cleanData as any });
-      imported++;
+      const result = await prisma.inventoryItem.createMany({
+        data: batch.map(b => b.data as any),
+        skipDuplicates: true,
+      });
+      imported += result.count;
     } catch (e: any) {
-      if (e?.code === "P2002") {
-        errors.push(`Row ${r + 2}: Serial Number "${data.serialNumber}" already exists, skipped`);
-      } else {
-        errors.push(`Row ${r + 2}: ${e?.message ?? "Unknown error"}`);
+      for (const item of batch) {
+        try {
+          await prisma.inventoryItem.create({ data: item.data as any });
+          imported++;
+        } catch (err: any) {
+          if (err?.code === "P2002") {
+            errors.push(`Row ${item.rowNum}: Serial Number "${item.data.serialNumber}" already exists, skipped`);
+          } else {
+            errors.push(`Row ${item.rowNum}: ${err?.message ?? "Unknown error"}`);
+          }
+        }
       }
     }
   }
