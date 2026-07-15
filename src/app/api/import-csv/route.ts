@@ -78,6 +78,7 @@ const baseMapping: Record<string, string> = {
 };
 
 const aliases: Record<string, string> = {
+  "serial no": "serialNumber",
   "name of the employee": "employeeName",
   "serial no in ws1": "serialNoInWs1",
   "date of ws1 update": "dateOfWs1Update",
