@@ -108,6 +108,11 @@ interface HistoryRecord {
   imageType: string | null;
   count: number | null;
   pwcRemarks: string | null;
+  trackingStatus: string | null;
+  trackingSubStatus: string | null;
+  dcNumber: string | null;
+  docketNumber: string | null;
+  deliveryDate: string | null;
   assignedAt: string;
 }
 

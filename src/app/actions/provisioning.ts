@@ -68,6 +68,7 @@ export async function advanceOrderToProvisioning(
 
   revalidatePath("/dashboard/provisioning");
   revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard/inventory");
 }
 
 export async function getOrderInventoryLocations(orderId: string) {
@@ -208,6 +209,7 @@ export async function bulkAdvanceOrdersToProvisioning(
 
   revalidatePath("/dashboard/provisioning");
   revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard/inventory");
 }
 
 export async function handoverToLogistics(orderIds: string[]) {
@@ -232,6 +234,7 @@ export async function handoverToLogistics(orderIds: string[]) {
 
   revalidatePath("/dashboard/provisioning");
   revalidatePath("/dashboard/logistics");
+  revalidatePath("/dashboard/inventory");
 }
 
 export async function removeFromProvisioning(orderId: string) {
@@ -258,4 +261,5 @@ export async function removeFromProvisioning(orderId: string) {
 
   revalidatePath("/dashboard/provisioning");
   revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard/inventory");
 }

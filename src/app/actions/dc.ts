@@ -172,7 +172,20 @@ export async function generateDC(orderId: string, data: DcFormData) {
 
   await syncOrderTrackingStatus(orderId, trackingStatus);
 
+  const linkedAssets = await prisma.asset.findMany({
+    where: { orderId, inventoryItemId: { not: null } },
+    select: { inventoryItemId: true },
+  });
+  const linkedItemIds = linkedAssets.map(a => a.inventoryItemId).filter(Boolean) as string[];
+  if (linkedItemIds.length > 0) {
+    await prisma.inventoryItem.updateMany({
+      where: { id: { in: linkedItemIds } },
+      data: { dcNumber },
+    });
+  }
+
   revalidatePath("/dashboard/finance");
+  revalidatePath("/dashboard/inventory");
 
   return { ...dc, taxableValue: dc.taxableValue ? Number(dc.taxableValue) : null, igst: dc.igst ? Number(dc.igst) : null, totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null, items: dc.items.map(i => ({ ...i, rate: Number(i.rate), amount: Number(i.amount), taxableValue: i.taxableValue ? Number(i.taxableValue) : null, igstRate: i.igstRate ? Number(i.igstRate) : null, igstAmount: i.igstAmount ? Number(i.igstAmount) : null })) };
 }
@@ -317,8 +330,16 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
     data: { dcNo: dcNumber, status: "DC_GENERATED" },
   });
 
+  if (rp.inventoryItemId) {
+    await prisma.inventoryItem.update({
+      where: { id: rp.inventoryItemId },
+      data: { dcNumber },
+    });
+  }
+
   revalidatePath("/dashboard/finance");
   revalidatePath("/dashboard/reverse-pickup");
+  revalidatePath("/dashboard/inventory");
 
   return { ...dc, taxableValue: dc.taxableValue ? Number(dc.taxableValue) : null, igst: dc.igst ? Number(dc.igst) : null, totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null, items: dc.items.map(i => ({ ...i, rate: Number(i.rate), amount: Number(i.amount), taxableValue: i.taxableValue ? Number(i.taxableValue) : null, igstRate: i.igstRate ? Number(i.igstRate) : null, igstAmount: i.igstAmount ? Number(i.igstAmount) : null })) };
 }

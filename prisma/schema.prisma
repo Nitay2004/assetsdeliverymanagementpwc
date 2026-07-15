@@ -228,6 +228,9 @@ model AssignmentRecord {
   pwcRemarks           String?   @map("pwc_remarks")
   trackingStatus       String?   @map("tracking_status")
   trackingSubStatus    String?   @map("tracking_sub_status")
+  dcNumber             String?   @map("dc_number")
+  docketNumber         String?   @map("docket_number")
+  deliveryDate         DateTime? @map("delivery_date") @db.Date
   assignedAt           DateTime  @default(now()) @map("assigned_at")
 
   inventoryItem        InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)

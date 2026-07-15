@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { Plus, ArrowLeftRight, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileText, CheckCircle, Clock } from "lucide-react";
 import Link from "next/link";
 import { ReversePickupTable } from "@/components/reverse-pickup/reverse-pickup-table";
+import { ReversePickupExportButton } from "@/components/reverse-pickup/reverse-pickup-export-button";
 
 const STATUS_STYLES: Record<string, { label: string; color: string }> = {
   REQUESTED:              { label: "Requested",              color: "bg-yellow-100 text-yellow-700" },
@@ -58,15 +59,18 @@ export default async function ReversePickupPage() {
             Manage asset returns from employees — from pickup request to restock.
           </p>
         </div>
-        {canManage && (
-          <Link
-            href="/dashboard/reverse-pickup/add"
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-press"
-          >
-            <Plus className="size-4" />
-            New Request
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ReversePickupExportButton />
+          {canManage && (
+            <Link
+              href="/dashboard/reverse-pickup/add"
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-press"
+            >
+              <Plus className="size-4" />
+              New Request
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">

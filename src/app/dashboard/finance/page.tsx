@@ -5,6 +5,7 @@ import { FileText } from "lucide-react";
 import { FinanceOrderRow } from "@/components/finance/finance-order-row";
 import { ScrollToItem } from "@/components/shared/scroll-to-item";
 import { ReversePickupFinanceSection } from "@/components/finance/reverse-pickup-finance-section";
+import { FinanceExportButton } from "@/components/finance/finance-export-button";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
 import type { OrderStatus } from "@prisma/client";
@@ -87,11 +88,14 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Finance Module</h1>
-        <p className="text-muted-foreground mt-2">
-          Generate Delivery Challans and E-Way bills for orders.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Finance Module</h1>
+          <p className="text-muted-foreground mt-2">
+            Generate Delivery Challans and E-Way bills for orders.
+          </p>
+        </div>
+        <FinanceExportButton />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">

@@ -55,6 +55,7 @@ export async function markAsRto(
 
   revalidatePath("/dashboard/logistics");
   revalidatePath("/dashboard/finance");
+  revalidatePath("/dashboard/inventory");
 }
 
 export async function addDocket(formData: FormData) {
@@ -81,7 +82,20 @@ export async function addDocket(formData: FormData) {
     },
   });
 
+  const linkedAssets = await prisma.asset.findMany({
+    where: { orderId, inventoryItemId: { not: null } },
+    select: { inventoryItemId: true },
+  });
+  const linkedItemIds = linkedAssets.map(a => a.inventoryItemId).filter(Boolean) as string[];
+  if (linkedItemIds.length > 0) {
+    await prisma.inventoryItem.updateMany({
+      where: { id: { in: linkedItemIds } },
+      data: { docketNumber },
+    });
+  }
+
   revalidatePath("/dashboard/logistics");
+  revalidatePath("/dashboard/inventory");
 }
 
 export async function updateDocket(id: string, formData: FormData) {
@@ -174,4 +188,5 @@ export async function advanceOrderStatus(orderId: string, status: string) {
   await syncOrderTrackingStatus(orderId, status);
 
   revalidatePath("/dashboard/logistics");
+  revalidatePath("/dashboard/inventory");
 }

@@ -37,9 +37,15 @@ export async function syncOrderTrackingStatus(orderId: string, orderStatus: stri
 
   const trackingStatus = orderStatusTrackingMap[orderStatus] ?? null;
 
+  const updateData: Record<string, any> = { trackingStatus };
+
+  if (orderStatus === "DELIVERED" || orderStatus === "DELIVERY_CONFIRMED") {
+    updateData.deliveryDate = new Date();
+  }
+
   await prisma.inventoryItem.updateMany({
     where: { id: { in: itemIds } },
-    data: { trackingStatus },
+    data: updateData,
   });
 }
 

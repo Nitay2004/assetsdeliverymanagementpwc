@@ -269,6 +269,9 @@ export async function returnItemToStock(id: string) {
         pwcRemarks: existing.pwcRemarks,
         trackingStatus: existing.trackingStatus,
         trackingSubStatus: existing.trackingSubStatus,
+        dcNumber: existing.dcNumber,
+        docketNumber: existing.docketNumber,
+        deliveryDate: existing.deliveryDate,
         assignedAt: new Date(),
       },
     });
@@ -295,6 +298,9 @@ export async function returnItemToStock(id: string) {
       imageType: null,
       count: null,
       pwcRemarks: null,
+      dcNumber: null,
+      docketNumber: null,
+      deliveryDate: null,
     },
   });
 
@@ -485,6 +491,9 @@ export async function reassignItem(id: string, formData: FormData) {
         pwcRemarks: existing.pwcRemarks,
         trackingStatus: existing.trackingStatus,
         trackingSubStatus: existing.trackingSubStatus,
+        dcNumber: existing.dcNumber,
+        docketNumber: existing.docketNumber,
+        deliveryDate: existing.deliveryDate,
         assignedAt: new Date(),
       },
     });
@@ -547,6 +556,7 @@ export async function getAssignmentHistory(itemId: string) {
   return records.map((r) => ({
     ...r,
     requestDate: r.requestDate?.toISOString() ?? null,
+    deliveryDate: r.deliveryDate?.toISOString() ?? null,
     assignedAt: r.assignedAt.toISOString(),
   }));
 }

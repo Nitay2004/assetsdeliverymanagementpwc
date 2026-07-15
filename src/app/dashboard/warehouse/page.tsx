@@ -4,6 +4,7 @@ import { Plus, Package, Clock, CheckCircle, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { PendingAllocationsTable } from "@/components/warehouse/pending-allocations-table";
 import { AllocatedAssetsTable } from "@/components/warehouse/allocated-assets-table";
+import { WarehouseExportButton } from "@/components/warehouse/warehouse-export-button";
 
 export default async function WarehousePage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
@@ -52,15 +53,18 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
             Allocate laptops from inventory to pending orders.
           </p>
         </div>
-        {canManage && (
-          <Link
-            href="/dashboard/warehouse/add"
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-press"
-          >
-            <Plus className="size-4" />
-            Add Order
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <WarehouseExportButton />
+          {canManage && (
+            <Link
+              href="/dashboard/warehouse/add"
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-press"
+            >
+              <Plus className="size-4" />
+              Add Order
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Summary stats */}
