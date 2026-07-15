@@ -233,21 +233,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const requiredFields = ["serialNumber", "employeeName", "invoicingWarehouse", "stickerColour"];
-  const fieldLabels: Record<string, string> = {
-    serialNumber: "Serial Number",
-    employeeName: "Employee Name",
-    invoicingWarehouse: "Invoicing Warehouse",
-    stickerColour: "Sticker Colour",
-  };
-
-  // Build reverse lookup to find which header maps to each required field
-  const headerToField: Record<number, string> = {};
-  for (let i = 0; i < headers.length; i++) {
-    const col = resolveColumn(headers[i].trim());
-    if (col) headerToField[i] = col;
-  }
-
   const unknownHeaders: string[] = [];
   let imported = 0;
   const errors: string[] = [];
@@ -257,18 +242,6 @@ export async function POST(request: Request) {
     if (row.length === 0 || row.every(c => c.trim() === "")) continue;
 
     const data = buildPrismaData(headers, row, unknownHeaders);
-
-    // Check required fields
-    const missing: string[] = [];
-    for (const field of requiredFields) {
-      if (!data[field] || String(data[field]).trim() === "") {
-        missing.push(fieldLabels[field]);
-      }
-    }
-    if (missing.length > 0) {
-      errors.push(`Row ${r + 2}: missing required fields: ${missing.join(", ")}`);
-      continue;
-    }
 
     if (!data.model && data.laptopModel) {
       data.model = data.laptopModel;
