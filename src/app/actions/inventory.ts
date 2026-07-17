@@ -548,6 +548,12 @@ export async function reassignItem(id: string, formData: FormData) {
   revalidatePath("/dashboard/inventory");
 }
 
+function safeToDateISO(val: Date | null | undefined): string | null {
+  if (!val) return null;
+  const t = val.getTime();
+  return isNaN(t) ? null : val.toISOString();
+}
+
 export async function getAssignmentHistory(itemId: string) {
   const records = await prisma.assignmentRecord.findMany({
     where: { inventoryItemId: itemId },
@@ -555,9 +561,9 @@ export async function getAssignmentHistory(itemId: string) {
   });
   return records.map((r) => ({
     ...r,
-    requestDate: r.requestDate?.toISOString() ?? null,
-    deliveryDate: r.deliveryDate?.toISOString() ?? null,
-    assignedAt: r.assignedAt.toISOString(),
+    requestDate: safeToDateISO(r.requestDate),
+    deliveryDate: safeToDateISO(r.deliveryDate),
+    assignedAt: safeToDateISO(r.assignedAt) ?? "",
   }));
 }
 

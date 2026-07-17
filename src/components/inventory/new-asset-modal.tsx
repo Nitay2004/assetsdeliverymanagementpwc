@@ -20,7 +20,7 @@ function addMonths(date: Date, months: number): Date {
 }
 
 function formatDate(date: Date): string {
-  return date.toISOString().split("T")[0];
+  return isNaN(date.getTime()) ? "" : date.toISOString().split("T")[0];
 }
 
 export function NewAssetModal({ open, onClose }: Props) {

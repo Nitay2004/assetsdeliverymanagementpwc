@@ -4,6 +4,12 @@ import { Package, ShieldCheck, Laptop, Database } from "lucide-react";
 import { InventoryTable } from "@/components/inventory/inventory-table";
 import { InventoryHeader } from "@/components/inventory/inventory-header";
 
+function safeISO(date: Date | null | undefined): string | null {
+  if (!date) return null;
+  const t = date.getTime();
+  return isNaN(t) ? null : date.toISOString();
+}
+
 export default async function InventoryPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
   const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
@@ -85,21 +91,23 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
           const latest = i.assignmentRecords[0];
           return {
             ...i,
-            requestDate: i.requestDate ?? null,
-            slaStartDate: i.slaStartDate ?? null,
-            actualDeliveryDate: i.actualDeliveryDate ?? null,
-            laptopAcceptanceDate: i.laptopAcceptanceDate ?? null,
-            warrantyEndPeriod: i.warrantyEndPeriod ?? null,
-            deliveryDate: i.deliveryDate ?? null,
-            pickupDate: i.pickupDate ?? null,
-            dateOfWs1Update: i.dateOfWs1Update ?? null,
-            servicesStartDate: i.servicesStartDate ?? null,
-            date: i.date ?? null,
+            requestDate: safeISO(i.requestDate),
+            slaStartDate: safeISO(i.slaStartDate),
+            actualDeliveryDate: safeISO(i.actualDeliveryDate),
+            laptopAcceptanceDate: safeISO(i.laptopAcceptanceDate),
+            warrantyEndPeriod: safeISO(i.warrantyEndPeriod),
+            deliveryDate: safeISO(i.deliveryDate),
+            pickupDate: safeISO(i.pickupDate),
+            dateOfWs1Update: safeISO(i.dateOfWs1Update),
+            servicesStartDate: safeISO(i.servicesStartDate),
+            date: safeISO(i.date),
+            createdAt: safeISO(i.createdAt),
+            updatedAt: safeISO(i.updatedAt),
             _latestAssignment: latest ? {
               employeeName: latest.employeeName,
               emailId: latest.emailId,
               purpose: latest.purpose,
-              requestDate: latest.requestDate?.toISOString() ?? null,
+              requestDate: safeISO(latest.requestDate),
               mobileNumber: latest.mobileNumber,
             } : null,
           };
