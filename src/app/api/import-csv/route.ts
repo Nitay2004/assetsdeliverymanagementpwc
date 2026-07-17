@@ -380,7 +380,12 @@ function buildPrismaData(
       unknownHeaders.push(header);
       continue;
     }
-    data[column] = parseValue(row[i]?.trim() ?? "", column);
+    const parsed = parseValue(row[i]?.trim() ?? "", column);
+    if (parsed !== null && parsed !== undefined && parsed !== "") {
+      data[column] = parsed;
+    } else if (!(column in data)) {
+      data[column] = null;
+    }
   }
   return data;
 }
@@ -429,6 +434,7 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const file = formData.get("file") as File;
+  const mode = (formData.get("mode") as string) || "upload";
 
   if (!file) {
     return NextResponse.json(
@@ -473,9 +479,7 @@ export async function POST(request: Request) {
     }
   }
 
-  let imported = 0;
   const errors: string[] = [];
-  const BATCH_SIZE = 500;
 
   const rows: { data: Record<string, unknown>; rowNum: number }[] = [];
   for (let r = 0; r < records.length; r++) {
@@ -485,63 +489,300 @@ export async function POST(request: Request) {
     const data = buildPrismaData(headers, row, unknownHeaders, resolvedMap);
 
     if (!data.serialNumber || String(data.serialNumber).trim() === "") {
-      data.serialNumber = `AUTO-${Date.now()}-${r + 2}`;
+      errors.push(`Row ${r + 2}: No serial number found, skipped`);
+      continue;
     }
 
     if (!data.model && data.laptopModel) {
       data.model = data.laptopModel;
     }
 
-    const cleanData = Object.fromEntries(
-      Object.entries(data).filter(([_, v]) => v !== null && v !== undefined)
-    );
-
-    const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
-    const hasTracking = cleanData.trackingStatus && String(cleanData.trackingStatus).trim() !== "";
-    if ((hasEmployee || hasTracking) && !cleanData.status) {
-      cleanData.status = "ALLOCATED";
-    }
-
-    rows.push({ data: cleanData, rowNum: r + 2 });
+    rows.push({ data, rowNum: r + 2 });
   }
 
-  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const batch = rows.slice(i, i + BATCH_SIZE);
-    try {
-      const result = await prisma.inventoryItem.createMany({
-        data: batch.map(b => b.data as any),
-        skipDuplicates: true,
+  // ── UPDATE MODE ──
+  if (mode === "update") {
+    return handleUpdateMode(rows, unknownHeaders, headerMapping, errors);
+  }
+
+  // ── UPLOAD MODE (default) ──
+  return handleUploadMode(rows, unknownHeaders, headerMapping, errors);
+}
+
+const BATCH_SIZE = 200;
+
+const assignmentFields = [
+  "employeeName", "emailId", "mobileNumber", "alternatePhoneNumber",
+  "shippingAddress", "landMark", "city", "state", "pinCode",
+  "purpose", "requestDate", "userBaseLocation", "imageType", "count",
+  "pwcRemarks", "trackingStatus", "trackingSubStatus", "dcNumber",
+  "docketNumber", "deliveryDate",
+];
+
+const inventoryItemUpdateFields = [
+  "employeeName", "emailId", "mobileNumber", "alternatePhoneNumber",
+  "shippingAddress", "landMark", "city", "state", "pinCode",
+  "purpose", "requestDate", "userBaseLocation", "imageType", "count",
+  "pwcRemarks", "trackingStatus", "trackingSubStatus", "dcNumber",
+  "docketNumber", "deliveryDate", "partner", "sr", "entity",
+  "laptopMake", "laptopModel", "invoiceProductDescription",
+  "description", "emailReceivedHour", "cutOffStatus", "slaStartDate",
+  "slaState", "zone", "tier", "odaLocation", "tat", "deliveryTatDays",
+  "actualDeliveryDate", "slaStatus", "laptopAcceptanceDate", "warrantyPeriod",
+  "warrantyEndPeriod", "adaptorAdded", "accessoryHeadsetMouse", "stickerColour",
+  "dc", "vendor", "deliveredLocation", "processStatus", "machineWs1Status",
+  "serialNoInWs1", "dateOfWs1Update", "servicesStartDate", "invoicingWarehouse",
+  "boxSerialNo", "checkField", "remark", "date", "csvStatus",
+];
+
+function buildAssignmentRecord(itemId: string, data: Record<string, unknown>): Record<string, unknown> {
+  const record: Record<string, unknown> = { inventoryItemId: itemId, assignedAt: new Date() };
+  for (const f of assignmentFields) {
+    record[f] = (data as any)[f] ?? null;
+  }
+  return record;
+}
+
+function buildUpdateData(data: Record<string, unknown>): Record<string, unknown> {
+  const updateData: Record<string, unknown> = {};
+  for (const f of inventoryItemUpdateFields) {
+    if (f in data && data[f] !== undefined) {
+      updateData[f] = data[f];
+    }
+  }
+  if (updateData.employeeName && String(updateData.employeeName).trim() !== "") {
+    updateData.status = "ALLOCATED";
+  }
+  return updateData;
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+}
+
+async function handleUpdateMode(
+  rows: { data: Record<string, unknown>; rowNum: number }[],
+  unknownHeaders: string[],
+  headerMapping: { header: string; field: string | undefined }[],
+  errors: string[]
+) {
+  const allSerials = [...new Set(
+    rows.map(r => String(r.data.serialNumber ?? "").trim()).filter(Boolean)
+  )];
+
+  const existingItems = await prisma.inventoryItem.findMany({
+    where: { serialNumber: { in: allSerials } },
+    select: {
+      id: true, serialNumber: true,
+      employeeName: true, emailId: true, mobileNumber: true, alternatePhoneNumber: true,
+      shippingAddress: true, landMark: true, city: true, state: true, pinCode: true,
+      purpose: true, requestDate: true, userBaseLocation: true, imageType: true,
+      count: true, pwcRemarks: true, trackingStatus: true, trackingSubStatus: true,
+      dcNumber: true, docketNumber: true, deliveryDate: true,
+    },
+  });
+
+  const existingMap = new Map(existingItems.map(item => [item.serialNumber, item]));
+
+  const historyRecords: Record<string, unknown>[] = [];
+  const updateOps: { id: string; data: Record<string, unknown> }[] = [];
+  let notFound = 0;
+
+  for (const item of rows) {
+    const sn = String(item.data.serialNumber ?? "").trim();
+    const existing = existingMap.get(sn);
+
+    if (!existing) {
+      notFound++;
+      errors.push(`Row ${item.rowNum}: Serial number "${sn}" not found in inventory`);
+      continue;
+    }
+
+    if (existing.employeeName) {
+      historyRecords.push({
+        inventoryItemId: existing.id,
+        employeeName: existing.employeeName,
+        emailId: existing.emailId,
+        mobileNumber: existing.mobileNumber,
+        alternatePhoneNumber: existing.alternatePhoneNumber,
+        shippingAddress: existing.shippingAddress,
+        landMark: existing.landMark,
+        city: existing.city,
+        state: existing.state,
+        pinCode: existing.pinCode,
+        purpose: existing.purpose,
+        requestDate: existing.requestDate,
+        userBaseLocation: existing.userBaseLocation,
+        imageType: existing.imageType,
+        count: existing.count,
+        pwcRemarks: existing.pwcRemarks,
+        trackingStatus: existing.trackingStatus,
+        trackingSubStatus: existing.trackingSubStatus,
+        dcNumber: existing.dcNumber,
+        docketNumber: existing.docketNumber,
+        deliveryDate: existing.deliveryDate,
+        assignedAt: new Date(),
       });
-      imported += result.count;
-    } catch (e: any) {
-      for (const item of batch) {
-        try {
-          await prisma.inventoryItem.create({ data: item.data as any });
-          imported++;
-        } catch (err: any) {
-          if (err?.code === "P2002") {
-            errors.push(`Row ${item.rowNum}: Serial Number "${item.data.serialNumber}" already exists, skipped`);
-          } else {
-            errors.push(`Row ${item.rowNum}: ${err?.message ?? "Unknown error"}`);
-          }
-        }
-      }
+    }
+
+    const updateData = buildUpdateData(item.data);
+    if (Object.keys(updateData).length > 0) {
+      updateOps.push({ id: existing.id, data: updateData });
+    }
+  }
+
+  // Batch insert history records
+  let mapped = 0;
+  for (const batch of chunk(historyRecords, BATCH_SIZE)) {
+    try {
+      const result = await prisma.assignmentRecord.createMany({ data: batch as any[] });
+      mapped += result.count;
+    } catch (err: any) {
+      errors.push(`Failed to save assignment history batch: ${err?.message ?? "Unknown error"}`);
+    }
+  }
+
+  // Batch update inventory items using transaction
+  let updated = 0;
+  for (const batch of chunk(updateOps, BATCH_SIZE)) {
+    try {
+      await prisma.$transaction(
+        batch.map(op => prisma.inventoryItem.update({ where: { id: op.id }, data: op.data as any }))
+      );
+      updated += batch.length;
+    } catch (err: any) {
+      errors.push(`Failed to update inventory batch: ${err?.message ?? "Unknown error"}`);
     }
   }
 
   revalidatePath("/dashboard/inventory");
 
   const uniqueUnknown = [...new Set(unknownHeaders)];
-  let warning = "";
-  if (uniqueUnknown.length > 0) {
-    warning = `Unrecognized columns ignored: ${uniqueUnknown.join(", ")}.`;
+  let warning = uniqueUnknown.length > 0 ? `Unrecognized columns ignored: ${uniqueUnknown.join(", ")}.` : "";
+
+  return NextResponse.json({
+    success: true,
+    updated,
+    mapped,
+    notFound,
+    errors: errors.length > 0 ? errors : null,
+    warning: warning || null,
+  });
+}
+
+async function handleUploadMode(
+  rows: { data: Record<string, unknown>; rowNum: number }[],
+  unknownHeaders: string[],
+  headerMapping: { header: string; field: string | undefined }[],
+  errors: string[]
+) {
+  const allSerials = [...new Set(
+    rows.map(r => String(r.data.serialNumber ?? "").trim()).filter(Boolean)
+  )];
+
+  const existingItems = await prisma.inventoryItem.findMany({
+    where: { serialNumber: { in: allSerials } },
+    select: { id: true, serialNumber: true },
+  });
+
+  const existingMap = new Map(existingItems.map(item => [item.serialNumber, item.id]));
+
+  // Separate rows into new items and existing items
+  const newItems: { data: Record<string, unknown>; rowNum: number }[] = [];
+  const existingRows: { data: Record<string, unknown>; rowNum: number; itemId: string }[] = [];
+
+  for (const item of rows) {
+    const sn = String(item.data.serialNumber ?? "").trim();
+    const itemId = existingMap.get(sn);
+    if (itemId) {
+      existingRows.push({ ...item, itemId });
+    } else {
+      newItems.push(item);
+    }
   }
 
+  // Batch create new inventory items
+  const newItemsData: Record<string, unknown>[] = [];
+  const newItemsMeta: { sn: string; rowNum: number }[] = [];
+
+  for (const item of newItems) {
+    const sn = String(item.data.serialNumber ?? "").trim();
+    const cleanData = Object.fromEntries(
+      Object.entries(item.data).filter(([_, v]) => v !== null && v !== undefined)
+    );
+    if (!cleanData.serialNumber) cleanData.serialNumber = sn;
+    if (!cleanData.status) {
+      const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
+      cleanData.status = hasEmployee ? "ALLOCATED" : "NEW";
+    }
+    newItemsData.push(cleanData);
+    newItemsMeta.push({ sn, rowNum: item.rowNum });
+  }
+
+  // Insert new items in batches and collect their IDs
+  const newItemsWithIds: { itemId: string; data: Record<string, unknown>; rowNum: number }[] = [];
+
+  for (let i = 0; i < newItemsData.length; i += BATCH_SIZE) {
+    const batchData = newItemsData.slice(i, i + BATCH_SIZE);
+    const batchMeta = newItemsMeta.slice(i, i + BATCH_SIZE);
+    try {
+      await prisma.inventoryItem.createMany({ data: batchData as any[] });
+      // Fetch back the IDs
+      const batchSerials = batchMeta.map(m => m.sn);
+      const created = await prisma.inventoryItem.findMany({
+        where: { serialNumber: { in: batchSerials } },
+        select: { id: true, serialNumber: true },
+      });
+      const idMap = new Map(created.map(c => [c.serialNumber, c.id]));
+      for (let j = 0; j < batchMeta.length; j++) {
+        const id = idMap.get(batchMeta[j].sn);
+        if (id) {
+          newItemsWithIds.push({ itemId: id, data: batchData[j], rowNum: batchMeta[j].rowNum });
+        } else {
+          errors.push(`Row ${batchMeta[j].rowNum}: Failed to create item "${batchMeta[j].sn}"`);
+        }
+      }
+    } catch (err: any) {
+      for (const meta of batchMeta) {
+        errors.push(`Row ${meta.rowNum}: Failed to create item "${meta.sn}" - ${err?.message ?? "Unknown error"}`);
+      }
+    }
+  }
+
+  // Build all assignment records (new + existing)
+  const allAssignments: Record<string, unknown>[] = [];
+  let mapped = 0;
+
+  for (const item of newItemsWithIds) {
+    allAssignments.push(buildAssignmentRecord(item.itemId, item.data));
+  }
+  for (const item of existingRows) {
+    allAssignments.push(buildAssignmentRecord(item.itemId, item.data));
+  }
+
+  // Batch insert all assignment records
+  for (const batch of chunk(allAssignments, BATCH_SIZE)) {
+    try {
+      const result = await prisma.assignmentRecord.createMany({ data: batch as any[] });
+      mapped += result.count;
+    } catch (err: any) {
+      errors.push(`Failed to save assignment history batch: ${err?.message ?? "Unknown error"}`);
+    }
+  }
+
+  revalidatePath("/dashboard/inventory");
+
+  const uniqueUnknown = [...new Set(unknownHeaders)];
+  let warning = uniqueUnknown.length > 0 ? `Unrecognized columns ignored: ${uniqueUnknown.join(", ")}.` : "";
   const matchedHeaders = headerMapping.filter(h => h.field).map(h => `${h.header} → ${h.field}`);
 
   return NextResponse.json({
     success: true,
-    imported,
+    mapped,
     matched: matchedHeaders,
     errors: errors.length > 0 ? errors : null,
     warning: warning || null,
