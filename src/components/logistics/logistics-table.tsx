@@ -247,6 +247,17 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
     } finally { setUploading(false); }
   }
 
+  async function handleViewPod(filePath: string) {
+    try {
+      const res = await fetch(`/api/pod-url?path=${encodeURIComponent(filePath)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load POD");
+      window.open(data.url, "_blank");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "error" });
+    }
+  }
+
   function handleDownloadDc(dcId: string) {
     window.open(`/api/dc/${dcId}/pdf`, "_blank");
   }
@@ -483,11 +494,11 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
                                     {/* POD section */}
                                     <div className="mt-2 flex items-center gap-2">
                                       {d.podDocumentUrl ? (
-                                        <a href={d.podDocumentUrl} target="_blank" rel="noopener noreferrer"
+                                        <button onClick={() => handleViewPod(d.podDocumentUrl!)}
                                           className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 underline"
                                         >
                                           <Download className="size-3" /> View POD
-                                        </a>
+                                        </button>
                                       ) : (
                                         <span className="text-xs text-muted-foreground">POD not uploaded</span>
                                       )}

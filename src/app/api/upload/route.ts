@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { getSupabaseStorage, POD_BUCKET } from "@/lib/supabase/storage";
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,11 +19,22 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(bytes);
 
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "pod");
-    await mkdir(uploadDir, { recursive: true });
-    await writeFile(path.join(uploadDir, fileName), buffer);
+    const filePath = `pod/${fileName}`;
 
-    return NextResponse.json({ url: `/uploads/pod/${fileName}` });
+    const supabase = getSupabaseStorage();
+    const { error } = await supabase.storage
+      .from(POD_BUCKET)
+      .upload(filePath, buffer, {
+        contentType: file.type || `application/${ext === "jpg" ? "jpeg" : ext}`,
+        upsert: false,
+      });
+
+    if (error) {
+      console.error("Supabase upload error:", error);
+      return NextResponse.json({ error: error.message || "Upload failed" }, { status: 500 });
+    }
+
+    return NextResponse.json({ url: filePath });
   } catch (err) {
     console.error("Upload error:", err);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
