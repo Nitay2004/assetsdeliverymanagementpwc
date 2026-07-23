@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Upload, Download, Loader2, Database, UserPlus, Users } from "lucide-react";
+import { Plus, Upload, Download, Loader2, Database, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { NewAssetModal } from "./new-asset-modal";
 import { AssignUserModal } from "./assign-user-modal";
@@ -14,7 +14,6 @@ export function InventoryHeader({ isAdmin }: Props) {
   const [showNewAsset, setShowNewAsset] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showAssignSingle, setShowAssignSingle] = useState(false);
-  const [showAssignMultiple, setShowAssignMultiple] = useState(false);
 
   async function handleExport() {
     setExporting(true);
@@ -76,13 +75,6 @@ export function InventoryHeader({ isAdmin }: Props) {
                 <UserPlus className="size-3.5" />
                 Assign User
               </button>
-              <button
-                onClick={() => setShowAssignMultiple(true)}
-                className="flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-all hover:bg-muted active:translate-y-px"
-              >
-                <Users className="size-3.5" />
-                Multi Assign
-              </button>
             </>
           )}
           <Link
@@ -96,7 +88,6 @@ export function InventoryHeader({ isAdmin }: Props) {
       </div>
       <NewAssetModal open={showNewAsset} onClose={() => setShowNewAsset(false)} />
       <AssignUserModal open={showAssignSingle} onClose={() => setShowAssignSingle(false)} mode="single" />
-      <AssignUserModal open={showAssignMultiple} onClose={() => setShowAssignMultiple(false)} mode="multiple" />
     </>
   );
 }
