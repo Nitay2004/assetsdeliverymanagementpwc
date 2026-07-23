@@ -35,26 +35,60 @@ export async function GET() {
     where: { status: { not: "ORDER_PLACED" } },
     include: {
       assets: { include: { inventoryItem: true }, orderBy: { createdAt: "asc" } },
+      dockets: { orderBy: { createdAt: "asc" } },
+      deliveryChallans: { orderBy: { createdAt: "asc" } },
     },
     orderBy: { updatedAt: "desc" },
   });
 
+  let sr = 1;
   const rows: Record<string, unknown>[] = [];
   for (const order of orders) {
+    const firstDocket = order.dockets[0];
+    const firstDC = order.deliveryChallans[0];
     for (const asset of order.assets) {
+      const inv = asset.inventoryItem;
       rows.push({
-        "Client": order.clientName,
-        "Engineer": order.engineerName ?? "",
-        "WH Location": order.warehouseLocation ?? "",
-        "Prov Location": order.provisioningLocation ?? "",
-        "Serial No": asset.inventoryItem?.serialNumber ?? "",
-        "Model": asset.inventoryItem?.model ?? "",
-        "Image Type": asset.inventoryItem?.imageType ?? "",
-        "Sticker": asset.inventoryItem?.stickerColour ?? "",
-        "Asset Status": ASSET_STATUS_MAP[asset.status] ?? asset.status,
-        "Order Status": order.status.replace(/_/g, " "),
-        "Created At": getVal(order as unknown as Record<string, unknown>, "createdAt"),
-        "Updated At": getVal(order as unknown as Record<string, unknown>, "updatedAt"),
+        "Sr.no": sr++,
+        "Inward Date": inv ? getVal(inv as unknown as Record<string, unknown>, "requestDate") : "",
+        "Product Part no": inv?.partNo ?? "",
+        "Serial No": inv?.serialNumber ?? "",
+        "Model": inv?.model ?? "",
+        "Product Description": inv?.invoiceProductDescription ?? inv?.description ?? "",
+        "Owner of the Asset": inv?.employeeName ?? "",
+        "Inward Lot No": inv?.sr?.toString() ?? "",
+        "HP Lot No": "",
+        "Warehouse Location": order.warehouseLocation ?? "",
+        "Provisioning Location": order.provisioningLocation ?? "",
+        "Provisioned Date": (asset.status === "os_installed" || asset.status === "allocated")
+          ? getVal(order as unknown as Record<string, unknown>, "updatedAt")
+          : "",
+        "Provisioned Status": ASSET_STATUS_MAP[asset.status] ?? asset.status,
+        "Engineer Name": order.engineerName ?? "",
+        "Sticker": inv?.stickerColour ?? "",
+        "PWC Image": inv?.imageType ?? "",
+        "PWC Entity": inv?.entity ?? "",
+        "Shipping Date": inv ? getVal(inv as unknown as Record<string, unknown>, "actualDeliveryDate") : "",
+        "Courier Name": firstDocket ? "" : "",
+        "Docket #": firstDocket?.docketNumber ?? "",
+        "Employee Name": inv?.employeeName ?? "",
+        "Location - City": inv?.city ?? "",
+        "Delivery Date": inv ? getVal(inv as unknown as Record<string, unknown>, "deliveryDate") : "",
+        "Warranty Start Date": inv ? getVal(inv as unknown as Record<string, unknown>, "servicesStartDate") : "",
+        "Warranty End Date": inv ? getVal(inv as unknown as Record<string, unknown>, "warrantyEndPeriod") : "",
+        "Delivery Challans No.": firstDC?.dcNumber ?? order.dcNumber ?? "",
+        "Previous Image Date": "",
+        "Inward Date - 1": "",
+        "Outward Date - 1": "",
+        "Inward Date - 2": "",
+        "Outward Date - 2": "",
+        "Inward Date - 3": "",
+        "Outward Date - 3": "",
+        "Inward Date - 4": "",
+        "HASH ID": inv?.id ?? "",
+        "Blancco": "",
+        "Blancco DATE": "",
+        "Blancco CERTIFICATE": "",
       });
     }
   }
