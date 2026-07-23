@@ -198,3 +198,62 @@
 .animate-fade-in-up {
   animation: fadeInUp 0.5s ease-out forwards;
 }
+
+.grid-panel-top-left,
+.grid-panel-bottom-right {
+  position: absolute;
+  background-size: 28px 28px;
+}
+
+.grid-panel-top-left {
+  top: 64px;
+  left: 0;
+  width: 420px;
+  height: 380px;
+  background-image: linear-gradient(to right, oklch(0.65 0.15 250 / 0.2) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.65 0.15 250 / 0.2) 1px, transparent 1px);
+  mask-image: radial-gradient(ellipse 100% 100% at 0% 0%, black 10%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 100% 100% at 0% 0%, black 10%, transparent 70%);
+}
+
+.grid-panel-bottom-right {
+  bottom: 0;
+  right: 0;
+  width: 400px;
+  height: 400px;
+  background-image: linear-gradient(to right, oklch(0.6 0.2 280 / 0.15) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.6 0.2 280 / 0.15) 1px, transparent 1px);
+  mask-image: radial-gradient(ellipse 100% 100% at 100% 100%, black 10%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 100% 100% at 100% 100%, black 10%, transparent 70%);
+}
+
+.dark .grid-panel-top-left {
+  background-image: linear-gradient(to right, oklch(0.4 0.15 250 / 0.15) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.4 0.15 250 / 0.15) 1px, transparent 1px);
+}
+
+.dark .grid-panel-bottom-right {
+  background-image: linear-gradient(to right, oklch(0.35 0.15 280 / 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.35 0.15 280 / 0.12) 1px, transparent 1px);
+}
+
+/* Mobile responsive grid panels */
+@media (max-width: 768px) {
+  .grid-panel-top-left {
+    width: 200px;
+    height: 200px;
+  }
+  .grid-panel-bottom-right {
+    width: 200px;
+    height: 200px;
+  }
+}
+
+/* Responsive table cell padding */
+@media (max-width: 640px) {
+  table td, table th {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    font-size: 0.75rem;
+  }
+}

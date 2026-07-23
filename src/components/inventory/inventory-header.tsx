@@ -40,46 +40,52 @@ export function InventoryHeader({ isAdmin }: Props) {
 
   return (
     <>
-      <div className="p-6 border-b flex items-center gap-2 bg-muted/20 border-b-black/5 dark:border-b-white/5">
-        <Database className="size-5 text-primary" />
-        <h2 className="text-xl font-semibold">Inventory Pool</h2>
-        <div className="ml-auto flex items-center gap-2">
+      <div className="p-3 sm:p-6 border-b bg-muted/20 border-b-black/5 dark:border-b-white/5">
+        <div className="flex items-center gap-2">
+          <Database className="size-5 text-primary shrink-0" />
+          <h2 className="text-lg sm:text-xl font-semibold">Inventory Pool</h2>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-all hover:bg-muted active:translate-y-px disabled:opacity-50"
+            className="flex items-center gap-1.5 sm:gap-2 rounded-lg border px-3 sm:px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-all hover:bg-muted active:translate-y-px disabled:opacity-50"
           >
             {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-            {exporting ? "Exporting..." : "Export All"}
+            <span className="hidden xs:inline">{exporting ? "Exporting..." : "Export"}</span>
+            <span className="xs:hidden">{exporting ? "..." : "Export"}</span>
           </button>
           {isAdmin && (
             <>
               <button
                 onClick={() => setShowNewAsset(true)}
-                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-px"
+                className="flex items-center gap-1.5 sm:gap-2 rounded-lg bg-primary px-3 sm:px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-px"
               >
                 <Plus className="size-3.5" />
-                New Asset
+                <span className="hidden sm:inline">New Asset</span>
+                <span className="sm:hidden">New</span>
               </button>
               <Link
                 href="/dashboard/inventory/add"
-                className="flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-all hover:bg-muted active:translate-y-px"
+                className="flex items-center gap-1.5 sm:gap-2 rounded-lg border px-3 sm:px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-all hover:bg-muted active:translate-y-px"
               >
                 <Plus className="size-3.5" />
-                Add Item
+                <span className="hidden sm:inline">Add Item</span>
+                <span className="sm:hidden">Add</span>
               </Link>
               <button
                 onClick={() => setShowAssignSingle(true)}
-                className="flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-all hover:bg-muted active:translate-y-px"
+                className="flex items-center gap-1.5 sm:gap-2 rounded-lg border px-3 sm:px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-all hover:bg-muted active:translate-y-px"
               >
                 <UserPlus className="size-3.5" />
-                Assign User
+                <span className="hidden sm:inline">Assign User</span>
+                <span className="sm:hidden">Assign</span>
               </button>
             </>
           )}
           <Link
             href="/dashboard/inventory/import"
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-px"
+            className="flex items-center gap-1.5 sm:gap-2 rounded-lg bg-primary px-3 sm:px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-px"
           >
             <Upload className="size-3.5" />
             Import
