@@ -71,14 +71,14 @@ export function InventoryHeader({ isAdmin }: Props) {
               </Link>
               <button
                 onClick={() => setShowAssignSingle(true)}
-                className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 shadow-sm transition-all hover:bg-blue-100 active:translate-y-px"
+                className="flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-all hover:bg-muted active:translate-y-px"
               >
                 <UserPlus className="size-3.5" />
                 Assign User
               </button>
               <button
                 onClick={() => setShowAssignMultiple(true)}
-                className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 shadow-sm transition-all hover:bg-blue-100 active:translate-y-px"
+                className="flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-all hover:bg-muted active:translate-y-px"
               >
                 <Users className="size-3.5" />
                 Multi Assign
