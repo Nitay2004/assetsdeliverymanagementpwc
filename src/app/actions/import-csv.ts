@@ -190,17 +190,17 @@ export async function importInventoryCSV(formData: FormData) {
 
   const headers = records[0];
   const unknownHeaders: string[] = [];
-  let imported = 0;
   const errors: string[] = [];
 
+  const rows: { data: Record<string, unknown>; rowNum: number }[] = [];
   for (let r = 1; r < records.length; r++) {
     const row = records[r];
     if (row.length === 0 || row.every(c => c.trim() === "")) continue;
 
     const data = buildPrismaData(headers, row, unknownHeaders);
 
-    if (!data.serialNumber) {
-      errors.push(`Row ${r + 1}: missing Serial Number, skipped`);
+    if (!data.serialNumber || String(data.serialNumber).trim() === "") {
+      errors.push(`Row ${r + 1}: No serial number found, skipped`);
       continue;
     }
 
@@ -208,24 +208,61 @@ export async function importInventoryCSV(formData: FormData) {
       data.model = data.laptopModel;
     }
 
-    if (!data.model) {
-      errors.push(`Row ${r + 1}: missing Model, skipped`);
-      continue;
+    rows.push({ data, rowNum: r + 1 });
+  }
+
+  const assignmentFields = [
+    "employeeName", "emailId", "mobileNumber", "alternatePhoneNumber",
+    "shippingAddress", "landMark", "city", "state", "pinCode",
+    "purpose", "requestDate", "userBaseLocation", "imageType", "count",
+    "pwcRemarks", "trackingStatus", "trackingSubStatus", "dcNumber",
+    "docketNumber", "deliveryDate",
+  ];
+
+  const allSerials = [...new Set(
+    rows.map(r => String(r.data.serialNumber ?? "").trim()).filter(Boolean)
+  )];
+
+  const existingItems = await prisma.inventoryItem.findMany({
+    where: { serialNumber: { in: allSerials } },
+    select: { id: true, serialNumber: true },
+  });
+
+  const existingMap = new Map(existingItems.map(item => [item.serialNumber, item.id]));
+  let mapped = 0;
+
+  for (const item of rows) {
+    const sn = String(item.data.serialNumber ?? "").trim();
+    let itemId = existingMap.get(sn);
+
+    if (!itemId) {
+      try {
+        const cleanData = Object.fromEntries(
+          Object.entries(item.data).filter(([_, v]) => v !== null && v !== undefined)
+        );
+        if (!cleanData.serialNumber) cleanData.serialNumber = sn;
+        if (!cleanData.status) {
+          const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
+          cleanData.status = hasEmployee ? "ALLOCATED" : "NEW";
+        }
+        const created = await prisma.inventoryItem.create({ data: cleanData as any });
+        itemId = created.id;
+      } catch (err: any) {
+        errors.push(`Row ${item.rowNum}: Failed to create item "${sn}" - ${err?.message ?? "Unknown error"}`);
+        continue;
+      }
     }
 
-    const cleanData = Object.fromEntries(
-      Object.entries(data).filter(([_, v]) => v !== null && v !== undefined)
-    );
-
     try {
-      await prisma.inventoryItem.create({ data: cleanData as any });
-      imported++;
-    } catch (e: any) {
-      if (e?.code === "P2002") {
-        errors.push(`Row ${r + 1}: Serial Number "${data.serialNumber}" already exists, skipped`);
-      } else {
-        errors.push(`Row ${r + 1}: ${e?.message ?? "Unknown error"}`);
+      const assignmentData: Record<string, unknown> = { inventoryItemId: itemId };
+      for (const f of assignmentFields) {
+        assignmentData[f] = (item.data as any)[f] ?? null;
       }
+      assignmentData.assignedAt = new Date();
+      await prisma.assignmentRecord.create({ data: assignmentData as any });
+      mapped++;
+    } catch (err: any) {
+      errors.push(`Row ${item.rowNum}: Failed to map assignment for "${sn}" - ${err?.message ?? "Unknown error"}`);
     }
   }
 
@@ -239,7 +276,7 @@ export async function importInventoryCSV(formData: FormData) {
 
   return {
     success: true,
-    imported,
+    mapped,
     errors: errors.length > 0 ? errors : null,
     warning: warning || null,
   };

@@ -75,22 +75,22 @@ function AutoField({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function ReversePickupForm() {
+export function ReversePickupForm({ initialData }: { initialData?: Record<string, string> }) {
   const { toast } = useToast();
   const [pending, setPending] = useState(false);
   const [dd, setDd] = useState<DropdownData | null>(null);
-  const [serialNumber, setSerialNumber] = useState("");
-  const [model, setModel] = useState("");
-  const [entity, setEntity] = useState("");
-  const [imageType, setImageType] = useState("");
-  const [employeeName, setEmployeeName] = useState("");
-  const [emailId, setEmailId] = useState("");
-  const [mobileNumber, setMobileNumber] = useState("");
-  const [pickupAddress, setPickupAddress] = useState("");
-  const [landmark, setLandmark] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [pinCode, setPinCode] = useState("");
+  const [serialNumber, setSerialNumber] = useState(initialData?.serialNumber || "");
+  const [model, setModel] = useState(initialData?.model || "");
+  const [entity, setEntity] = useState(initialData?.entity || "");
+  const [imageType, setImageType] = useState(initialData?.imageType || "");
+  const [employeeName, setEmployeeName] = useState(initialData?.employeeName || "");
+  const [emailId, setEmailId] = useState(initialData?.emailId || "");
+  const [mobileNumber, setMobileNumber] = useState(initialData?.mobileNumber || "");
+  const [pickupAddress, setPickupAddress] = useState(initialData?.shippingAddress || "");
+  const [landmark, setLandmark] = useState(initialData?.landMark || "");
+  const [city, setCity] = useState(initialData?.city || "");
+  const [state, setState] = useState(initialData?.state || "");
+  const [pinCode, setPinCode] = useState(initialData?.pinCode || "");
   const [accessories, setAccessories] = useState("");
   const [lookupPending, setLookupPending] = useState(false);
   const [pincodeLoading, setPincodeLoading] = useState(false);

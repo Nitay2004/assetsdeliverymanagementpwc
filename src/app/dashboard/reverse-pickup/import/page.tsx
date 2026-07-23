@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Upload, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
-export default function ImportInventoryPage() {
+export default function ImportReversePickupPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<{
     success: boolean;
     imported?: number;
     errors?: string[] | null;
-    warning?: string | null; 
+    warning?: string | null;
     error?: string;
   } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -28,7 +28,7 @@ export default function ImportInventoryPage() {
     fd.set("file", file);
 
     try {
-      const res = await fetch("/api/import-csv", {
+      const res = await fetch("/api/import-reverse-pickup", {
         method: "POST",
         body: fd,
       });
@@ -45,22 +45,22 @@ export default function ImportInventoryPage() {
     <div className="max-w-xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
         <Link
-          href="/dashboard/inventory"
+          href="/dashboard/reverse-pickup"
           className="flex h-8 w-8 items-center justify-center rounded-lg border text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="size-4" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Bulk Import Inventory</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Bulk Import Reverse Pickup</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Upload a CSV or Excel file to bulk-import inventory items.
+            Upload a CSV or Excel file to bulk-import reverse pickup requests.
           </p>
         </div>
       </div>
 
       <div className="rounded-xl glass shadow-sm p-4 text-sm text-muted-foreground space-y-1">
-        <p className="font-medium text-foreground">Required columns:</p>
-        <p>Serial Number, Employee Name, Invoicing Warehouse, Sticker Colour</p>
+        <p className="font-medium text-foreground">Supported columns:</p>
+        <p>Any reverse pickup fields — unrecognized columns are ignored.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-xl glass shadow-sm p-6 space-y-5">
@@ -78,7 +78,7 @@ export default function ImportInventoryPage() {
                 {file ? file.name : "Click to select a file"}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                CSV or Excel file with headers matching inventory columns
+                CSV or Excel file with headers matching reverse pickup columns
               </p>
             </div>
           </div>
@@ -125,7 +125,7 @@ export default function ImportInventoryPage() {
                 <CheckCircle2 className="size-5 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-semibold">Import Complete</p>
-                  <p className="text-sm mt-1">{result.imported} item(s) imported successfully.</p>
+                  <p className="text-sm mt-1">{result.imported} request(s) imported successfully.</p>
                 </div>
               </div>
 
@@ -151,10 +151,10 @@ export default function ImportInventoryPage() {
               )}
 
               <button
-                onClick={() => router.push("/dashboard/inventory")}
+                onClick={() => router.push("/dashboard/reverse-pickup")}
                 className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-px"
               >
-                View Inventory
+                View Reverse Pickup
               </button>
             </>
           )}

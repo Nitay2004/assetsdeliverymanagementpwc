@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Layers,
   AlertTriangle,
+  Users,
 } from "lucide-react";
 import type { OrderStatus } from "@prisma/client";
 import Link from "next/link";
@@ -168,6 +169,7 @@ export default async function DashboardPage(props: {
   // Quick-links for modules
   const modules = [
     { label: "Inventory", href: "/dashboard/inventory", icon: <Package className="size-4" />, count: totalInventory, desc: "Total items" },
+    { label: "Assigned Assets", href: "/dashboard/assigned-assets", icon: <Users className="size-4" />, count: allocatedStock, desc: "Allocated to users" },
     { label: "Warehouse", href: "/dashboard/warehouse", icon: <Layers className="size-4" />, count: pendingAllocationCount, desc: "Pending allocation" },
     { label: "Provisioning", href: "/dashboard/provisioning", icon: <Laptop className="size-4" />, count: orders.filter((o) => ["ALLOCATED", "IN_PROVISIONING"].includes(o.status)).length, desc: "In progress" },
     { label: "Finance", href: "/dashboard/finance", icon: <CheckCircle className="size-4" />, count: orders.filter((o) => ["IN_PROVISIONING", "DC_GENERATED", "INVOICED"].includes(o.status)).length, desc: "Pending finance" },

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { Plus, ArrowLeftRight, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileText, CheckCircle, Clock } from "lucide-react";
+import { Plus, ArrowLeftRight, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileText, CheckCircle, Clock, Upload } from "lucide-react";
 import Link from "next/link";
 import { ReversePickupTable } from "@/components/reverse-pickup/reverse-pickup-table";
 import { ReversePickupExportButton } from "@/components/reverse-pickup/reverse-pickup-export-button";
@@ -62,13 +62,22 @@ export default async function ReversePickupPage() {
         <div className="flex items-center gap-2">
           <ReversePickupExportButton />
           {canManage && (
-            <Link
-              href="/dashboard/reverse-pickup/add"
-              className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-press"
-            >
-              <Plus className="size-4" />
-              New Request
-            </Link>
+            <>
+              <Link
+                href="/dashboard/reverse-pickup/import"
+                className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold text-foreground shadow-sm transition-all hover:bg-accent active:translate-y-press"
+              >
+                <Upload className="size-4" />
+                Import
+              </Link>
+              <Link
+                href="/dashboard/reverse-pickup/add"
+                className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:translate-y-press"
+              >
+                <Plus className="size-4" />
+                New Request
+              </Link>
+            </>
           )}
         </div>
       </div>
