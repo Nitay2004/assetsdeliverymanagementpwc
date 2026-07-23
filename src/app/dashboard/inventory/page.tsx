@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { Package, ShieldCheck, Laptop, Database } from "lucide-react";
 import { InventoryTable } from "@/components/inventory/inventory-table";
 import { InventoryHeader } from "@/components/inventory/inventory-header";
+import type { Prisma } from "@prisma/client";
 
 function safeISO(date: Date | null | undefined): string | null {
   if (!date) return null;
@@ -20,9 +21,23 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
   const page = Math.max(1, parseInt(searchParams.page as string) || 1);
   const pageSize = Math.max(1, Math.min(100, parseInt(searchParams.limit as string) || 25));
   const skip = (page - 1) * pageSize;
+  const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
+
+  const baseWhere: Prisma.InventoryItemWhereInput = {};
+  const where: Prisma.InventoryItemWhereInput = search ? {
+    ...baseWhere,
+    OR: [
+      { serialNumber: { contains: search, mode: "insensitive" as const } },
+      { model: { contains: search, mode: "insensitive" as const } },
+      { invoicingWarehouse: { contains: search, mode: "insensitive" as const } },
+      { trackingStatus: { contains: search, mode: "insensitive" as const } },
+      { employeeName: { contains: search, mode: "insensitive" as const } },
+    ],
+  } : baseWhere;
 
   const [inventoryItems, totalCount, newCount, availableCount, allocatedCount] = await Promise.all([
     prisma.inventoryItem.findMany({
+      where,
       skip,
       take: pageSize,
       include: {
@@ -33,7 +48,7 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
       },
       orderBy: { createdAt: 'desc' },
     }),
-    prisma.inventoryItem.count(),
+    prisma.inventoryItem.count({ where }),
     prisma.inventoryItem.count({ where: { status: "NEW" } }),
     prisma.inventoryItem.count({ where: { status: "AVAILABLE" } }),
     prisma.inventoryItem.count({ where: { status: "ALLOCATED" } }),

@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { ProvisioningEditModal } from "./provisioning-edit-modal";
 import { ScrollToItem } from "@/components/shared/scroll-to-item";
+import { DataTableFilter, filterRows, UrlDataTableFilter } from "@/components/shared/data-table-filter";
 
 const ASSET_STATUS_STYLES: Record<string, string> = {
   pending:     "bg-yellow-100 text-yellow-700",
@@ -73,6 +74,8 @@ export function ProvisioningTable({ orders, canManage, engineers, selectedId }: 
   const rows = orders.flatMap(order =>
     order.assets.map(asset => ({ order, asset }))
   );
+
+  const allRows = rows;
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -198,6 +201,9 @@ export function ProvisioningTable({ orders, canManage, engineers, selectedId }: 
       )}
 
       <div className="rounded-xl glass shadow-sm overflow-hidden">
+        <div className="p-4 border-b">
+          <UrlDataTableFilter placeholder="Search by client, engineer, serial no, model, location..." />
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">

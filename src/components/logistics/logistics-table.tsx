@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { useRouter } from "next/navigation";
 import { ScrollToItem } from "@/components/shared/scroll-to-item";
+import { DataTableFilter, filterRows, UrlDataTableFilter } from "@/components/shared/data-table-filter";
 
 interface RtoRecordData {
   id: string;
@@ -262,8 +263,13 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
     );
   }
 
+  const filteredOrders = orders;
+
   return (<>
     <div className="rounded-xl glass shadow-sm overflow-hidden">
+      <div className="p-4 border-b">
+        <UrlDataTableFilter placeholder="Search by client, location, serial no, docket, DC..." />
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
@@ -282,7 +288,7 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
           </thead>
           <tbody className="divide-y">
             <ScrollToItem selectedId={selectedId} prefix="logistics" />
-            {orders.map((order) => {
+            {filteredOrders.map((order) => {
               const isExpanded = expandedId === order.id;
               const flowEntry = STATUS_FLOW[order.status];
               const dc = getDcForOrder(order);

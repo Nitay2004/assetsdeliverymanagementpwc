@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, ExternalLink, Trash2, Eye } from "lucide-rea
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { deleteReversePickupRequest } from "@/app/actions/reverse-pickup";
+import { DataTableFilter, filterRows } from "@/components/shared/data-table-filter";
 
 interface RequestData {
   id: string;
@@ -40,6 +41,7 @@ export function ReversePickupTable({ requests, canManage, statusStyles }: Props)
   const { toast } = useToast();
   const { showAlert } = useAlert();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleDelete = async (id: string, requestNumber: string) => {
     const ok = await showAlert({
@@ -68,8 +70,16 @@ export function ReversePickupTable({ requests, canManage, statusStyles }: Props)
     );
   };
 
+  const filteredRequests = filterRows(requests, searchQuery, [
+    "requestNumber", "employeeName", "serialNumber", "model", "status", "type",
+    "courierName", "partnerName", "warehouseLocation", "displayStatus", "qcResult", "finalDisposition",
+  ]);
+
   return (
     <div className="rounded-xl glass shadow-sm overflow-hidden">
+      <div className="p-4 border-b">
+        <DataTableFilter value={searchQuery} onChange={setSearchQuery} placeholder="Search by request #, employee, serial no, model, courier..." />
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
@@ -86,14 +96,14 @@ export function ReversePickupTable({ requests, canManage, statusStyles }: Props)
             </tr>
           </thead>
           <tbody className="divide-y">
-            {requests.length === 0 ? (
+            {filteredRequests.length === 0 ? (
               <tr>
                 <td colSpan={canManage ? 9 : 8} className="px-6 py-12 text-center text-muted-foreground">
-                  No reverse pickup requests yet.
+                  {searchQuery ? "No results match your search." : "No reverse pickup requests yet."}
                 </td>
               </tr>
             ) : (
-              requests.map((req) => (
+              filteredRequests.map((req) => (
                 <Fragment key={req.id}>
                   <tr
                     className="hover:bg-muted/10 transition-colors cursor-pointer"

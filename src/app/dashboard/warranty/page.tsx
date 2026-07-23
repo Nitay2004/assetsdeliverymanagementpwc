@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { Shield, CheckCircle, AlertCircle } from "lucide-react";
-import { WarrantyItemRow } from "@/components/warranty/warranty-item-row";
+import { WarrantyItemTable } from "@/components/warranty/warranty-item-table";
 import { ScrollToItem } from "@/components/shared/scroll-to-item";
 
 export default async function WarrantyPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -63,28 +63,7 @@ export default async function WarrantyPage(props: { searchParams: Promise<Record
           No inventory items found.
         </div>
       ) : (
-        <div className="rounded-xl glass shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
-                <tr>
-                  <th className="px-6 py-4 font-semibold">Serial #</th>
-                  <th className="px-6 py-4 font-semibold">Model</th>
-                  <th className="px-6 py-4 font-semibold">Warranty Period</th>
-                  <th className="px-6 py-4 font-semibold">Warranty End</th>
-                  <th className="px-6 py-4 font-semibold">Services Start</th>
-                  {canManage && <th className="px-6 py-4 font-semibold">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                <ScrollToItem selectedId={selectedId} prefix="warranty" />
-                {items.map((item) => (
-                  <WarrantyItemRow key={item.id} item={item} canManage={canManage} elementId={`warranty-${item.id}`} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <WarrantyItemTable items={items} canManage={canManage} selectedId={selectedId} />
       )}
     </div>
   );

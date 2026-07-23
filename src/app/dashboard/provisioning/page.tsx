@@ -4,12 +4,14 @@ import { redirect } from "next/navigation";
 import { CheckCircle, Clock, Wrench, User } from "lucide-react";
 import { ProvisioningTable } from "@/components/provisioning/provisioning-table";
 import { ProvisioningPagination } from "@/components/provisioning/provisioning-pagination";
+import type { Prisma } from "@prisma/client";
 
 export default async function ProvisioningPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
   const page = Math.max(1, parseInt(typeof searchParams.page === "string" ? searchParams.page : "1", 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(typeof searchParams.limit === "string" ? searchParams.limit : "25", 10) || 25));
   const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
+  const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "PROVISIONING"));
 
@@ -29,10 +31,24 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     }
   }
 
+  const baseWhere: Prisma.OrderWhereInput = { status: { not: "ORDER_PLACED" } };
+  const where: Prisma.OrderWhereInput = search ? {
+    ...baseWhere,
+    OR: [
+      { clientName: { contains: search, mode: "insensitive" as const } },
+      { deliveryLocation: { contains: search, mode: "insensitive" as const } },
+      { engineerName: { contains: search, mode: "insensitive" as const } },
+      { warehouseLocation: { contains: search, mode: "insensitive" as const } },
+      { provisioningLocation: { contains: search, mode: "insensitive" as const } },
+      { assets: { some: { inventoryItem: { serialNumber: { contains: search, mode: "insensitive" as const } } } } },
+      { assets: { some: { inventoryItem: { model: { contains: search, mode: "insensitive" as const } } } } },
+    ],
+  } : baseWhere;
+
   const [totalCount, orders] = await Promise.all([
-    prisma.order.count({ where: { status: { not: "ORDER_PLACED" } } }),
+    prisma.order.count({ where }),
     prisma.order.findMany({
-      where: { status: { not: "ORDER_PLACED" } },
+      where,
       include: {
         assets: {
           include: { inventoryItem: true },

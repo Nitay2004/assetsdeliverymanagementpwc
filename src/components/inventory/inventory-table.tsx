@@ -7,6 +7,7 @@ import { deleteInventoryItem, sendToWarehouse, getInventoryItem } from "@/app/ac
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { InventoryDetailDrawer } from "./inventory-detail-drawer";
+import { DataTableFilter, filterRows, UrlDataTableFilter } from "@/components/shared/data-table-filter";
 
 interface LatestAssignment {
   employeeName: string | null;
@@ -209,6 +210,8 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
     items.filter(i => i.status === "AVAILABLE" || i.status === "ALLOCATED").length > 0 &&
     items.filter(i => i.status === "AVAILABLE" || i.status === "ALLOCATED").every(i => selectedIds.has(i.id));
 
+  const filteredItems = items;
+
   return (
     <div className="relative">
       {/* Bulk action bar */}
@@ -225,6 +228,10 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
           </button>
         </div>
       )}
+
+      <div className="p-4 border-b bg-background">
+        <UrlDataTableFilter placeholder="Search by serial no, model, employee, warehouse, tracking status..." />
+      </div>
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
@@ -250,14 +257,14 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
             </tr>
           </thead>
           <tbody className="divide-y">
-            {items.length === 0 ? (
+            {filteredItems.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">
                   No inventory found.
                 </td>
               </tr>
             ) : (
-              items.map(item => {
+              filteredItems.map(item => {
                 const a = item._latestAssignment;
                 const canSend = item.status === "AVAILABLE" || item.status === "ALLOCATED";
                 const isSelected = selectedIds.has(item.id);

@@ -8,7 +8,7 @@ import { LogisticsExportButton } from "@/components/logistics/logistics-export-b
 import { getWarehouses } from "@/app/actions/dc";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
-import type { OrderStatus } from "@prisma/client";
+import type { OrderStatus, Prisma } from "@prisma/client";
 
 const STATUS_FILTER: OrderStatus[] = ["IN_PROVISIONING", "DOCKET_ASSIGNED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "PACKED_AND_LABELLED", "DISPATCHED", "DELIVERED", "RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"];
 
@@ -17,6 +17,7 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
   const page = Math.max(1, parseInt(typeof searchParams.page === "string" ? searchParams.page : "1", 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(typeof searchParams.limit === "string" ? searchParams.limit : "10", 10) || 10));
   const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
+  const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "LOGISTICS"));
 
@@ -27,9 +28,22 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
     }
   }
 
-  const totalCount = await prisma.order.count({ where: { status: { in: STATUS_FILTER } } });
+  const baseWhere: Prisma.OrderWhereInput = { status: { in: STATUS_FILTER } };
+  const where: Prisma.OrderWhereInput = search ? {
+    ...baseWhere,
+    OR: [
+      { clientName: { contains: search, mode: "insensitive" as const } },
+      { deliveryLocation: { contains: search, mode: "insensitive" as const } },
+      { dcNumber: { contains: search, mode: "insensitive" as const } },
+      { assets: { some: { inventoryItem: { serialNumber: { contains: search, mode: "insensitive" as const } } } } },
+      { dockets: { some: { docketNumber: { contains: search, mode: "insensitive" as const } } } },
+      { dockets: { some: { ewayBillNumber: { contains: search, mode: "insensitive" as const } } } },
+    ],
+  } : baseWhere;
+
+  const totalCount = await prisma.order.count({ where });
   const rawOrders = await prisma.order.findMany({
-    where: { status: { in: STATUS_FILTER } },
+    where,
     include: {
       dockets: { orderBy: { createdAt: "desc" } },
       assets: { include: { inventoryItem: true } },

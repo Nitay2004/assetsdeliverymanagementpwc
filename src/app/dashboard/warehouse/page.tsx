@@ -5,13 +5,26 @@ import Link from "next/link";
 import { PendingAllocationsTable } from "@/components/warehouse/pending-allocations-table";
 import { AllocatedAssetsTable } from "@/components/warehouse/allocated-assets-table";
 import { WarehouseExportButton } from "@/components/warehouse/warehouse-export-button";
+import type { Prisma } from "@prisma/client";
 
 export default async function WarehousePage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
   const page = Math.max(1, parseInt(typeof searchParams.page === "string" ? searchParams.page : "1", 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(typeof searchParams.limit === "string" ? searchParams.limit : "10", 10) || 10));
+  const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "WAREHOUSE"));
+
+  const allocatedWhere: Prisma.OrderWhereInput = { status: { not: "ORDER_PLACED" }, ...(search ? {
+    OR: [
+      { clientName: { contains: search, mode: "insensitive" as const } },
+      { deliveryLocation: { contains: search, mode: "insensitive" as const } },
+      { dcNumber: { contains: search, mode: "insensitive" as const } },
+      { assets: { some: { inventoryItem: { serialNumber: { contains: search, mode: "insensitive" as const } } } } },
+      { dockets: { some: { docketNumber: { contains: search, mode: "insensitive" as const } } } },
+      { dockets: { some: { ewayBillNumber: { contains: search, mode: "insensitive" as const } } } },
+    ],
+  } : {}) };
 
   const [pendingOrders, totalAllocated, allocatedOrders, availableInventory] = await Promise.all([
     prisma.order.findMany({
@@ -23,11 +36,9 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
       },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.order.count({
-      where: { status: { not: "ORDER_PLACED" } },
-    }),
+    prisma.order.count({ where: allocatedWhere }),
     prisma.order.findMany({
-      where: { status: { not: "ORDER_PLACED" } },
+      where: allocatedWhere,
       include: {
         assets: {
           include: { inventoryItem: true },

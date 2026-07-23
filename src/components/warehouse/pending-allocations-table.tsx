@@ -5,6 +5,7 @@ import { AllocateForm } from "@/components/warehouse/allocate-form";
 import { AdvanceProvisioningModal } from "@/components/warehouse/advance-provisioning-modal";
 import { BulkAdvanceModal } from "@/components/provisioning/bulk-advance-modal";
 import { AlertCircle, ChevronDown, ChevronRight, ArrowRight, CheckSquare } from "lucide-react";
+import { DataTableFilter, filterRows } from "@/components/shared/data-table-filter";
 
 interface AvailableItem {
   id: string;
@@ -72,6 +73,7 @@ export function PendingAllocationsTable({ orders, availableItems, canManage }: P
   const [advanceOrderId, setAdvanceOrderId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkAdvanceIds, setBulkAdvanceIds] = useState<string[] | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const toggleRow = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
@@ -107,6 +109,14 @@ export function PendingAllocationsTable({ orders, availableItems, canManage }: P
     );
   }
 
+  const filteredOrders = filterRows(orders, searchQuery, [
+    "clientName", "deliveryLocation", "intermediary", "status",
+  ]).filter(order => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return order.assets.some(a => a.inventoryItem?.serialNumber?.toLowerCase().includes(q));
+  });
+
   return (
     <>
       {/* Bulk action bar */}
@@ -140,6 +150,9 @@ export function PendingAllocationsTable({ orders, availableItems, canManage }: P
       )}
 
       <div className="rounded-xl glass shadow-sm overflow-hidden">
+        <div className="p-4 border-b">
+          <DataTableFilter value={searchQuery} onChange={setSearchQuery} placeholder="Search by client, location, serial no..." />
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
@@ -168,7 +181,7 @@ export function PendingAllocationsTable({ orders, availableItems, canManage }: P
               </tr>
             </thead>
             <tbody className="divide-y">
-              {orders.map((order) => {
+              {filteredOrders.map((order) => {
                 const pendingAssetCount = order.assets.filter(
                   (a) => a.inventoryItemId === null
                 ).length;

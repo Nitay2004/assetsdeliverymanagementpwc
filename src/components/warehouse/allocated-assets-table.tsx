@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { OrderActions } from "@/components/orders/order-actions";
+import { UrlDataTableFilter } from "@/components/shared/data-table-filter";
 
 interface AssetInventoryItem {
   id: string;
@@ -62,8 +63,13 @@ export function AllocatedAssetsTable({
     router.push(`/dashboard/warehouse?page=${page}&limit=${pageSize}`);
   }
 
+  const filteredOrders = orders;
+
   return (
     <div className="rounded-xl glass shadow-sm overflow-hidden">
+      <div className="p-4 border-b">
+        <UrlDataTableFilter placeholder="Search by client, location, serial no, docket, DC..." />
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
@@ -80,14 +86,14 @@ export function AllocatedAssetsTable({
             </tr>
           </thead>
           <tbody className="divide-y">
-            {orders.length === 0 ? (
+            {filteredOrders.length === 0 ? (
               <tr>
                 <td colSpan={canManage ? 9 : 8} className="px-6 py-8 text-center text-muted-foreground">
                   No allocated assets yet.
                 </td>
               </tr>
             ) : (
-              orders.map((order) => (
+              filteredOrders.map((order) => (
                 <tr key={order.id} id={`order-${order.id}`} className="hover:bg-muted/10 transition-colors scroll-mt-20">
                   <td className="px-6 py-4 font-medium">{order.clientName}</td>
                   <td className="px-6 py-4 text-muted-foreground">{order.deliveryLocation}</td>

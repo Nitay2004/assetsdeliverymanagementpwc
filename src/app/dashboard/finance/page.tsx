@@ -2,13 +2,13 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { FileText } from "lucide-react";
-import { FinanceOrderRow } from "@/components/finance/finance-order-row";
+import { FinanceOrderTable } from "@/components/finance/finance-order-table";
 import { ScrollToItem } from "@/components/shared/scroll-to-item";
 import { ReversePickupFinanceSection } from "@/components/finance/reverse-pickup-finance-section";
 import { FinanceExportButton } from "@/components/finance/finance-export-button";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
-import type { OrderStatus } from "@prisma/client";
+import type { OrderStatus, Prisma } from "@prisma/client";
 
 const STATUS_FILTER: OrderStatus[] = ["IN_PROVISIONING", "DC_REQUESTED", "DC_GENERATED", "PACKED_AND_LABELLED", "DOCKET_ASSIGNED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "DISPATCHED", "DELIVERED", "RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "DELIVERY_CONFIRMED"];
 
@@ -17,6 +17,7 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
   const page = Math.max(1, parseInt(typeof searchParams.page === "string" ? searchParams.page : "1", 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(typeof searchParams.limit === "string" ? searchParams.limit : "10", 10) || 10));
   const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
+  const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "FINANCE"));
 
@@ -27,9 +28,23 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
     }
   }
 
-  const totalCount = await prisma.order.count({ where: { status: { in: STATUS_FILTER } } });
+  const baseWhere: Prisma.OrderWhereInput = { status: { in: STATUS_FILTER } };
+  const where: Prisma.OrderWhereInput = search ? {
+    ...baseWhere,
+    OR: [
+      { clientName: { contains: search, mode: "insensitive" as const } },
+      { deliveryLocation: { contains: search, mode: "insensitive" as const } },
+      { invoiceNumber: { contains: search, mode: "insensitive" as const } },
+      { dcNumber: { contains: search, mode: "insensitive" as const } },
+      { assets: { some: { inventoryItem: { serialNumber: { contains: search, mode: "insensitive" as const } } } } },
+      { dockets: { some: { docketNumber: { contains: search, mode: "insensitive" as const } } } },
+      { dockets: { some: { ewayBillNumber: { contains: search, mode: "insensitive" as const } } } },
+    ],
+  } : baseWhere;
+
+  const totalCount = await prisma.order.count({ where });
   const rawOrders = await prisma.order.findMany({
-    where: { status: { in: STATUS_FILTER } },
+    where,
     include: {
       deliveryChallans: {
         include: { items: true, warehouse: true },
@@ -124,32 +139,10 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
           No orders ready for finance processing.
         </div>
       ) : (
-        <div className="rounded-xl glass shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
-                <tr>
-                  <th className="px-6 py-4 font-semibold">Client</th>
-                  <th className="px-6 py-4 font-semibold">Location</th>
-                  <th className="px-6 py-4 font-semibold">Units</th>
-                  <th className="px-6 py-4 font-semibold">Serial No.</th>
-                  <th className="px-6 py-4 font-semibold">DC #</th>
-                  <th className="px-6 py-4 font-semibold">E-Way Bill</th>
-                  <th className="px-6 py-4 font-semibold">Status</th>
-                  {canManage && <th className="px-6 py-4 font-semibold">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                <ScrollToItem selectedId={selectedId} prefix="finance" />
-                {orders.map((order) => (
-                  <FinanceOrderRow key={order.id} order={order} canManage={canManage} elementId={`finance-${order.id}`} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-
+        <>
+          <FinanceOrderTable orders={orders} canManage={canManage} selectedId={selectedId} />
           <PaginationBar basePath="/dashboard/finance" currentPage={safePage} totalPages={totalPages} totalCount={totalCount} limit={limit} />
-        </div>
+        </>
       )}
 
       <ReversePickupFinanceSection
