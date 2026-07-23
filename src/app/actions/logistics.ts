@@ -34,6 +34,7 @@ export async function markAsRto(
       warehouseId: data.warehouseId,
       receivedBy: data.receivedBy,
       rtoDocketNumber: data.rtoDocketNumber,
+      rtoDate: new Date(),
     },
   });
 

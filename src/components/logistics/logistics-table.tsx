@@ -14,6 +14,7 @@ interface RtoRecordData {
   warehouseId: string | null;
   receivedBy: string | null;
   rtoDocketNumber: string | null;
+  rtoDate: string | null;
 }
 
 interface DocketForm {
@@ -584,6 +585,18 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
                 className="w-full rounded-lg border px-3 py-2 text-sm bg-background focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 placeholder="Enter new docket number for RTO" />
               <p className="text-xs text-muted-foreground">Old docket number will be preserved below.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-muted-foreground">RTO Date</label>
+              <input
+                type="date"
+                value={new Date().toISOString().split("T")[0]}
+                readOnly
+                disabled
+                className="w-full rounded-lg border px-3 py-2 text-sm bg-muted/50 text-muted-foreground cursor-not-allowed"
+              />
+              <p className="text-xs text-muted-foreground">Auto-filled with today's date.</p>
             </div>
           </div>
 

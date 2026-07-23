@@ -121,6 +121,7 @@ model RtoRecord {
   warehouseId     String?   @map("warehouse_id") @db.Uuid
   receivedBy      String?   @map("received_by")
   rtoDocketNumber String?   @map("rto_docket_number")
+  rtoDate         DateTime?  @map("rto_date") @db.Date
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 

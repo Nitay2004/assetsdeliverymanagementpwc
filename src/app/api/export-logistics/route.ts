@@ -92,6 +92,7 @@ export async function GET() {
       "E-Way Bill Numbers": order.dockets.map((d) => d.ewayBillNumber).filter(Boolean).join(", "),
       "Has POD": order.dockets.some((d) => d.podDocumentUrl) ? "Yes" : "No",
       "RTO Docket": order.rtoRecords.map((r) => r.rtoDocketNumber).filter(Boolean).join(", "),
+      "RTO Date": order.rtoRecords.map((r) => r.rtoDate ? getVal(r as unknown as Record<string, unknown>, "rtoDate") : "").filter(Boolean).join(", "),
       "Created At": getVal(order as unknown as Record<string, unknown>, "createdAt"),
       "Updated At": getVal(order as unknown as Record<string, unknown>, "updatedAt"),
     };
