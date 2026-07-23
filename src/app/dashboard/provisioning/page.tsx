@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { CheckCircle, Clock, Wrench, User } from "lucide-react";
 import { ProvisioningTable } from "@/components/provisioning/provisioning-table";
 import { ProvisioningPagination } from "@/components/provisioning/provisioning-pagination";
+import { ProvisioningExportButton } from "@/components/provisioning/provisioning-export-button";
 import type { Prisma } from "@prisma/client";
 
 export default async function ProvisioningPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -83,11 +84,14 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Provisioning Module</h1>
-        <p className="text-muted-foreground mt-2">
-          Track OS installation and hardware quality checks.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Provisioning Module</h1>
+          <p className="text-muted-foreground mt-2">
+            Track OS installation and hardware quality checks.
+          </p>
+        </div>
+        <ProvisioningExportButton />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
