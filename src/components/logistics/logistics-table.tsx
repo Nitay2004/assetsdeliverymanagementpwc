@@ -14,7 +14,7 @@ interface RtoRecordData {
   warehouseId: string | null;
   receivedBy: string | null;
   rtoDocketNumber: string | null;
-  rtoDate: string | null;
+  rtoDate: Date | null;
 }
 
 interface DocketForm {
