@@ -44,6 +44,8 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [formItem, setFormItem] = useState<AssetItem | null>(null);
   const [saving, setSaving] = useState(false);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [orderedSelectedItems, setOrderedSelectedItems] = useState<AssetItem[]>([]);
 
   // Dropdown state
   const { data: dropdownData, handleAddOption, handleDeleteOption } = useDropdownData();
@@ -69,6 +71,8 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
     setSelectedIds(new Set());
     setShowForm(false);
     setFormItem(null);
+    setCurrentStepIndex(0);
+    setOrderedSelectedItems([]);
     setSelectedEntity("");
     setSelectedPurpose("");
     setSelectedImageType("");
@@ -118,12 +122,11 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
 
   function handleAssignMultiple() {
     if (selectedIds.size === 0) return;
-    // Open form for first selected item, then assign all with same data
-    const firstItem = availableItems.find(i => selectedIds.has(i.id));
-    if (firstItem) {
-      setFormItem(firstItem);
-      setShowForm(true);
-    }
+    const items = availableItems.filter(i => selectedIds.has(i.id));
+    setOrderedSelectedItems(items);
+    setCurrentStepIndex(0);
+    setFormItem(items[0]);
+    setShowForm(true);
   }
 
   async function handleFormSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -135,23 +138,31 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
       if (activeMode === "single" && formItem) {
         await reassignItem(formItem.id, form);
         toast({ title: "Assigned", description: `${formItem.serialNumber} assigned successfully.`, variant: "success" });
+        resetAll();
+        onClose();
+        router.refresh();
       } else if (activeMode === "multiple") {
-        const ids = Array.from(selectedIds);
-        let successCount = 0;
-        for (const id of ids) {
-          try {
-            await reassignItem(id, form);
-            successCount++;
-          } catch {
-            // continue with next
-          }
-        }
-        toast({ title: "Assigned", description: `${successCount} of ${ids.length} items assigned successfully.`, variant: "success" });
-      }
+        const isLastStep = currentStepIndex >= orderedSelectedItems.length - 1;
+        const currentItem = orderedSelectedItems[currentStepIndex];
 
-      resetAll();
-      onClose();
-      router.refresh();
+        try {
+          await reassignItem(currentItem.id, form);
+        } catch {
+          // continue
+        }
+
+        if (!isLastStep) {
+          const nextIndex = currentStepIndex + 1;
+          setCurrentStepIndex(nextIndex);
+          setFormItem(orderedSelectedItems[nextIndex]);
+          toast({ title: "Saved", description: `${currentItem.serialNumber} assigned. Moving to next...`, variant: "success" });
+        } else {
+          toast({ title: "All Assigned", description: `All ${orderedSelectedItems.length} items assigned successfully.`, variant: "success" });
+          resetAll();
+          onClose();
+          router.refresh();
+        }
+      }
     } catch (err: any) {
       toast({ title: "Error", description: err.message || "Assignment failed", variant: "error" });
     } finally {
@@ -389,18 +400,36 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
             )
           ) : (
             /* ─── Assignment Form ─── */
-            <form onSubmit={handleFormSubmit} className="space-y-4">
+            <form key={activeMode === "multiple" ? `step-${currentStepIndex}-${formItem?.id}` : "single"} onSubmit={handleFormSubmit} className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium">
                   Assigning: <span className="text-primary">{formItem?.serialNumber}</span>
-                  {activeMode === "multiple" && selectedIds.size > 1 && (
-                    <span className="text-muted-foreground ml-1">(+ {selectedIds.size - 1} more)</span>
+                  {activeMode === "multiple" && orderedSelectedItems.length > 1 && (
+                    <span className="text-muted-foreground ml-1">(Step {currentStepIndex + 1} of {orderedSelectedItems.length})</span>
                   )}
                 </p>
-                <button type="button" onClick={() => { setShowForm(false); setFormItem(null); }} className="text-xs text-muted-foreground hover:text-foreground">
+                <button type="button" onClick={() => { setShowForm(false); setFormItem(null); setCurrentStepIndex(0); setOrderedSelectedItems([]); }} className="text-xs text-muted-foreground hover:text-foreground">
                   ← Back to selection
                 </button>
               </div>
+
+              {activeMode === "multiple" && orderedSelectedItems.length > 1 && (
+                <div className="space-y-1">
+                  <div className="w-full bg-muted rounded-full h-1.5">
+                    <div
+                      className="bg-primary h-1.5 rounded-full transition-all duration-300"
+                      style={{ width: `${((currentStepIndex + 1) / orderedSelectedItems.length) * 100}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between">
+                    {orderedSelectedItems.map((item, idx) => (
+                      <div key={item.id} className={`text-xs ${idx <= currentStepIndex ? "text-primary font-medium" : "text-muted-foreground"}`}>
+                        {item.serialNumber}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-3 gap-2">
                 <input name="partner" placeholder="Partner" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
@@ -546,9 +575,13 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
 
               <div className="flex gap-2 pt-2 border-t">
                 <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
-                  {saving ? "Saving..." : activeMode === "multiple" ? `Assign ${selectedIds.size} Item(s)` : "Save Assignment"}
+                  {saving ? "Saving..." : activeMode === "multiple"
+                    ? (currentStepIndex >= orderedSelectedItems.length - 1
+                        ? `Assign & Finish`
+                        : `Save & Next`)
+                    : "Save Assignment"}
                 </button>
-                <button type="button" onClick={() => { setShowForm(false); setFormItem(null); }} className="rounded-lg border px-4 py-2.5 text-sm font-medium hover:bg-muted transition-colors">
+                <button type="button" onClick={() => { setShowForm(false); setFormItem(null); setCurrentStepIndex(0); setOrderedSelectedItems([]); }} className="rounded-lg border px-4 py-2.5 text-sm font-medium hover:bg-muted transition-colors">
                   Cancel
                 </button>
               </div>
