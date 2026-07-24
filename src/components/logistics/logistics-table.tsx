@@ -63,6 +63,7 @@ interface OrderData {
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   IN_PROVISIONING:     { label: "In Provisioning",    color: "bg-purple-100 text-purple-700" },
+  DOCKET_REQUESTED:    { label: "Docket Requested",   color: "bg-amber-100 text-amber-700" },
   DOCKET_ASSIGNED:     { label: "Docket Assigned",     color: "bg-blue-100 text-blue-700" },
   DC_REQUESTED:        { label: "DC Requested",        color: "bg-indigo-100 text-indigo-700" },
   DC_GENERATED:        { label: "DC Generated",        color: "bg-indigo-100 text-indigo-700" },
@@ -82,8 +83,9 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 const STATUS_FLOW: Record<string, { next: string; label: string } | null> = {
   IN_PROVISIONING:             null,
-  DC_REQUESTED:                { next: "DOCKET_ASSIGNED",               label: "Assign Docket" },
-  DOCKET_ASSIGNED:             { next: "DC_GENERATED",                  label: "Request DC" },
+  DOCKET_REQUESTED:            { next: "DOCKET_ASSIGNED",               label: "Assign Docket" },
+  DOCKET_ASSIGNED:             { next: "DC_REQUESTED",                  label: "Request DC" },
+  DC_REQUESTED:                null,
   DC_GENERATED:                { next: "EWAY_BILL_REQUESTED",           label: "Request E-Way Bill" },
   EWAY_BILL_REQUESTED:         null,
   EWAY_BILL_GENERATED:         { next: "PACKED_AND_LABELLED",           label: "Pack & Label" },

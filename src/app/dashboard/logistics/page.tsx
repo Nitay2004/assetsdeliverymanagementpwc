@@ -10,7 +10,7 @@ import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
 import type { OrderStatus, Prisma } from "@prisma/client";
 
-const STATUS_FILTER: OrderStatus[] = ["IN_PROVISIONING", "DOCKET_ASSIGNED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "PACKED_AND_LABELLED", "DISPATCHED", "DELIVERED", "RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"];
+const STATUS_FILTER: OrderStatus[] = ["DOCKET_REQUESTED", "DOCKET_ASSIGNED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "PACKED_AND_LABELLED", "DISPATCHED", "DELIVERED", "RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"];
 
 export default async function LogisticsPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
@@ -68,8 +68,8 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
     })),
   }));
 
-  const needsDocket = rawOrders.filter(o => o.status === "DC_REQUESTED").length;
-  const awaitingFinance = rawOrders.filter(o => ["DOCKET_ASSIGNED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "RTO_DC_REQUESTED", "RTO_EWAY_BILL_REQUESTED"].includes(o.status)).length;
+  const needsDocket = rawOrders.filter(o => o.status === "DOCKET_REQUESTED").length;
+  const awaitingFinance = rawOrders.filter(o => ["DOCKET_ASSIGNED", "DC_REQUESTED", "EWAY_BILL_REQUESTED", "RTO_DC_REQUESTED", "RTO_EWAY_BILL_REQUESTED"].includes(o.status)).length;
   const readyToPack = rawOrders.filter(o => ["DC_GENERATED", "EWAY_BILL_GENERATED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_GENERATED"].includes(o.status)).length;
   const inTransit = rawOrders.filter(o => ["DISPATCHED", "DELIVERED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"].includes(o.status)).length;
 

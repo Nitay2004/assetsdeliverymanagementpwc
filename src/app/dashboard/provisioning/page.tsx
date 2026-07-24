@@ -21,9 +21,9 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
       where: { id: selectedId },
       select: { updatedAt: true, status: true },
     });
-    if (selOrder && !["ALLOCATED", "IN_PROVISIONING", "DC_REQUESTED"].includes(selOrder.status)) {
+    if (selOrder && !["ALLOCATED", "IN_PROVISIONING", "DOCKET_REQUESTED"].includes(selOrder.status)) {
       const pos = await prisma.order.count({
-        where: { status: { in: ["ALLOCATED", "IN_PROVISIONING", "DC_REQUESTED"] }, updatedAt: { gt: selOrder.updatedAt } },
+        where: { status: { in: ["ALLOCATED", "IN_PROVISIONING", "DOCKET_REQUESTED"] }, updatedAt: { gt: selOrder.updatedAt } },
       });
       const correctPage = Math.floor(pos / limit) + 1;
       if (correctPage !== page) {
@@ -32,7 +32,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     }
   }
 
-  const baseWhere: Prisma.OrderWhereInput = { status: { in: ["ALLOCATED", "IN_PROVISIONING", "DC_REQUESTED"] } };
+  const baseWhere: Prisma.OrderWhereInput = { status: { in: ["ALLOCATED", "IN_PROVISIONING", "DOCKET_REQUESTED"] } };
   const where: Prisma.OrderWhereInput = search ? {
     ...baseWhere,
     OR: [
@@ -64,7 +64,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
 
   const engineers = [...new Set(orders.map(o => o.engineerName).filter(Boolean))] as string[];
   const inProvisioningCount = orders.filter(o => o.status === "ALLOCATED" || o.status === "IN_PROVISIONING").length;
-  const handedOverCount = orders.filter(o => o.status === "DC_REQUESTED").length;
+  const handedOverCount = orders.filter(o => o.status === "DOCKET_REQUESTED").length;
   const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
 
   // Group data by engineer for sections
