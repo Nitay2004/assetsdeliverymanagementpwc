@@ -747,9 +747,12 @@ async function handleUploadMode(
       Object.entries(item.data).filter(([_, v]) => v !== null && v !== undefined)
     );
     if (!cleanData.serialNumber) cleanData.serialNumber = sn;
+    const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
+    const hasEntity = cleanData.entity && String(cleanData.entity).trim() !== "";
     if (!cleanData.status) {
-      const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
       cleanData.status = hasEmployee ? "ALLOCATED" : "NEW";
+    } else if (cleanData.status === "AVAILABLE" && !hasEntity) {
+      cleanData.status = "NEW";
     }
     newItemsData.push(cleanData);
     newItemsMeta.push({ sn, rowNum: item.rowNum });

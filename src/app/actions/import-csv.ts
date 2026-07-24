@@ -269,9 +269,12 @@ export async function importInventoryCSV(formData: FormData) {
           Object.entries(item.data).filter(([_, v]) => v !== null && v !== undefined)
         );
         if (!cleanData.serialNumber) cleanData.serialNumber = sn;
+        const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
+        const hasEntity = cleanData.entity && String(cleanData.entity).trim() !== "";
         if (!cleanData.status) {
-          const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
           cleanData.status = hasEmployee ? "ALLOCATED" : "NEW";
+        } else if (cleanData.status === "AVAILABLE" && !hasEntity) {
+          cleanData.status = "NEW";
         }
         const created = await prisma.inventoryItem.create({ data: cleanData as any });
         itemId = created.id;
