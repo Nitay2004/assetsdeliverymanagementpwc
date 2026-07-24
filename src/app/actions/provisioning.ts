@@ -32,6 +32,7 @@ export async function updateAssetStatus(assetId: string, status: string) {
   });
 
   revalidatePath("/dashboard/provisioning");
+  revalidatePath("/dashboard");
 }
 
 export async function advanceOrderToProvisioning(
@@ -69,6 +70,7 @@ export async function advanceOrderToProvisioning(
   revalidatePath("/dashboard/provisioning");
   revalidatePath("/dashboard/warehouse");
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 }
 
 export async function getOrderInventoryLocations(orderId: string) {
@@ -210,6 +212,7 @@ export async function bulkAdvanceOrdersToProvisioning(
   revalidatePath("/dashboard/provisioning");
   revalidatePath("/dashboard/warehouse");
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 }
 
 export async function handoverToLogistics(orderIds: string[]) {
@@ -241,6 +244,7 @@ export async function handoverToLogistics(orderIds: string[]) {
   revalidatePath("/dashboard/provisioning");
   revalidatePath("/dashboard/logistics");
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 }
 
 export async function removeFromProvisioning(orderId: string) {
@@ -268,4 +272,5 @@ export async function removeFromProvisioning(orderId: string) {
   revalidatePath("/dashboard/provisioning");
   revalidatePath("/dashboard/warehouse");
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 }

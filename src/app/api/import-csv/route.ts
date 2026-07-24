@@ -692,6 +692,7 @@ async function handleUpdateMode(
   }
 
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 
   const uniqueUnknown = [...new Set(unknownHeaders)];
   let warning = uniqueUnknown.length > 0 ? `Unrecognized columns ignored: ${uniqueUnknown.join(", ")}.` : "";
@@ -810,6 +811,7 @@ async function handleUploadMode(
   }
 
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 
   const uniqueUnknown = [...new Set(unknownHeaders)];
   let warning = uniqueUnknown.length > 0 ? `Unrecognized columns ignored: ${uniqueUnknown.join(", ")}.` : "";

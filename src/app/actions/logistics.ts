@@ -57,6 +57,7 @@ export async function markAsRto(
   revalidatePath("/dashboard/logistics");
   revalidatePath("/dashboard/finance");
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 }
 
 export async function addDocket(formData: FormData) {
@@ -97,6 +98,7 @@ export async function addDocket(formData: FormData) {
 
   revalidatePath("/dashboard/logistics");
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 }
 
 export async function updateDocket(id: string, formData: FormData) {
@@ -121,6 +123,7 @@ export async function updateDocket(id: string, formData: FormData) {
   });
 
   revalidatePath("/dashboard/logistics");
+  revalidatePath("/dashboard");
 }
 
 export async function updateDocketPod(docketId: string, podDocumentUrl: string) {
@@ -135,6 +138,7 @@ export async function updateDocketPod(docketId: string, podDocumentUrl: string) 
   });
 
   revalidatePath("/dashboard/logistics");
+  revalidatePath("/dashboard");
 }
 
 export async function deleteDocket(id: string) {
@@ -146,6 +150,7 @@ export async function deleteDocket(id: string) {
   await prisma.docket.delete({ where: { id } });
 
   revalidatePath("/dashboard/logistics");
+  revalidatePath("/dashboard");
 }
 
 export async function advanceOrderStatus(orderId: string, status: string) {
@@ -190,4 +195,5 @@ export async function advanceOrderStatus(orderId: string, status: string) {
 
   revalidatePath("/dashboard/logistics");
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 }

@@ -116,6 +116,7 @@ export async function addInventoryItem(formData: FormData) {
   }
 
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 }
 
 export async function updateInventoryItem(id: string, formData: FormData) {
@@ -221,6 +222,7 @@ export async function updateInventoryItem(id: string, formData: FormData) {
   }
 
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
   redirect("/dashboard/inventory");
 }
 
@@ -237,6 +239,7 @@ export async function deleteInventoryItem(id: string) {
   }
 
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 }
 
 export async function returnItemToStock(id: string) {
@@ -305,6 +308,7 @@ export async function returnItemToStock(id: string) {
   });
 
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 }
 
 export async function getDistinctFieldValues() {

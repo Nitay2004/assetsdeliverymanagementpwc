@@ -35,6 +35,7 @@ export async function addOrder(formData: FormData) {
   });
 
   revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard");
   redirect("/dashboard/warehouse");
 }
 
@@ -104,4 +105,5 @@ export async function deleteOrder(id: string) {
   await prisma.order.delete({ where: { id } });
 
   revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard");
 }

@@ -298,6 +298,7 @@ export async function importInventoryCSV(formData: FormData) {
   }
 
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 
   const uniqueUnknown = [...new Set(unknownHeaders)];
   let warning = "";
