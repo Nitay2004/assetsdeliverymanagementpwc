@@ -21,9 +21,9 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
       where: { id: selectedId },
       select: { updatedAt: true, status: true },
     });
-    if (selOrder && selOrder.status !== "ORDER_PLACED") {
+    if (selOrder && !["ALLOCATED", "IN_PROVISIONING"].includes(selOrder.status)) {
       const pos = await prisma.order.count({
-        where: { status: { not: "ORDER_PLACED" }, updatedAt: { gt: selOrder.updatedAt } },
+        where: { status: { in: ["ALLOCATED", "IN_PROVISIONING"] }, updatedAt: { gt: selOrder.updatedAt } },
       });
       const correctPage = Math.floor(pos / limit) + 1;
       if (correctPage !== page) {
@@ -32,7 +32,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     }
   }
 
-  const baseWhere: Prisma.OrderWhereInput = { status: { not: "ORDER_PLACED" } };
+  const baseWhere: Prisma.OrderWhereInput = { status: { in: ["ALLOCATED", "IN_PROVISIONING"] } };
   const where: Prisma.OrderWhereInput = search ? {
     ...baseWhere,
     OR: [
@@ -63,8 +63,8 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   ]);
 
   const engineers = [...new Set(orders.map(o => o.engineerName).filter(Boolean))] as string[];
-  const inProvisioningCount = orders.filter(o => o.status === "ALLOCATED" || o.status === "IN_PROVISIONING").length;
-  const provisionedCount = orders.length - inProvisioningCount;
+  const inProvisioningCount = orders.filter(o => o.status === "IN_PROVISIONING").length;
+  const pendingAllocationCount = orders.filter(o => o.status === "ALLOCATED").length;
   const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
 
   // Group data by engineer for sections
@@ -109,8 +109,8 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
             <CheckCircle className="size-5 text-green-600" />
           </div>
           <div>
-            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Provisioned</p>
-            <p className="text-2xl font-bold text-primary mt-1">{provisionedCount}</p>
+            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Pending Allocation</p>
+            <p className="text-2xl font-bold text-primary mt-1">{pendingAllocationCount}</p>
           </div>
         </div>
         <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
