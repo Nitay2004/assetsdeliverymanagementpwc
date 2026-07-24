@@ -81,9 +81,9 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 const STATUS_FLOW: Record<string, { next: string; label: string } | null> = {
-  IN_PROVISIONING:             { next: "DOCKET_ASSIGNED",               label: "Assign Docket" },
-  DOCKET_ASSIGNED:             { next: "DC_REQUESTED",                  label: "Request DC" },
-  DC_REQUESTED:                null,
+  IN_PROVISIONING:             null,
+  DC_REQUESTED:                { next: "DOCKET_ASSIGNED",               label: "Assign Docket" },
+  DOCKET_ASSIGNED:             { next: "DC_GENERATED",                  label: "Request DC" },
   DC_GENERATED:                { next: "EWAY_BILL_REQUESTED",           label: "Request E-Way Bill" },
   EWAY_BILL_REQUESTED:         null,
   EWAY_BILL_GENERATED:         { next: "PACKED_AND_LABELLED",           label: "Pack & Label" },

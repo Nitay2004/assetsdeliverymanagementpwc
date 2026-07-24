@@ -68,8 +68,8 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
     })),
   }));
 
-  const needsDocket = rawOrders.filter(o => o.status === "IN_PROVISIONING").length;
-  const awaitingFinance = rawOrders.filter(o => ["DOCKET_ASSIGNED", "DC_REQUESTED", "EWAY_BILL_REQUESTED", "RTO_DC_REQUESTED", "RTO_EWAY_BILL_REQUESTED"].includes(o.status)).length;
+  const needsDocket = rawOrders.filter(o => o.status === "DC_REQUESTED").length;
+  const awaitingFinance = rawOrders.filter(o => ["DOCKET_ASSIGNED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "RTO_DC_REQUESTED", "RTO_EWAY_BILL_REQUESTED"].includes(o.status)).length;
   const readyToPack = rawOrders.filter(o => ["DC_GENERATED", "EWAY_BILL_GENERATED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_GENERATED"].includes(o.status)).length;
   const inTransit = rawOrders.filter(o => ["DISPATCHED", "DELIVERED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"].includes(o.status)).length;
 

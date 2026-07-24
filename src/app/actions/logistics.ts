@@ -161,8 +161,8 @@ export async function advanceOrderStatus(orderId: string, status: string) {
   if (!order) throw new Error("Order not found.");
 
   const allowedNextStatuses: Record<string, string[]> = {
-    IN_PROVISIONING: ["DOCKET_ASSIGNED"],
-    DOCKET_ASSIGNED: ["DC_REQUESTED"],
+    DC_REQUESTED: ["DOCKET_ASSIGNED"],
+    DOCKET_ASSIGNED: ["DC_GENERATED"],
     DC_GENERATED: ["EWAY_BILL_REQUESTED"],
     EWAY_BILL_GENERATED: ["PACKED_AND_LABELLED"],
     PACKED_AND_LABELLED: ["DISPATCHED"],

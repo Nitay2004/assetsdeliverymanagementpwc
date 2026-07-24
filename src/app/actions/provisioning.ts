@@ -218,6 +218,12 @@ export async function handoverToLogistics(orderIds: string[]) {
     throw new Error("Unauthorized");
   }
 
+  // Advance order status to DC_REQUESTED so it moves to logistics
+  await prisma.order.updateMany({
+    where: { id: { in: orderIds }, status: "IN_PROVISIONING" },
+    data: { status: "DC_REQUESTED" },
+  });
+
   // Update tracking status on inventory items to "Handed Over to Logistics"
   const assets = await prisma.asset.findMany({
     where: { orderId: { in: orderIds }, inventoryItemId: { not: null } },

@@ -21,9 +21,9 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
       where: { id: selectedId },
       select: { updatedAt: true, status: true },
     });
-    if (selOrder && selOrder.status !== "ORDER_PLACED") {
+    if (selOrder && !["ALLOCATED", "IN_PROVISIONING"].includes(selOrder.status)) {
       const pos = await prisma.order.count({
-        where: { status: { not: "ORDER_PLACED" }, updatedAt: { gt: selOrder.updatedAt } },
+        where: { status: { in: ["ALLOCATED", "IN_PROVISIONING"] }, updatedAt: { gt: selOrder.updatedAt } },
       });
       const correctPage = Math.floor(pos / limit) + 1;
       if (correctPage !== page) {
@@ -32,7 +32,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     }
   }
 
-  const baseWhere: Prisma.OrderWhereInput = { status: { not: "ORDER_PLACED" } };
+  const baseWhere: Prisma.OrderWhereInput = { status: { in: ["ALLOCATED", "IN_PROVISIONING"] } };
   const where: Prisma.OrderWhereInput = search ? {
     ...baseWhere,
     OR: [
