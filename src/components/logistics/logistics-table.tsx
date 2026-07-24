@@ -307,7 +307,7 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
               const dc = getDcForOrder(order);
               const isFormOpen = docketForm?.orderId === order.id;
               const colSpan = canManage ? 10 : 9;
-              const showAddDocket = order.status === "IN_PROVISIONING" || order.status === "DOCKET_ASSIGNED";
+              const showAddDocket = order.status === "DOCKET_REQUESTED";
 
               return (
                 <Fragment key={order.id}>

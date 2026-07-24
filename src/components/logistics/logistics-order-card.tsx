@@ -222,7 +222,7 @@ export function LogisticsOrderCard({ order, canManage }: { order: OrderData; can
                   Cancel
                 </button>
               </form>
-            ) : (
+            ) : order.status === "DOCKET_REQUESTED" && (
               <button
                 onClick={() => setShowDocketForm(true)}
                 className="px-3 py-1.5 rounded-lg text-sm font-semibold border hover:bg-muted transition-colors"
