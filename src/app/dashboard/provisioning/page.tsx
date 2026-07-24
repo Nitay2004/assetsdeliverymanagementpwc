@@ -21,9 +21,9 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
       where: { id: selectedId },
       select: { updatedAt: true, status: true },
     });
-    if (selOrder && !["ALLOCATED", "IN_PROVISIONING"].includes(selOrder.status)) {
+    if (selOrder && !["ALLOCATED", "IN_PROVISIONING", "DOCKET_ASSIGNED"].includes(selOrder.status)) {
       const pos = await prisma.order.count({
-        where: { status: { in: ["ALLOCATED", "IN_PROVISIONING"] }, updatedAt: { gt: selOrder.updatedAt } },
+        where: { status: { in: ["ALLOCATED", "IN_PROVISIONING", "DOCKET_ASSIGNED"] }, updatedAt: { gt: selOrder.updatedAt } },
       });
       const correctPage = Math.floor(pos / limit) + 1;
       if (correctPage !== page) {
@@ -32,7 +32,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     }
   }
 
-  const baseWhere: Prisma.OrderWhereInput = { status: { in: ["ALLOCATED", "IN_PROVISIONING"] } };
+  const baseWhere: Prisma.OrderWhereInput = { status: { in: ["ALLOCATED", "IN_PROVISIONING", "DOCKET_ASSIGNED"] } };
   const where: Prisma.OrderWhereInput = search ? {
     ...baseWhere,
     OR: [
@@ -65,6 +65,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const engineers = [...new Set(orders.map(o => o.engineerName).filter(Boolean))] as string[];
   const inProvisioningCount = orders.filter(o => o.status === "IN_PROVISIONING").length;
   const pendingAllocationCount = orders.filter(o => o.status === "ALLOCATED").length;
+  const handedOverCount = orders.filter(o => o.status === "DOCKET_ASSIGNED").length;
   const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
 
   // Group data by engineer for sections
@@ -94,7 +95,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
         <ProvisioningExportButton />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-4">
         <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
           <div className="p-3 rounded-lg bg-yellow-100">
             <Clock className="size-5 text-yellow-600" />
@@ -111,6 +112,15 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
           <div>
             <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Pending Allocation</p>
             <p className="text-2xl font-bold text-primary mt-1">{pendingAllocationCount}</p>
+          </div>
+        </div>
+        <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
+          <div className="p-3 rounded-lg bg-blue-100">
+            <CheckCircle className="size-5 text-blue-600" />
+          </div>
+          <div>
+            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Handed Over</p>
+            <p className="text-2xl font-bold text-primary mt-1">{handedOverCount}</p>
           </div>
         </div>
         <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
