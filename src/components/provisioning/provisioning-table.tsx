@@ -311,7 +311,7 @@ export function ProvisioningTable({ orders, canManage, engineers, selectedId }: 
                               {nextStatus.label}
                             </button>
                           )}
-                          {asset.status === "os_installed" && inv?.trackingStatus !== "Handed Over to Logistics" && order.status !== "DOCKET_ASSIGNED" && (
+                          {asset.status === "os_installed" && inv?.trackingStatus !== "Handed Over to Logistics" && order.status === "IN_PROVISIONING" && (
                             <button
                               onClick={() => handleHandoverToLogistics([order.id])}
                               className="px-2 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap"
@@ -319,7 +319,7 @@ export function ProvisioningTable({ orders, canManage, engineers, selectedId }: 
                               Handed over to Logistics
                             </button>
                           )}
-                          {asset.status === "os_installed" && (inv?.trackingStatus === "Handed Over to Logistics" || order.status === "DOCKET_ASSIGNED") && (
+                          {asset.status === "os_installed" && (inv?.trackingStatus === "Handed Over to Logistics" || order.status === "DC_REQUESTED") && (
                             <span className="text-xs text-green-600 font-semibold">Handed Over</span>
                           )}
                           <button onClick={() => openEdit(order)}
