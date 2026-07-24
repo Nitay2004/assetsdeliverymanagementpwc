@@ -29,6 +29,7 @@ const fieldKeywords: [string, string[]][] = [
   ["pinCode",          ["pin", "pincode", "pin code", "postal code", "zip", "zip code"]],
   ["partner",          ["partner", "owner of the asset", "asset owner", "owner"]],
   ["entity",           ["entity", "pwc entity", "pwcentity", "company"]],
+  ["partNo",           ["part no", "part number", "part no.", "part#", "part #", "pn", "hp part", "material", "material number"]],
   ["model",            ["model", "product", "product name", "machine", "device"]],
   ["specs",            ["spec", "specs", "specification", "configuration", "config"]],
   ["purpose",          ["purpose", "usage", "reason", "why"]],
@@ -138,6 +139,7 @@ function intelligentResolve(header: string): string | undefined {
 
 const baseMapping: Record<string, string> = {
   "Serial Number": "serialNumber",
+  "Part No": "partNo",
   "Model": "model",
   "Specs": "specs",
   "Status": "status",
@@ -214,6 +216,9 @@ const aliases: Record<string, string> = {
   "emp name": "employeeName",
   "engineer name": "employeeName",
   "product": "model",
+  "part no": "partNo",
+  "part number": "partNo",
+  "hp part": "partNo",
   "owner of the asset": "partner",
   "pwcentity": "entity",
   "pwc entity": "entity",
@@ -500,6 +505,33 @@ export async function POST(request: Request) {
     rows.push({ data, rowNum: r + 2 });
   }
 
+  // ── PRODUCT MASTER ENRICHMENT ──
+  // Always override with ProductMaster values when partNo matches
+  const partNos = [...new Set(
+    rows.map(r => String(r.data.partNo ?? "").trim()).filter(Boolean)
+  )];
+
+  if (partNos.length > 0) {
+    const products = await prisma.productMaster.findMany({
+      where: { partNo: { in: partNos } },
+      select: { partNo: true, make: true, model: true, description: true, warranty: true },
+    });
+    const productMap = new Map(products.filter(p => p.partNo).map(p => [p.partNo!, p]));
+
+    for (const row of rows) {
+      const pn = String(row.data.partNo ?? "").trim();
+      if (!pn) continue;
+      const product = productMap.get(pn);
+      if (!product) continue;
+
+      row.data.model = product.model;
+      row.data.laptopMake = product.make;
+      row.data.invoiceProductDescription = product.description;
+      row.data.description = product.description;
+      row.data.warrantyPeriod = product.warranty;
+    }
+  }
+
   // ── UPDATE MODE ──
   if (mode === "update") {
     return handleUpdateMode(rows, unknownHeaders, headerMapping, errors);
@@ -525,7 +557,7 @@ const inventoryItemUpdateFields = [
   "purpose", "requestDate", "userBaseLocation", "imageType", "count",
   "pwcRemarks", "trackingStatus", "trackingSubStatus", "dcNumber",
   "docketNumber", "deliveryDate", "partner", "sr", "entity",
-  "laptopMake", "laptopModel", "invoiceProductDescription",
+  "laptopMake", "laptopModel", "invoiceProductDescription", "partNo",
   "description", "emailReceivedHour", "cutOffStatus", "slaStartDate",
   "slaState", "zone", "tier", "odaLocation", "tat", "deliveryTatDays",
   "actualDeliveryDate", "slaStatus", "laptopAcceptanceDate", "warrantyPeriod",

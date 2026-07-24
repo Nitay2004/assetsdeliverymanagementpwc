@@ -12,6 +12,7 @@ function normalize(s: string): string {
 const baseMapping: Record<string, string> = {
   "Serial Number": "serialNumber",
   "Model": "model",
+  "Part No": "partNo",
   "Specs": "specs",
   "Status": "status",
   "Partner": "partner",
@@ -209,6 +210,33 @@ export async function importInventoryCSV(formData: FormData) {
     }
 
     rows.push({ data, rowNum: r + 1 });
+  }
+
+  // ── PRODUCT MASTER ENRICHMENT ──
+  // Always override with ProductMaster values when partNo matches
+  const partNos = [...new Set(
+    rows.map(r => String(r.data.partNo ?? "").trim()).filter(Boolean)
+  )];
+
+  if (partNos.length > 0) {
+    const products = await prisma.productMaster.findMany({
+      where: { partNo: { in: partNos } },
+      select: { partNo: true, make: true, model: true, description: true, warranty: true },
+    });
+    const productMap = new Map(products.filter(p => p.partNo).map(p => [p.partNo!, p]));
+
+    for (const row of rows) {
+      const pn = String(row.data.partNo ?? "").trim();
+      if (!pn) continue;
+      const product = productMap.get(pn);
+      if (!product) continue;
+
+      row.data.model = product.model;
+      row.data.laptopMake = product.make;
+      row.data.invoiceProductDescription = product.description;
+      row.data.description = product.description;
+      row.data.warrantyPeriod = product.warranty;
+    }
   }
 
   const assignmentFields = [
