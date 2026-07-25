@@ -8,11 +8,16 @@ import { ArrowLeft, Upload, AlertCircle, CheckCircle2, Loader2 } from "lucide-re
 export default function ImportInventoryPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
+  const [mode, setMode] = useState<"upload" | "update">("upload");
   const [result, setResult] = useState<{
     success: boolean;
     imported?: number;
+    updated?: number;
+    mapped?: number;
+    notFound?: number;
+    matched?: string[];
     errors?: string[] | null;
-    warning?: string | null; 
+    warning?: string | null;
     error?: string;
   } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -26,6 +31,7 @@ export default function ImportInventoryPage() {
 
     const fd = new FormData();
     fd.set("file", file);
+    fd.set("mode", mode);
 
     try {
       const res = await fetch("/api/import-csv", {
@@ -91,6 +97,40 @@ export default function ImportInventoryPage() {
           />
         </div>
 
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-foreground">Import Mode</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setMode("upload")}
+              className={`rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
+                mode === "upload"
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:border-primary/50"
+              }`}
+            >
+              <div className="text-left">
+                <p className="font-semibold">Upload (New)</p>
+                <p className="text-xs mt-0.5 opacity-70">Create new items, skip duplicates</p>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("update")}
+              className={`rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
+                mode === "update"
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:border-primary/50"
+              }`}
+            >
+              <div className="text-left">
+                <p className="font-semibold">Update (Existing)</p>
+                <p className="text-xs mt-0.5 opacity-70">Update existing items by serial no.</p>
+              </div>
+            </button>
+          </div>
+        </div>
+
         <button
           type="submit"
           disabled={!file || loading}
@@ -125,7 +165,16 @@ export default function ImportInventoryPage() {
                 <CheckCircle2 className="size-5 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-semibold">Import Complete</p>
-                  <p className="text-sm mt-1">{result.imported} item(s) imported successfully.</p>
+                  {mode === "upload" ? (
+                    <p className="text-sm mt-1">{result.mapped ?? result.imported ?? 0} row(s) imported successfully.</p>
+                  ) : (
+                    <div className="text-sm mt-1 space-y-0.5">
+                      <p>{result.updated ?? 0} item(s) updated.</p>
+                      {result.notFound !== undefined && result.notFound > 0 && (
+                        <p className="text-amber-600">{result.notFound} serial number(s) not found in inventory.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
