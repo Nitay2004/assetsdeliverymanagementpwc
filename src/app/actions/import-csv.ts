@@ -289,8 +289,9 @@ export async function importInventoryCSV(formData: FormData) {
         if (!cleanData.serialNumber) cleanData.serialNumber = sn;
         const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
         const hasEntity = cleanData.entity && String(cleanData.entity).trim() !== "";
+        const hasWarehouse = cleanData.invoicingWarehouse && String(cleanData.invoicingWarehouse).trim() !== "";
         if (!cleanData.status) {
-          cleanData.status = hasEmployee ? "ALLOCATED" : "NEW";
+          cleanData.status = hasEmployee ? "ALLOCATED" : hasWarehouse ? "AVAILABLE" : "NEW";
         } else if (cleanData.status === "AVAILABLE" && !hasEntity) {
           cleanData.status = "NEW";
         }
