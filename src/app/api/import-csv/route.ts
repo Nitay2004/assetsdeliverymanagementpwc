@@ -596,7 +596,7 @@ function buildAssignmentRecord(itemId: string, data: Record<string, unknown>): R
 function buildUpdateData(data: Record<string, unknown>): Record<string, unknown> {
   const updateData: Record<string, unknown> = {};
   for (const f of inventoryItemUpdateFields) {
-    if (f in data && data[f] !== undefined) {
+    if (f in data && data[f] !== undefined && data[f] !== null && String(data[f]).trim() !== "") {
       updateData[f] = data[f];
     }
   }

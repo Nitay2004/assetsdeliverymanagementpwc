@@ -9,6 +9,10 @@ function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+const skippedHeaders = new Set([
+  "process", "next ship to user", "dispatch date", "delivery date",
+]);
+
 const baseMapping: Record<string, string> = {
   "Request Number": "requestNumber",
   "Serial Number": "serialNumber",
@@ -23,39 +27,71 @@ const baseMapping: Record<string, string> = {
   "Accessories": "accessories",
   "Reason": "reason",
   "Pickup Address": "pickupAddress",
+  "Location Address": "pickupAddress",
+  "Shipping Address": "pickupAddress",
   "Landmark": "landmark",
+  "Land Mark": "landmark",
   "City": "city",
   "State": "state",
   "Pin Code": "pinCode",
   "Year": "year",
   "SR No": "srNo",
   "Request Date": "requestDateHp",
+  "Request Date (HP)": "requestDateHp",
   "Employee ID": "employeeId",
   "Alternate ID": "alternateId",
   "Last Working Day": "lastWorkingDay",
   "Warehouse Location": "warehouseLocation",
+  "Warehouse": "warehouseLocation",
+  "Warehouse Details": "warehouseLocation",
   "Display Status": "displayStatus",
+  "Status(Received, Pickup Pending, Pickup Initiated)": "displayStatus",
   "ETA": "eta",
+  "ETA (Pickup)": "eta",
   "Future Date Pickup": "futureDatePickup",
+  "Dependancy": "dependency",
   "Dependency": "dependency",
   "Remarks": "remarks",
   "Courier Name": "courierName",
   "Docket Number": "docketNumber",
+  "Docket No": "docketNumber",
   "Pickup Date": "pickupDate",
   "SRN No": "srnNo",
-  "Partner Name": "partnerName",
-  "Partner Reference": "partnerReference",
+  "E Way bill No": "eWayBillNo",
+  "E-Way Bill No": "eWayBillNo",
+  "ETA for unit to be received": "etaForUnitReceived",
+  "Case Age": "caseAge",
+  "Blancco Yes/No": "blanccoYesNo",
+  "Blancco Date": "blanccoDate",
   "Case ID": "caseId",
   "Issue Reported": "issueReported",
   "Replacement Part": "replacementPart",
   "Exception Remarks": "exceptionRemarks",
   "Remark": "remark",
+  "Provisioning Status": "provisioningStatus",
+  "Email Recieved Hour": "emailReceivedHour",
+  "Cut Off Status": "cutOffStatus",
+  "SLA Start Date": "slaStartDate",
+  "State (SLA)": "slaState",
+  "Zone (1)": "zone1",
+  "Tier 1": "tier1",
+  "ODA Location": "odaLocation",
+  "TAT": "tat",
+  "Delivery TAT ": "deliveryTat",
+  "Actual Delivery/POD Date": "actualDeliveryPodDate",
+  "SLA": "sla",
+  "Laptop Acceptance Date": "laptopAcceptanceDate",
+  "DC No": "dcNo",
+  "Receiver Serial No": "receiverSerialNo",
+  "Receiver S NO Entity": "receiverSnEntity",
+  "Receiver's Name": "receivedBy",
   "Final Disposition": "finalDisposition",
 };
 
 const aliases: Record<string, string> = {
   "employee name": "employeeName",
   "emp name": "employeeName",
+  "name of user": "employeeName",
   "serial number": "serialNumber",
   "s no": "serialNumber",
   "serial no": "serialNumber",
@@ -63,16 +99,20 @@ const aliases: Record<string, string> = {
   "phone": "mobileNumber",
   "phone number": "mobileNumber",
   "contact number": "mobileNumber",
+  "user contact details": "mobileNumber",
   "email": "emailId",
   "email id": "emailId",
   "laptop model": "model",
   "product": "model",
   "pick up address": "pickupAddress",
   "shipping address": "pickupAddress",
+  "location address": "pickupAddress",
+  "address": "pickupAddress",
   "pincode": "pinCode",
   "postal code": "pinCode",
   "warehouse": "warehouseLocation",
   "warehouse loc": "warehouseLocation",
+  "warehouse detail": "warehouseLocation",
   "courier": "courierName",
   "courier name": "courierName",
   "docket": "docketNumber",
@@ -97,6 +137,31 @@ const aliases: Record<string, string> = {
   "replacement part": "replacementPart",
   "disposition": "finalDisposition",
   "final disposition": "finalDisposition",
+  "provisioning status": "provisioningStatus",
+  "e way bill no": "eWayBillNo",
+  "e-way bill no": "eWayBillNo",
+  "eta for unit to be received": "etaForUnitReceived",
+  "blancco yes/no": "blanccoYesNo",
+  "blancco yes no": "blanccoYesNo",
+  "dependancy": "dependency",
+  "dc no": "dcNo",
+  "receiver serial no": "receiverSerialNo",
+  "receiver s no entity": "receiverSnEntity",
+  "state (sla)": "slaState",
+  "zone (1)": "zone1",
+  "tier 1": "tier1",
+  "delivery tat": "deliveryTat",
+  "actual delivery/pod date": "actualDeliveryPodDate",
+  "laptop acceptance date": "laptopAcceptanceDate",
+  "email recieved hour": "emailReceivedHour",
+  "cut off status": "cutOffStatus",
+  "sla start date": "slaStartDate",
+  "oda location": "odaLocation",
+  "case age": "caseAge",
+  "exception remarks": "exceptionRemarks",
+  "alternate phone number": "alternatePhoneNumber",
+  "receiver name": "receivedBy",
+  "received by": "receivedBy",
 };
 
 const normLookup: Record<string, string> = {};
@@ -109,7 +174,9 @@ for (const [alias, col] of Object.entries(aliases)) {
 
 function resolveColumn(header: string): string | undefined {
   const n = normalize(header);
-  return n ? normLookup[n] : undefined;
+  if (!n) return undefined;
+  if (skippedHeaders.has(n)) return undefined;
+  return normLookup[n];
 }
 
 const dateFields = new Set([
@@ -123,9 +190,17 @@ const intFields = new Set([
   "year",
 ]);
 
+function excelSerialToDate(serial: number): Date {
+  return new Date((serial - 25569) * 86400000);
+}
+
 function parseValue(value: string, field: string): unknown {
   if (value === "" || value === undefined || value === null) return null;
   if (dateFields.has(field)) {
+    const num = Number(value);
+    if (!isNaN(num) && num > 30000 && num < 60000 && String(Math.round(num)) === value.trim()) {
+      return excelSerialToDate(num);
+    }
     const d = new Date(value);
     return isNaN(d.getTime()) ? null : d;
   }
@@ -264,19 +339,66 @@ export async function POST(request: Request) {
     rows.push({ data, rowNum: r + 2 });
   }
 
+  // ── SERIAL NUMBER → INVENTORY LOOKUP (auto-fill user details) ──
+  const allSerials = [...new Set(
+    rows.map(r => String(r.data.serialNumber ?? "").trim()).filter(Boolean)
+  )];
+
+  const inventoryItems = allSerials.length > 0 ? await prisma.inventoryItem.findMany({
+    where: { serialNumber: { in: allSerials } },
+    select: {
+      serialNumber: true, model: true, entity: true, imageType: true,
+      employeeName: true, emailId: true, mobileNumber: true,
+      shippingAddress: true, landMark: true, city: true, state: true, pinCode: true,
+    },
+  }) : [];
+
+  const inventoryMap = new Map(inventoryItems.map(item => [item.serialNumber, item]));
+
+  for (const row of rows) {
+    const sn = String(row.data.serialNumber ?? "").trim();
+    if (!sn) {
+      errors.push(`Row ${row.rowNum}: Serial number is empty`);
+      continue;
+    }
+
+    const item = inventoryMap.get(sn);
+    if (!item) {
+      errors.push(`Row ${row.rowNum}: Serial number "${sn}" not found in inventory`);
+      continue;
+    }
+
+    if (!row.data.model && item.model) row.data.model = item.model;
+    if (!row.data.entity && item.entity) row.data.entity = item.entity;
+    if (!row.data.imageType && item.imageType) row.data.imageType = item.imageType;
+    if (!row.data.employeeName && item.employeeName) row.data.employeeName = item.employeeName;
+    if (!row.data.emailId && item.emailId) row.data.emailId = item.emailId;
+    if (!row.data.mobileNumber && item.mobileNumber) row.data.mobileNumber = item.mobileNumber;
+    if (!row.data.pickupAddress && item.shippingAddress) row.data.pickupAddress = item.shippingAddress;
+    if (!row.data.landmark && item.landMark) row.data.landmark = item.landMark;
+    if (!row.data.city && item.city) row.data.city = item.city;
+    if (!row.data.state && item.state) row.data.state = item.state;
+    if (!row.data.pinCode && item.pinCode) row.data.pinCode = item.pinCode;
+  }
+
   let imported = 0;
   const BATCH_SIZE = 200;
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const batchData = rows.slice(i, i + BATCH_SIZE).map(r => r.data);
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    const batchData = batch.map(r => r.data);
     try {
       await prisma.reversePickupRequest.createMany({ data: batchData as any[] });
       imported += batchData.length;
     } catch (err: any) {
-      for (const item of batchData) {
-        errors.push(
-          `Row ${rows[i + batchData.indexOf(item)].rowNum}: Failed - ${err?.message ?? "Unknown error"}`
-        );
+      for (const item of batch) {
+        try {
+          await prisma.reversePickupRequest.create({ data: item.data as any });
+          imported++;
+        } catch (singleErr: any) {
+          const msg = singleErr?.cause?.message ?? singleErr?.message ?? "Unknown error";
+          errors.push(`Row ${item.rowNum}: Failed to create request for "${item.data.serialNumber}" - ${msg}`);
+        }
       }
     }
   }

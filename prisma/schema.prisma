@@ -420,6 +420,9 @@ model ReversePickupRequest {
   exceptionRemarks      String?              @map("exception_remarks")
   remark                String?
 
+  // ── Provisioning ──
+  provisioningStatus    String?              @map("provisioning_status") // DD: Yes/No
+
   // ── Disposition ──
   finalDisposition      String?              @map("final_disposition")
 
