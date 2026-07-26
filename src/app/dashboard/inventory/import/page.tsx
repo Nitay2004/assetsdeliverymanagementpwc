@@ -3,19 +3,19 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Upload, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, Upload, AlertCircle, CheckCircle2, Loader2, Database, RefreshCw } from "lucide-react";
+
+type Mode = "upload" | "update";
 
 export default function ImportInventoryPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
-  const [mode, setMode] = useState<"upload" | "update">("upload");
+  const [mode, setMode] = useState<Mode>("upload");
   const [result, setResult] = useState<{
     success: boolean;
-    imported?: number;
-    updated?: number;
     mapped?: number;
+    updated?: number;
     notFound?: number;
-    matched?: string[];
     errors?: string[] | null;
     warning?: string | null;
     error?: string;
@@ -57,16 +57,64 @@ export default function ImportInventoryPage() {
           <ArrowLeft className="size-4" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Bulk Import Inventory</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            {mode === "upload" ? "Bulk Import Inventory" : "Update Existing Inventory"}
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Upload a CSV or Excel file to bulk-import inventory items.
+            {mode === "upload"
+              ? "Upload a CSV or Excel file to bulk-import inventory items."
+              : "Upload a CSV or Excel file to update existing inventory items by serial number."}
           </p>
         </div>
       </div>
 
-      <div className="rounded-xl glass shadow-sm p-4 text-sm text-muted-foreground space-y-1">
-        <p className="font-medium text-foreground">Required columns:</p>
-        <p>Serial Number, Employee Name, Invoicing Warehouse, Sticker Colour</p>
+      {/* Mode Toggle */}
+      <div className="rounded-xl glass shadow-sm p-1 flex gap-1">
+        <button
+          type="button"
+          onClick={() => { setMode("upload"); setResult(null); }}
+          className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
+            mode === "upload"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+          }`}
+        >
+          <Upload className="size-4" />
+          Upload New
+        </button>
+        <button
+          type="button"
+          onClick={() => { setMode("update"); setResult(null); }}
+          className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
+            mode === "update"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+          }`}
+        >
+          <RefreshCw className="size-4" />
+          Update Existing
+        </button>
+      </div>
+
+      {/* Mode Description */}
+      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+        {mode === "upload" ? (
+          <div className="flex items-start gap-3">
+            <Database className="size-5 shrink-0 text-primary mt-0.5" />
+            <div>
+              <p className="font-semibold text-foreground">Create new inventory items</p>
+              <p className="mt-1">Items with new serial numbers will be created. Existing serial numbers will get a new assignment record.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-3">
+            <RefreshCw className="size-5 shrink-0 text-primary mt-0.5" />
+            <div>
+              <p className="font-semibold text-foreground">Update existing inventory items</p>
+              <p className="mt-1">Serial numbers in your sheet will be matched against existing inventory. The current assignment will be saved to history, and the item will be updated with new data from the sheet.</p>
+            </div>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-xl glass shadow-sm p-6 space-y-5">
@@ -97,40 +145,6 @@ export default function ImportInventoryPage() {
           />
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">Import Mode</label>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setMode("upload")}
-              className={`rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
-                mode === "upload"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:border-primary/50"
-              }`}
-            >
-              <div className="text-left">
-                <p className="font-semibold">Upload (New)</p>
-                <p className="text-xs mt-0.5 opacity-70">Create new items, skip duplicates</p>
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("update")}
-              className={`rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
-                mode === "update"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:border-primary/50"
-              }`}
-            >
-              <div className="text-left">
-                <p className="font-semibold">Update (Existing)</p>
-                <p className="text-xs mt-0.5 opacity-70">Update existing items by serial no.</p>
-              </div>
-            </button>
-          </div>
-        </div>
-
         <button
           type="submit"
           disabled={!file || loading}
@@ -139,10 +153,10 @@ export default function ImportInventoryPage() {
           {loading ? (
             <>
               <Loader2 className="size-4 animate-spin" />
-              Importing...
+              {mode === "upload" ? "Importing..." : "Updating..."}
             </>
           ) : (
-            "Import"
+            mode === "upload" ? "Import" : "Update Inventory"
           )}
         </button>
       </form>
@@ -164,17 +178,20 @@ export default function ImportInventoryPage() {
               <div className="flex items-start gap-3 text-green-600">
                 <CheckCircle2 className="size-5 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-semibold">Import Complete</p>
-                  {mode === "upload" ? (
-                    <p className="text-sm mt-1">{result.mapped ?? result.imported ?? 0} row(s) imported successfully.</p>
-                  ) : (
-                    <div className="text-sm mt-1 space-y-0.5">
-                      <p>{result.updated ?? 0} item(s) updated.</p>
-                      {result.notFound !== undefined && result.notFound > 0 && (
-                        <p className="text-amber-600">{result.notFound} serial number(s) not found in inventory.</p>
-                      )}
-                    </div>
-                  )}
+                  <p className="font-semibold">
+                    {mode === "upload" ? "Import Complete" : "Update Complete"}
+                  </p>
+                  <div className="text-sm mt-1 space-y-0.5">
+                    {mode === "upload" ? (
+                      <p>{result.mapped} record(s) imported with assignment history.</p>
+                    ) : (
+                      <>
+                        <p>{result.updated ?? 0} item(s) updated successfully.</p>
+                        {result.mapped ? <p>{result.mapped} new assignment record(s) saved to history.</p> : null}
+                        {result.notFound ? <p className="text-amber-600">{result.notFound} serial number(s) not found in inventory.</p> : null}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
