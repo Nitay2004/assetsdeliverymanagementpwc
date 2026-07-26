@@ -89,6 +89,16 @@ const aliases: Record<string, string> = {
   "customer instruction doc": "customerInstructionDoc",
   "accessory headset mouse yes no": "accessoryHeadsetMouse",
   "pick up date": "pickupDate",
+  "part no": "partNo",
+  "part number": "partNo",
+  "partno": "partNo",
+  "partnumber": "partNo",
+  "part num": "partNo",
+  "hp part": "partNo",
+  "material no": "partNo",
+  "material number": "partNo",
+  "serialno": "serialNumber",
+  "s/n": "serialNumber",
 };
 
 const normLookup: Record<string, string> = {};
