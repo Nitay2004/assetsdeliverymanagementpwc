@@ -565,6 +565,7 @@ const inventoryItemUpdateFields = [
   "dc", "vendor", "deliveredLocation", "processStatus", "machineWs1Status",
   "serialNoInWs1", "dateOfWs1Update", "servicesStartDate", "invoicingWarehouse",
   "boxSerialNo", "checkField", "remark", "date", "csvStatus",
+  "model", "specs", "invoicedQuantity", "customerInstructionDoc", "pickupDate",
 ];
 
 function buildAssignmentRecord(itemId: string, data: Record<string, unknown>): Record<string, unknown> {
