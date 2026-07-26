@@ -337,6 +337,7 @@ model ReversePickupRequest {
   employeeName          String               @map("employee_name")
   emailId               String?              @map("email_id")
   mobileNumber          String?              @map("mobile_number")
+  alternatePhoneNumber  String?              @map("alternate_phone_number")
   contact               String?              // Manual - additional contact
 
   // ── Asset Details ──
