@@ -339,29 +339,43 @@ export async function POST(request: Request) {
     rows.push({ data, rowNum: r + 2 });
   }
 
-  // ── SERIAL NUMBER → INVENTORY LOOKUP (auto-fill user details) ──
+  // ── SERIAL NUMBER → INVENTORY LOOKUP (auto-fill user details, chunked) ──
   const allSerials = [...new Set(
     rows.map(r => String(r.data.serialNumber ?? "").trim()).filter(Boolean)
   )];
 
-  const inventoryItems = allSerials.length > 0 ? await prisma.inventoryItem.findMany({
-    where: { serialNumber: { in: allSerials } },
-    select: {
-      serialNumber: true, model: true, entity: true, imageType: true,
-      employeeName: true, emailId: true, mobileNumber: true,
-      shippingAddress: true, landMark: true, city: true, state: true, pinCode: true,
-    },
-  }) : [];
+  const inventoryMap = new Map<string, any>();
+  const CHUNK = 500;
+  for (let c = 0; c < allSerials.length; c += CHUNK) {
+    const chunk = allSerials.slice(c, c + CHUNK);
+    const items = await prisma.inventoryItem.findMany({
+      where: { serialNumber: { in: chunk } },
+      select: {
+        serialNumber: true, model: true, entity: true, imageType: true,
+        employeeName: true, emailId: true, mobileNumber: true,
+        shippingAddress: true, landMark: true, city: true, state: true, pinCode: true,
+      },
+    });
+    for (const item of items) {
+      inventoryMap.set(item.serialNumber, item);
+    }
+  }
 
-  const inventoryMap = new Map(inventoryItems.map(item => [item.serialNumber, item]));
-
+  // Filter out rows with no serial number
+  const validRows: typeof rows = [];
   for (const row of rows) {
     const sn = String(row.data.serialNumber ?? "").trim();
     if (!sn) {
       errors.push(`Row ${row.rowNum}: Serial number is empty`);
       continue;
     }
+    validRows.push(row);
+  }
 
+  // Auto-fill from inventory + skip missing serial numbers
+  const rowsToInsert: typeof rows = [];
+  for (const row of validRows) {
+    const sn = String(row.data.serialNumber ?? "").trim();
     const item = inventoryMap.get(sn);
     if (!item) {
       errors.push(`Row ${row.rowNum}: Serial number "${sn}" not found in inventory`);
@@ -379,25 +393,42 @@ export async function POST(request: Request) {
     if (!row.data.city && item.city) row.data.city = item.city;
     if (!row.data.state && item.state) row.data.state = item.state;
     if (!row.data.pinCode && item.pinCode) row.data.pinCode = item.pinCode;
+
+    // Skip rows missing required fields
+    if (!row.data.model || !String(row.data.model).trim()) {
+      errors.push(`Row ${row.rowNum}: Skipped - model not found for "${sn}"`);
+      continue;
+    }
+    if (!row.data.employeeName || !String(row.data.employeeName).trim()) {
+      errors.push(`Row ${row.rowNum}: Skipped - employee name not found for "${sn}"`);
+      continue;
+    }
+    if (!row.data.pickupAddress || !String(row.data.pickupAddress).trim()) {
+      errors.push(`Row ${row.rowNum}: Skipped - pickup address not found for "${sn}"`);
+      continue;
+    }
+
+    rowsToInsert.push(row);
   }
 
   let imported = 0;
-  const BATCH_SIZE = 200;
+  const BATCH_SIZE = 100;
 
-  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const batch = rows.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
+    const batch = rowsToInsert.slice(i, i + BATCH_SIZE);
     const batchData = batch.map(r => r.data);
     try {
       await prisma.reversePickupRequest.createMany({ data: batchData as any[] });
       imported += batchData.length;
     } catch (err: any) {
+      // Batch failed — retry one by one
       for (const item of batch) {
         try {
           await prisma.reversePickupRequest.create({ data: item.data as any });
           imported++;
         } catch (singleErr: any) {
           const msg = singleErr?.cause?.message ?? singleErr?.message ?? "Unknown error";
-          errors.push(`Row ${item.rowNum}: Failed to create request for "${item.data.serialNumber}" - ${msg}`);
+          errors.push(`Row ${item.rowNum}: Failed for "${item.data.serialNumber}" - ${msg}`);
         }
       }
     }
