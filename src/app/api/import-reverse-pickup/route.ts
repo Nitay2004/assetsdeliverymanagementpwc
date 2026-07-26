@@ -183,7 +183,7 @@ const dateFields = new Set([
   "requestDateHp", "lastWorkingDay", "eta", "futureDatePickup",
   "pickupDate", "inspectionDate", "receivedDate", "qcDate",
   "blanccoDate", "blancoCertificateDate", "actualDeliveryPodDate",
-  "laptopAcceptanceDate", "etaForUnitReceived",
+  "laptopAcceptanceDate", "etaForUnitReceived", "slaStartDate",
 ]);
 
 const intFields = new Set([
