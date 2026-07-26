@@ -756,11 +756,22 @@ async function handleUploadMode(
     }
   }
 
+  // Deduplicate newItems by serialNumber — CSV may have same serial for multiple assignments
+  const seenSerials = new Set<string>();
+  const dedupedNewItems: { data: Record<string, unknown>; rowNum: number }[] = [];
+  for (const item of newItems) {
+    const sn = String(item.data.serialNumber ?? "").trim();
+    if (!seenSerials.has(sn)) {
+      seenSerials.add(sn);
+      dedupedNewItems.push(item);
+    }
+  }
+
   // Batch create new inventory items
   const newItemsData: Record<string, unknown>[] = [];
   const newItemsMeta: { sn: string; rowNum: number }[] = [];
 
-  for (const item of newItems) {
+  for (const item of dedupedNewItems) {
     const sn = String(item.data.serialNumber ?? "").trim();
     const cleanData = Object.fromEntries(
       Object.entries(item.data).filter(([_, v]) => v !== null && v !== undefined)
@@ -801,18 +812,36 @@ async function handleUploadMode(
         }
       }
     } catch (err: any) {
+      const errMsg = err?.message ?? "Unknown error";
+      const causeMsg = err?.cause?.message ?? err?.meta ?? "";
+      const detail = causeMsg ? ` - ${JSON.stringify(causeMsg)}` : "";
       for (const meta of batchMeta) {
-        errors.push(`Row ${meta.rowNum}: Failed to create item "${meta.sn}" - ${err?.message ?? "Unknown error"}`);
+        errors.push(`Row ${meta.rowNum}: Failed to create item "${meta.sn}" - ${errMsg}${detail}`);
       }
     }
   }
 
-  // Build all assignment records (new + existing)
+  // Build all assignment records (new + duplicates + existing)
   const allAssignments: Record<string, unknown>[] = [];
   let mapped = 0;
 
+  // Map serialNumber → itemId for all created items
+  const serialToItemId = new Map<string, string>();
   for (const item of newItemsWithIds) {
-    allAssignments.push(buildAssignmentRecord(item.itemId, item.data));
+    serialToItemId.set(String(item.data.serialNumber ?? "").trim(), item.itemId);
+  }
+  // Also add existing rows
+  for (const item of existingRows) {
+    serialToItemId.set(String(item.data.serialNumber ?? "").trim(), item.itemId);
+  }
+
+  // Create assignment records for ALL original rows (including duplicate serials)
+  for (const item of newItems) {
+    const sn = String(item.data.serialNumber ?? "").trim();
+    const itemId = serialToItemId.get(sn);
+    if (itemId) {
+      allAssignments.push(buildAssignmentRecord(itemId, item.data));
+    }
   }
   for (const item of existingRows) {
     allAssignments.push(buildAssignmentRecord(item.itemId, item.data));
