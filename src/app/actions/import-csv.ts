@@ -291,7 +291,7 @@ export async function importInventoryCSV(formData: FormData) {
         const hasEntity = cleanData.entity && String(cleanData.entity).trim() !== "";
         const hasWarehouse = cleanData.invoicingWarehouse && String(cleanData.invoicingWarehouse).trim() !== "";
         if (!cleanData.status) {
-          cleanData.status = hasEmployee ? "ALLOCATED" : hasWarehouse ? "AVAILABLE" : "NEW";
+          cleanData.status = hasEmployee ? "ALLOCATED" : (hasWarehouse || hasEntity) ? "AVAILABLE" : "NEW";
         } else if (cleanData.status === "AVAILABLE" && !hasEntity) {
           cleanData.status = "NEW";
         }
