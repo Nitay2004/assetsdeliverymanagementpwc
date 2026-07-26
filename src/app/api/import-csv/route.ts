@@ -812,11 +812,20 @@ async function handleUploadMode(
         }
       }
     } catch (err: any) {
-      const errMsg = err?.message ?? "Unknown error";
-      const causeMsg = err?.cause?.message ?? err?.meta ?? "";
-      const detail = causeMsg ? ` - ${JSON.stringify(causeMsg)}` : "";
-      for (const meta of batchMeta) {
-        errors.push(`Row ${meta.rowNum}: Failed to create item "${meta.sn}" - ${errMsg}${detail}`);
+      // Batch failed — retry one by one to find the exact failing rows
+      for (let j = 0; j < batchData.length; j++) {
+        try {
+          await prisma.inventoryItem.create({ data: batchData[j] as any });
+          const created = await prisma.inventoryItem.findFirst({
+            where: { serialNumber: batchMeta[j].sn },
+            select: { id: true },
+          });
+          if (created) {
+            newItemsWithIds.push({ itemId: created.id, data: batchData[j], rowNum: batchMeta[j].rowNum });
+          }
+        } catch (singleErr: any) {
+          errors.push(`Row ${batchMeta[j].rowNum}: Failed to create item "${batchMeta[j].sn}" - ${singleErr?.message ?? "Unknown error"}`);
+        }
       }
     }
   }
