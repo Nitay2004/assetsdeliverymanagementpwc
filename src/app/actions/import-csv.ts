@@ -137,9 +137,17 @@ const validStatuses = new Set([
   "NEW", "AVAILABLE", "ALLOCATED", "DEFECTIVE", "RETIRED",
 ]);
 
+function excelSerialToDate(serial: number): Date {
+  return new Date((serial - 25569) * 86400000);
+}
+
 function parseValue(value: string, field: string): unknown {
   if (value === "" || value === undefined || value === null) return null;
   if (dateFields.has(field)) {
+    const num = Number(value);
+    if (!isNaN(num) && num > 30000 && num < 60000 && String(Math.round(num)) === value.trim()) {
+      return excelSerialToDate(num);
+    }
     const d = new Date(value);
     return isNaN(d.getTime()) ? null : d;
   }
