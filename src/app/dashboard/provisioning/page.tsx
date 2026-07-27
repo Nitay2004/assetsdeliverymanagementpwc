@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { CheckCircle, Clock, Wrench, User } from "lucide-react";
+import { CheckCircle, Clock, Wrench, User, Upload } from "lucide-react";
+import Link from "next/link";
 import { ProvisioningTable } from "@/components/provisioning/provisioning-table";
 import { ProvisioningPagination } from "@/components/provisioning/provisioning-pagination";
 import { ProvisioningExportButton } from "@/components/provisioning/provisioning-export-button";
@@ -91,7 +92,16 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
             Track OS installation and hardware quality checks.
           </p>
         </div>
-        <ProvisioningExportButton />
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/provisioning/import"
+            className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold text-foreground shadow-sm transition-all hover:bg-accent active:translate-y-press"
+          >
+            <Upload className="size-4" />
+            Import
+          </Link>
+          <ProvisioningExportButton />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
