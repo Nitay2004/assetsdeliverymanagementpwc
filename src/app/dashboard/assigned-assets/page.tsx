@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Users, Laptop, MapPin } from "lucide-react";
 import { AssignedAssetsTable } from "@/components/assigned-assets/assigned-assets-table";
 import { AssignedAssetsExportButton } from "@/components/assigned-assets/assigned-assets-export-button";
+import type { Prisma } from "@prisma/client";
 
 function safeISO(date: Date | null | undefined): string | null {
   if (!date) return null;
@@ -24,11 +25,30 @@ export default async function AssignedAssetsPage(props: {
     Math.min(100, parseInt(searchParams.limit as string) || 25)
   );
   const skip = (page - 1) * pageSize;
+  const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
+
+  const baseWhere: Prisma.InventoryItemWhereInput = { status: "ALLOCATED" };
+  const where: Prisma.InventoryItemWhereInput = search
+    ? {
+        ...baseWhere,
+        OR: [
+          { serialNumber: { contains: search, mode: "insensitive" } },
+          { model: { contains: search, mode: "insensitive" } },
+          { employeeName: { contains: search, mode: "insensitive" } },
+          { emailId: { contains: search, mode: "insensitive" } },
+          { purpose: { contains: search, mode: "insensitive" } },
+          { trackingStatus: { contains: search, mode: "insensitive" } },
+          { city: { contains: search, mode: "insensitive" } },
+          { state: { contains: search, mode: "insensitive" } },
+          { partner: { contains: search, mode: "insensitive" } },
+        ],
+      }
+    : baseWhere;
 
   const [items, totalCount, uniqueEmployees, modelBreakdown] =
     await Promise.all([
       prisma.inventoryItem.findMany({
-        where: { status: "ALLOCATED" },
+        where,
         include: {
           assignmentRecords: {
             orderBy: { assignedAt: "desc" },
@@ -39,7 +59,7 @@ export default async function AssignedAssetsPage(props: {
         skip,
         take: pageSize,
       }),
-      prisma.inventoryItem.count({ where: { status: "ALLOCATED" } }),
+      prisma.inventoryItem.count({ where }),
       prisma.inventoryItem.findMany({
         where: { status: "ALLOCATED" },
         select: { employeeName: true },

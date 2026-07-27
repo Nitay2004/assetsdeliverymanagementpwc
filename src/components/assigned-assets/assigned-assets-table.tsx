@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, ArrowLeftRight } from "lucide-react";
 import { getInventoryItem } from "@/app/actions/inventory";
 import { InventoryDetailDrawer } from "@/components/inventory/inventory-detail-drawer";
+import { UrlDataTableFilter } from "@/components/shared/data-table-filter";
 
 interface LatestAssignment {
   employeeName: string | null;
@@ -145,6 +146,9 @@ export function AssignedAssetsTable({
 
   return (
     <div className="relative">
+      <div className="px-6 py-4 border-b">
+        <UrlDataTableFilter placeholder="Search by serial no, model, employee, email, city, tracking status..." />
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
