@@ -27,10 +27,33 @@ const STATUS_ICONS: Record<string, typeof Truck> = {
   COMPLETED: CheckCircle,
 };
 
-const SEARCH_FIELDS = [
-  "requestNumber", "employeeName", "serialNumber", "model", "status", "type",
+const STRING_SEARCH_FIELDS = [
+  "requestNumber", "employeeName", "serialNumber", "model", "type",
   "courierName", "partnerName", "warehouseLocation", "displayStatus", "qcResult", "finalDisposition",
 ] as const;
+
+const ALL_STATUSES = [
+  "REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "INSPECTED",
+  "PICKED_UP", "RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "DC_REQUESTED",
+  "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED",
+  "BLANCO_CERTIFIED", "COMPLETED",
+] as const;
+
+const STATUS_LABELS: Record<string, string> = {
+  REQUESTED: "requested",
+  PARTNER_ASSIGNED: "partner assigned",
+  DOCKET_REQUESTED: "docket requested",
+  INSPECTED: "inspected",
+  PICKED_UP: "picked up",
+  RECEIVED_AT_WAREHOUSE: "received at warehouse",
+  QC_COMPLETED: "qc completed",
+  DC_REQUESTED: "dc requested",
+  DC_GENERATED: "dc generated",
+  EWAY_BILL_REQUESTED: "eway bill requested",
+  EWAY_BILL_GENERATED: "eway bill generated",
+  BLANCO_CERTIFIED: "blanco certified",
+  COMPLETED: "completed",
+};
 
 export default async function ReversePickupPage({
   searchParams,
@@ -48,9 +71,14 @@ export default async function ReversePickupPage({
 
   const searchFilter = search
     ? {
-        OR: SEARCH_FIELDS.map((field) => ({
-          [field]: { contains: search, mode: "insensitive" as const },
-        })),
+        OR: [
+          ...STRING_SEARCH_FIELDS.map((field) => ({
+            [field]: { contains: search, mode: "insensitive" as const },
+          })),
+          ...ALL_STATUSES
+            .filter((s) => STATUS_LABELS[s]?.includes(search.toLowerCase()) || s.includes(search.toUpperCase()))
+            .map((s) => ({ status: s as any })),
+        ],
       }
     : {};
 
