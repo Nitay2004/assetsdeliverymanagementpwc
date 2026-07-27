@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Users, Laptop, MapPin } from "lucide-react";
 import { AssignedAssetsTable } from "@/components/assigned-assets/assigned-assets-table";
+import { AssignedAssetsExportButton } from "@/components/assigned-assets/assigned-assets-export-button";
 
 function safeISO(date: Date | null | undefined): string | null {
   if (!date) return null;
@@ -59,13 +60,16 @@ export default async function AssignedAssetsPage(props: {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Assigned Assets
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          All inventory items currently allocated to users.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Assigned Assets
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            All inventory items currently allocated to users.
+          </p>
+        </div>
+        <AssignedAssetsExportButton />
       </div>
 
       <div className="grid gap-6 sm:grid-cols-3 mt-8">
