@@ -27,26 +27,58 @@ const STATUS_ICONS: Record<string, typeof Truck> = {
   COMPLETED: CheckCircle,
 };
 
-export default async function ReversePickupPage() {
+const SEARCH_FIELDS = [
+  "requestNumber", "employeeName", "serialNumber", "model", "status", "type",
+  "courierName", "partnerName", "warehouseLocation", "displayStatus", "qcResult", "finalDisposition",
+] as const;
+
+export default async function ReversePickupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; limit?: string; search?: string }>;
+}) {
+  const params = await searchParams;
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "REVERSE_PICKUP"));
 
-  const requests = await prisma.reversePickupRequest.findMany({
-    orderBy: { createdAt: "desc" },
+  const page = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
+  const limit = Math.min(100, Math.max(10, parseInt(params.limit ?? "25", 10) || 25));
+  const search = (params.search ?? "").trim();
+  const skip = (page - 1) * limit;
+
+  const searchFilter = search
+    ? {
+        OR: SEARCH_FIELDS.map((field) => ({
+          [field]: { contains: search, mode: "insensitive" as const },
+        })),
+      }
+    : {};
+
+  const where = { ...searchFilter };
+
+  const [requests, totalCount] = await Promise.all([
+    prisma.reversePickupRequest.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.reversePickupRequest.count({ where }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+  const allRequests = await prisma.reversePickupRequest.findMany({
+    select: { status: true },
   });
 
-  const statusCounts = requests.reduce<Record<string, number>>((acc, r) => {
-    acc[r.status] = (acc[r.status] || 0) + 1;
-    return acc;
-  }, {});
-
-  const pendingCount = requests.filter(r =>
+  const pendingCount = allRequests.filter(r =>
     ["REQUESTED", "PARTNER_ASSIGNED", "INSPECTED", "PICKED_UP"].includes(r.status)
   ).length;
-  const atWarehouse = requests.filter(r =>
+  const atWarehouse = allRequests.filter(r =>
     ["RECEIVED_AT_WAREHOUSE", "QC_COMPLETED"].includes(r.status)
   ).length;
-  const completedCount = requests.filter(r =>
+  const completedCount = allRequests.filter(r =>
     ["BLANCO_CERTIFIED", "COMPLETED"].includes(r.status)
   ).length;
 
@@ -116,7 +148,7 @@ export default async function ReversePickupPage() {
           </div>
           <div>
             <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Total Requests</p>
-            <p className="text-2xl font-bold text-primary mt-1">{requests.length}</p>
+            <p className="text-2xl font-bold text-primary mt-1">{allRequests.length}</p>
           </div>
         </div>
       </div>
@@ -134,6 +166,10 @@ export default async function ReversePickupPage() {
         }))}
         canManage={canManage}
         statusStyles={STATUS_STYLES}
+        currentPage={page}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        limit={limit}
       />
     </div>
   );
