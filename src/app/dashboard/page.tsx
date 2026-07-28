@@ -97,6 +97,7 @@ export default async function DashboardPage(props: {
   const inProvisioningCount = orders.filter(o => o.status === "IN_PROVISIONING").length;
   const pendingAllocationCount = orders.filter(o => o.status === "ORDER_PLACED").length;
   const inTransitCount = orders.filter(o => o.status === "DISPATCHED").length;
+  const packedAndLabelledCount = orders.filter(o => o.status === "PACKED_AND_LABELLED").length;
   const deliveredCount = orders.filter(o => ["DELIVERED", "DELIVERY_CONFIRMED"].includes(o.status)).length;
   const rtoCount = orders.filter(o => ["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"].includes(o.status)).length;
 
@@ -104,6 +105,8 @@ export default async function DashboardPage(props: {
   const newStock = inventoryItems.filter((i) => i.status === "NEW").length;
   const availableStock = inventoryItems.filter((i) => i.status === "AVAILABLE").length;
   const allocatedStock = inventoryItems.filter((i) => i.status === "ALLOCATED").length;
+  const slaMetCount = inventoryItems.filter((i) => i.slaStatus?.toLowerCase() === "met").length;
+  const slaMissedCount = inventoryItems.filter((i) => i.slaStatus?.toLowerCase() === "missed").length;
 
   const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
 
@@ -192,8 +195,53 @@ export default async function DashboardPage(props: {
         <DateRangePicker />
       </div>
 
-      {/* Top stat cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Inventory Section */}
+      <div>
+        <h2 className="text-lg font-semibold text-foreground mb-4">Inventory</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <TotalStockCard totalInventory={totalInventory} stockByWarehouse={stockByWarehouse} unallocatedCount={unallocatedCount} href="/dashboard/inventory" />
+          <QuickStat
+            icon={<Laptop className="size-5 text-purple-600" />}
+            iconBg="bg-purple-50"
+            label="New Stock"
+            value={newStock}
+            subtitle="Brand new laptops"
+            href="/dashboard/inventory"
+          />
+          <QuickStat
+            icon={<Laptop className="size-5 text-blue-600" />}
+            iconBg="bg-blue-50"
+            label="Re-deployment Inventory"
+            value={availableStock}
+            subtitle={`of ${totalInventory} total`}
+            href="/dashboard/inventory"
+          />
+          <QuickStat
+            icon={<Layers className="size-5 text-indigo-600" />}
+            iconBg="bg-indigo-50"
+            label="Assets Allocated to Users"
+            value={allocatedStock}
+            subtitle={`${totalAssets} order assets`}
+            href="/dashboard/inventory"
+          />
+        </div>
+      </div>
+
+      {/* Forward Shipment Section */}
+      <div>
+        <h2 className="text-lg font-semibold text-foreground mb-4">Forward Shipment</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <OrderStatCard
+          icon={<Clock className="size-5 text-yellow-600" />}
+          iconBg="bg-yellow-100"
+          label="In Warehouse Allocation"
+          value={pendingAllocationCount}
+          subtitle="Awaiting warehouse"
+          modalTitle="Pending Allocation Orders"
+          modalIcon={<Clock className="size-5 text-yellow-600" />}
+          modalIconBg="bg-yellow-100"
+          statuses={["ORDER_PLACED"]}
+        />
         <OrderStatCard
           icon={<Clock className="size-5 text-purple-600" />}
           iconBg="bg-purple-100"
@@ -206,15 +254,15 @@ export default async function DashboardPage(props: {
           statuses={["IN_PROVISIONING"]}
         />
         <OrderStatCard
-          icon={<Clock className="size-5 text-yellow-600" />}
-          iconBg="bg-yellow-100"
-          label="Pending Allocation"
-          value={pendingAllocationCount}
-          subtitle="Awaiting warehouse"
-          modalTitle="Pending Allocation Orders"
-          modalIcon={<Clock className="size-5 text-yellow-600" />}
-          modalIconBg="bg-yellow-100"
-          statuses={["ORDER_PLACED"]}
+          icon={<Package className="size-5 text-violet-600" />}
+          iconBg="bg-violet-100"
+          label="Packed & Labelled"
+          value={packedAndLabelledCount}
+          subtitle="Ready for dispatch"
+          modalTitle="Packed & Labelled Orders"
+          modalIcon={<Package className="size-5 text-violet-600" />}
+          modalIconBg="bg-violet-100"
+          statuses={["PACKED_AND_LABELLED"]}
         />
         <OrderStatCard
           icon={<Truck className="size-5 text-orange-600" />}
@@ -238,35 +286,6 @@ export default async function DashboardPage(props: {
           modalIconBg="bg-green-100"
           statuses={["DELIVERED", "DELIVERY_CONFIRMED"]}
         />
-      </div>
-
-      {/* Inventory & Status row */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <TotalStockCard totalInventory={totalInventory} stockByWarehouse={stockByWarehouse} unallocatedCount={unallocatedCount} href="/dashboard/inventory" />
-        <QuickStat
-          icon={<Laptop className="size-5 text-purple-600" />}
-          iconBg="bg-purple-50"
-          label="New Stock"
-          value={newStock}
-          subtitle="Brand new laptops"
-          href="/dashboard/inventory"
-        />
-        <QuickStat
-          icon={<Laptop className="size-5 text-blue-600" />}
-          iconBg="bg-blue-50"
-          label="Available for Assignment"
-          value={availableStock}
-          subtitle={`of ${totalInventory} total`}
-          href="/dashboard/inventory"
-        />
-        <QuickStat
-          icon={<Layers className="size-5 text-indigo-600" />}
-          iconBg="bg-indigo-50"
-          label="Assets Allocated to Users"
-          value={allocatedStock}
-          subtitle={`${totalAssets} order assets`}
-          href="/dashboard/inventory"
-        />
         <OrderStatCard
           icon={<AlertTriangle className="size-5 text-red-500" />}
           iconBg="bg-red-50"
@@ -278,18 +297,36 @@ export default async function DashboardPage(props: {
           modalIconBg="bg-red-50"
           statuses={["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"]}
         />
+        <QuickStat
+          icon={<CheckCircle className="size-5 text-green-600" />}
+          iconBg="bg-green-50"
+          label="SLA Met"
+          value={slaMetCount}
+          subtitle="Within TAT"
+        />
+        <QuickStat
+          icon={<AlertTriangle className="size-5 text-red-500" />}
+          iconBg="bg-red-50"
+          label="SLA Missed"
+          value={slaMissedCount}
+          subtitle="Beyond TAT"
+        />
+        </div>
       </div>
 
-      {/* Reverse Pickup row */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <QuickStat
-          icon={<ArrowRight className="size-5 text-cyan-600" />}
-          iconBg="bg-cyan-50"
-          label="Reverse Pickup"
-          value={reversePickupCount}
-          subtitle="Requests in pipeline"
-          href="/dashboard/reverse-pickup"
-        />
+      {/* Reverse Shipment Section */}
+      <div>
+        <h2 className="text-lg font-semibold text-foreground mb-4">Reverse Shipment</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
+          <QuickStat
+            icon={<ArrowRight className="size-5 text-cyan-600" />}
+            iconBg="bg-cyan-50"
+            label="Reverse Pickup"
+            value={reversePickupCount}
+            subtitle="Requests in pipeline"
+            href="/dashboard/reverse-pickup"
+          />
+        </div>
       </div>
 
       {/* Pipeline + Activity */}
