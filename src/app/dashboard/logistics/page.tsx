@@ -5,6 +5,7 @@ import { Package, Truck, ClipboardList, FileText, Hash } from "lucide-react";
 import { LogisticsTable } from "@/components/logistics/logistics-table";
 import { ReversePickupDocketSection } from "@/components/logistics/reverse-pickup-docket-section";
 import { LogisticsExportButton } from "@/components/logistics/logistics-export-button";
+import { PodExportButton } from "@/components/logistics/pod-export-button";
 import { getWarehouses } from "@/app/actions/dc";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
@@ -112,7 +113,10 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
             Request DC, assign dockets, pack, label, and manage E-Way bills.
           </p>
         </div>
-        <LogisticsExportButton />
+        <div className="flex items-center gap-2">
+          <PodExportButton />
+          <LogisticsExportButton />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-5">
