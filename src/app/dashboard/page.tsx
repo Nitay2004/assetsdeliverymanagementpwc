@@ -124,7 +124,6 @@ export default async function DashboardPage(props: {
   const availableStock = inventoryItems.filter((i) => i.status === "AVAILABLE").length;
   const allocatedStock = inventoryItems.filter((i) => i.status === "ALLOCATED").length;
   const slaMetCount = inventoryItems.filter((i) => i.slaStatus?.toLowerCase() === "met").length;
-  const slaMissedCount = inventoryItems.filter((i) => i.slaStatus?.toLowerCase() === "missed").length;
 
   const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
 
@@ -136,7 +135,6 @@ export default async function DashboardPage(props: {
   const reverseReceivedInWh = reversePickups.filter((r) => r.status === "RECEIVED_AT_WAREHOUSE").length;
   const reverseAlignQc = reversePickups.filter((r) => ["DC_REQUESTED", "QC_COMPLETED", "DC_GENERATED"].includes(r.status)).length;
   const reverseSlaMet = reversePickups.filter((r) => r.sla?.toLowerCase() === "met").length;
-  const reverseSlaMissed = reversePickups.filter((r) => r.sla?.toLowerCase() === "missed").length;
 
   // Group inventory items by invoicing warehouse
   const warehouseMap = new Map<string, number>();
@@ -338,17 +336,6 @@ export default async function DashboardPage(props: {
             modalIconBg="bg-green-50"
             slaValue="MET"
           />
-          <InventorySlaStatCard
-            icon={<AlertTriangle className="size-5 text-red-500" />}
-            iconBg="bg-red-50"
-            label="SLA Missed"
-            value={slaMissedCount}
-            subtitle="Beyond TAT"
-            modalTitle="SLA Missed Items"
-            modalIcon={<AlertTriangle className="size-5 text-red-500" />}
-            modalIconBg="bg-red-50"
-            slaValue="MISSED"
-        />
         </div>
       </div>
 
@@ -430,17 +417,6 @@ export default async function DashboardPage(props: {
             modalTitle="SLA Met Requests"
             modalIcon={<CheckCircle className="size-5 text-green-600" />}
             modalIconBg="bg-green-50"
-            statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "INSPECTED", "PICKED_UP", "RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "BLANCO_CERTIFIED", "COMPLETED"]}
-          />
-          <ReverseStatCard
-            icon={<AlertTriangle className="size-5 text-red-500" />}
-            iconBg="bg-red-50"
-            label="SLA Missed"
-            value={reverseSlaMissed}
-            subtitle="Beyond TAT"
-            modalTitle="SLA Missed Requests"
-            modalIcon={<AlertTriangle className="size-5 text-red-500" />}
-            modalIconBg="bg-red-50"
             statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "INSPECTED", "PICKED_UP", "RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "BLANCO_CERTIFIED", "COMPLETED"]}
           />
         </div>
