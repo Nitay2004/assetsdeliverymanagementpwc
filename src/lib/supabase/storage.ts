@@ -9,4 +9,4 @@ export function getSupabaseStorage() {
   });
 }
 
-export const POD_BUCKET = "pod-uploads";
+export const POD_BUCKET = "pod_upload";
