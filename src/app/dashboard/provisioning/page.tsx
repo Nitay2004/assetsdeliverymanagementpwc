@@ -14,6 +14,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const limit = Math.min(100, Math.max(1, parseInt(typeof searchParams.limit === "string" ? searchParams.limit : "25", 10) || 25));
   const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
   const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
+  const selectedEngineer = typeof searchParams.engineer === "string" ? searchParams.engineer : "";
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "PROVISIONING"));
 
@@ -83,6 +84,25 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     }
   }
 
+  const visibleSections = selectedEngineer
+    ? sections.filter(s => s.label === selectedEngineer)
+    : sections;
+
+  function engineerUrl(engineer: string) {
+    const p = new URLSearchParams();
+    if (search) p.set("search", search);
+    if (selectedId) p.set("selected", selectedId);
+    if (page > 1) p.set("page", String(page));
+    if (limit !== 25) p.set("limit", String(limit));
+    if (engineer) p.set("engineer", engineer);
+    const qs = p.toString();
+    return `/dashboard/provisioning${qs ? `?${qs}` : ""}`;
+  }
+
+  const btnBase = "px-4 py-2 rounded-lg text-sm font-semibold transition-all border";
+  const btnActive = "bg-primary text-primary-foreground border-primary shadow-sm";
+  const btnInactive = "bg-background text-muted-foreground border-border hover:bg-accent hover:text-foreground";
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       <div className="flex items-start justify-between">
@@ -134,12 +154,36 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
         </div>
       </div>
 
-      {sections.length === 0 ? (
+      {sections.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={engineerUrl("")}
+            className={`${btnBase} ${!selectedEngineer ? btnActive : btnInactive}`}
+          >
+            All ({sections.length})
+          </Link>
+          {sections.map(s => (
+            <Link
+              key={s.label}
+              href={engineerUrl(s.label)}
+              className={`${btnBase} ${selectedEngineer === s.label ? btnActive : btnInactive}`}
+            >
+              <User className="inline size-3.5 mr-1" />
+              {s.label}
+              <span className="ml-1.5 text-xs opacity-70">({s.orders.reduce((sum, o) => sum + o.assets.length, 0)})</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {visibleSections.length === 0 ? (
         <div className="p-8 rounded-xl glass text-center text-muted-foreground">
-          No orders ready for provisioning. Allocate inventory in the Warehouse module first.
+          {selectedEngineer
+            ? `No orders found for "${selectedEngineer}".`
+            : "No orders ready for provisioning. Allocate inventory in the Warehouse module first."}
         </div>
       ) : (
-        sections.map((section) => (
+        visibleSections.map((section) => (
           <section key={section.label} className="space-y-3">
             <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
               <User className={`size-5 ${section.label === "Unassigned" ? "text-muted-foreground" : "text-blue-600"}`} />

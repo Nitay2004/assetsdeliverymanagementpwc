@@ -265,6 +265,23 @@ export async function importInventoryCSV(formData: FormData) {
     "docketNumber", "deliveryDate",
   ];
 
+  const itemUpdateFields = [
+    "employeeName", "emailId", "mobileNumber", "alternatePhoneNumber",
+    "shippingAddress", "landMark", "city", "state", "pinCode",
+    "purpose", "requestDate", "userBaseLocation", "imageType", "count",
+    "pwcRemarks", "trackingStatus", "trackingSubStatus", "dcNumber",
+    "docketNumber", "deliveryDate", "partner", "sr", "entity",
+    "laptopMake", "laptopModel", "invoiceProductDescription", "partNo",
+    "description", "emailReceivedHour", "cutOffStatus", "slaStartDate",
+    "slaState", "zone", "tier", "odaLocation", "tat", "deliveryTatDays",
+    "actualDeliveryDate", "slaStatus", "laptopAcceptanceDate", "warrantyPeriod",
+    "warrantyEndPeriod", "adaptorAdded", "accessoryHeadsetMouse", "stickerColour",
+    "dc", "vendor", "deliveredLocation", "processStatus", "machineWs1Status",
+    "serialNoInWs1", "dateOfWs1Update", "servicesStartDate", "invoicingWarehouse",
+    "boxSerialNo", "checkField", "remark", "date", "csvStatus",
+    "model", "specs", "invoicedQuantity", "customerInstructionDoc", "pickupDate",
+  ];
+
   const allSerials = [...new Set(
     rows.map(r => String(r.data.serialNumber ?? "").trim()).filter(Boolean)
   )];
@@ -299,6 +316,21 @@ export async function importInventoryCSV(formData: FormData) {
       } catch (err: any) {
         errors.push(`Row ${item.rowNum}: Failed to create item "${sn}" - ${err?.message ?? "Unknown error"}`);
         continue;
+      }
+    } else {
+      try {
+        const updateData: Record<string, unknown> = {};
+        for (const f of itemUpdateFields) {
+          const val = (item.data as any)[f];
+          if (val !== undefined && val !== null && String(val).trim() !== "") {
+            updateData[f] = val;
+          }
+        }
+        if (Object.keys(updateData).length > 0) {
+          await prisma.inventoryItem.update({ where: { id: itemId }, data: updateData as any });
+        }
+      } catch (err: any) {
+        errors.push(`Row ${item.rowNum}: Failed to update item "${sn}" - ${err?.message ?? "Unknown error"}`);
       }
     }
 

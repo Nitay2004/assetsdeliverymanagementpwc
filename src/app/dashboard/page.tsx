@@ -11,6 +11,10 @@ import {
   Layers,
   AlertTriangle,
   Users,
+  Target,
+  XCircle,
+  Warehouse,
+  ClipboardCheck,
 } from "lucide-react";
 import type { OrderStatus } from "@prisma/client";
 import Link from "next/link";
@@ -20,6 +24,9 @@ import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { TotalStockCard } from "@/components/dashboard/total-stock-card";
 import { DateRangePicker } from "@/components/dashboard/date-range-picker";
 import { OrderStatCard } from "@/components/dashboard/order-stat-card";
+import { ReverseStatCard } from "@/components/dashboard/reverse-stat-card";
+import { CancelledReverseStatCard } from "@/components/dashboard/cancelled-reverse-stat-card";
+import { InventorySlaStatCard } from "@/components/dashboard/inventory-sla-stat-card";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   ORDER_PLACED: { label: "Order Placed", color: "#eab308" },
@@ -70,7 +77,7 @@ export default async function DashboardPage(props: {
   const reverseWhere = createdAt ? { createdAt } : undefined;
 
   // Fetch all data in parallel
-  const [orders, inventoryItems, recentOrders, recentInventory, reversePickupCount] = await Promise.all([
+  const [orders, inventoryItems, recentOrders, recentInventory, reversePickups] = await Promise.all([
     prisma.order.findMany({
       where: orderWhere,
       include: { assets: true },
@@ -88,7 +95,7 @@ export default async function DashboardPage(props: {
       orderBy: { updatedAt: "desc" },
       take: 5,
     }),
-    prisma.reversePickupRequest.count({
+    prisma.reversePickupRequest.findMany({
       where: reverseWhere,
     }),
   ]);
@@ -109,6 +116,16 @@ export default async function DashboardPage(props: {
   const slaMissedCount = inventoryItems.filter((i) => i.slaStatus?.toLowerCase() === "missed").length;
 
   const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
+
+  // Reverse Shipment stats
+  const reversePickupCount = reversePickups.length;
+  const reversePickupsDone = reversePickups.filter((r) => ["PICKED_UP", "COMPLETED"].includes(r.status)).length;
+  const reversePickupsCancelled = reversePickups.filter((r) => r.remark?.toLowerCase().includes("cancel")).length;
+  const reverseInTransit = reversePickups.filter((r) => ["DOCKET_REQUESTED", "INSPECTED"].includes(r.status)).length;
+  const reverseReceivedInWh = reversePickups.filter((r) => r.status === "RECEIVED_AT_WAREHOUSE").length;
+  const reverseAlignQc = reversePickups.filter((r) => ["DC_REQUESTED", "QC_COMPLETED", "DC_GENERATED"].includes(r.status)).length;
+  const reverseSlaMet = reversePickups.filter((r) => r.sla?.toLowerCase() === "met").length;
+  const reverseSlaMissed = reversePickups.filter((r) => r.sla?.toLowerCase() === "missed").length;
 
   // Group inventory items by invoicing warehouse
   const warehouseMap = new Map<string, number>();
@@ -297,19 +314,27 @@ export default async function DashboardPage(props: {
           modalIconBg="bg-red-50"
           statuses={["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"]}
         />
-        <QuickStat
-          icon={<CheckCircle className="size-5 text-green-600" />}
-          iconBg="bg-green-50"
-          label="SLA Met"
-          value={slaMetCount}
-          subtitle="Within TAT"
-        />
-        <QuickStat
-          icon={<AlertTriangle className="size-5 text-red-500" />}
-          iconBg="bg-red-50"
-          label="SLA Missed"
-          value={slaMissedCount}
-          subtitle="Beyond TAT"
+          <InventorySlaStatCard
+            icon={<CheckCircle className="size-5 text-green-600" />}
+            iconBg="bg-green-50"
+            label="SLA Met"
+            value={slaMetCount}
+            subtitle="Within TAT"
+            modalTitle="SLA Met Items"
+            modalIcon={<CheckCircle className="size-5 text-green-600" />}
+            modalIconBg="bg-green-50"
+            slaValue="MET"
+          />
+          <InventorySlaStatCard
+            icon={<AlertTriangle className="size-5 text-red-500" />}
+            iconBg="bg-red-50"
+            label="SLA Missed"
+            value={slaMissedCount}
+            subtitle="Beyond TAT"
+            modalTitle="SLA Missed Items"
+            modalIcon={<AlertTriangle className="size-5 text-red-500" />}
+            modalIconBg="bg-red-50"
+            slaValue="MISSED"
         />
         </div>
       </div>
@@ -317,14 +342,93 @@ export default async function DashboardPage(props: {
       {/* Reverse Shipment Section */}
       <div>
         <h2 className="text-lg font-semibold text-foreground mb-4">Reverse Shipment</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
-          <QuickStat
-            icon={<ArrowRight className="size-5 text-cyan-600" />}
-            iconBg="bg-cyan-50"
-            label="Reverse Pickup"
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <ReverseStatCard
+            icon={<Target className="size-5 text-blue-600" />}
+            iconBg="bg-blue-50"
+            label="Total Request"
             value={reversePickupCount}
-            subtitle="Requests in pipeline"
-            href="/dashboard/reverse-pickup"
+            subtitle="All reverse requests"
+            modalTitle="All Reverse Requests"
+            modalIcon={<Target className="size-5 text-blue-600" />}
+            modalIconBg="bg-blue-50"
+            statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "INSPECTED", "PICKED_UP", "RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "BLANCO_CERTIFIED", "COMPLETED"]}
+          />
+          <ReverseStatCard
+            icon={<CheckCircle className="size-5 text-green-600" />}
+            iconBg="bg-green-50"
+            label="Pick-ups Done"
+            value={reversePickupsDone}
+            subtitle="Successfully picked"
+            modalTitle="Pick-ups Done"
+            modalIcon={<CheckCircle className="size-5 text-green-600" />}
+            modalIconBg="bg-green-50"
+            statuses={["PICKED_UP", "COMPLETED"]}
+          />
+          <CancelledReverseStatCard
+            icon={<XCircle className="size-5 text-red-500" />}
+            iconBg="bg-red-50"
+            label="Pick-ups Cancelled"
+            value={reversePickupsCancelled}
+            subtitle="Cancelled requests"
+            modalTitle="Cancelled Pick-ups"
+            modalIcon={<XCircle className="size-5 text-red-500" />}
+            modalIconBg="bg-red-50"
+          />
+          <ReverseStatCard
+            icon={<Truck className="size-5 text-cyan-600" />}
+            iconBg="bg-cyan-50"
+            label="In-Transit"
+            value={reverseInTransit}
+            subtitle="On the way to warehouse"
+            modalTitle="In-Transit Requests"
+            modalIcon={<Truck className="size-5 text-cyan-600" />}
+            modalIconBg="bg-cyan-50"
+            statuses={["DOCKET_REQUESTED", "INSPECTED"]}
+          />
+          <ReverseStatCard
+            icon={<Warehouse className="size-5 text-emerald-600" />}
+            iconBg="bg-emerald-50"
+            label="Received in Warehouse"
+            value={reverseReceivedInWh}
+            subtitle="Reached warehouse"
+            modalTitle="Received in Warehouse"
+            modalIcon={<Warehouse className="size-5 text-emerald-600" />}
+            modalIconBg="bg-emerald-50"
+            statuses={["RECEIVED_AT_WAREHOUSE"]}
+          />
+          <ReverseStatCard
+            icon={<ClipboardCheck className="size-5 text-violet-600" />}
+            iconBg="bg-violet-50"
+            label="Align for QC & Blancco"
+            value={reverseAlignQc}
+            subtitle="Ready for QC process"
+            modalTitle="Align for QC & Blancco"
+            modalIcon={<ClipboardCheck className="size-5 text-violet-600" />}
+            modalIconBg="bg-violet-50"
+            statuses={["DC_REQUESTED", "QC_COMPLETED", "DC_GENERATED"]}
+          />
+          <ReverseStatCard
+            icon={<CheckCircle className="size-5 text-green-600" />}
+            iconBg="bg-green-50"
+            label="SLA Met"
+            value={reverseSlaMet}
+            subtitle="Within TAT"
+            modalTitle="SLA Met Requests"
+            modalIcon={<CheckCircle className="size-5 text-green-600" />}
+            modalIconBg="bg-green-50"
+            statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "INSPECTED", "PICKED_UP", "RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "BLANCO_CERTIFIED", "COMPLETED"]}
+          />
+          <ReverseStatCard
+            icon={<AlertTriangle className="size-5 text-red-500" />}
+            iconBg="bg-red-50"
+            label="SLA Missed"
+            value={reverseSlaMissed}
+            subtitle="Beyond TAT"
+            modalTitle="SLA Missed Requests"
+            modalIcon={<AlertTriangle className="size-5 text-red-500" />}
+            modalIconBg="bg-red-50"
+            statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "INSPECTED", "PICKED_UP", "RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "BLANCO_CERTIFIED", "COMPLETED"]}
           />
         </div>
       </div>

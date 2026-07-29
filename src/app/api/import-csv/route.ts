@@ -767,6 +767,30 @@ async function handleUploadMode(
     }
   }
 
+  // Batch update existing inventory items with CSV data
+  const updateOps: { id: string; data: Record<string, unknown> }[] = [];
+  const seenUpdateSerials = new Set<string>();
+  for (const item of existingRows) {
+    const sn = String(item.data.serialNumber ?? "").trim();
+    if (seenUpdateSerials.has(sn)) continue;
+    seenUpdateSerials.add(sn);
+    const updateData = buildUpdateData(item.data);
+    if (Object.keys(updateData).length > 0) {
+      updateOps.push({ id: item.itemId, data: updateData });
+    }
+  }
+  let updated = 0;
+  for (const batch of chunk(updateOps, BATCH_SIZE)) {
+    try {
+      await prisma.$transaction(
+        batch.map(op => prisma.inventoryItem.update({ where: { id: op.id }, data: op.data as any }))
+      );
+      updated += batch.length;
+    } catch (err: any) {
+      errors.push(`Failed to update existing inventory batch: ${err?.message ?? "Unknown error"}`);
+    }
+  }
+
   // Batch create new inventory items
   const newItemsData: Record<string, unknown>[] = [];
   const newItemsMeta: { sn: string; rowNum: number }[] = [];
@@ -876,6 +900,7 @@ async function handleUploadMode(
   return NextResponse.json({
     success: true,
     mapped,
+    updated,
     matched: matchedHeaders,
     errors: errors.length > 0 ? errors : null,
     warning: warning || null,

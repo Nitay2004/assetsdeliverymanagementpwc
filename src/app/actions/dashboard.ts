@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import type { OrderStatus } from "@prisma/client";
+import type { OrderStatus, ReversePickupStatus } from "@prisma/client";
 
 export interface TableOrderData {
   id: string;
@@ -52,4 +52,123 @@ export async function getOrdersByStatus(
   }));
 
   return { orders, total };
+}
+
+export interface TableReverseData {
+  id: string;
+  requestNumber: string;
+  employeeName: string;
+  serialNumber: string;
+  model: string;
+  status: string;
+  sla: string | null;
+  caseId: string | null;
+  remark: string | null;
+}
+
+export async function getReversePickupsByStatus(
+  statuses: ReversePickupStatus[],
+  page: number = 1,
+  limit: number = 50
+): Promise<{ items: TableReverseData[]; total: number }> {
+  const skip = (page - 1) * limit;
+
+  const [raw, total] = await Promise.all([
+    prisma.reversePickupRequest.findMany({
+      where: { status: { in: statuses } },
+      orderBy: { updatedAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.reversePickupRequest.count({
+      where: { status: { in: statuses } },
+    }),
+  ]);
+
+  const items = raw.map(r => ({
+    id: r.id,
+    requestNumber: r.requestNumber,
+    employeeName: r.employeeName,
+    serialNumber: r.serialNumber,
+    model: r.model,
+    status: r.status,
+    sla: r.sla,
+    caseId: r.caseId,
+    remark: r.remark,
+  }));
+
+  return { items, total };
+}
+
+export async function getCancelledReversePickups(
+  page: number = 1,
+  limit: number = 50
+): Promise<{ items: TableReverseData[]; total: number }> {
+  const skip = (page - 1) * limit;
+
+  const [raw, total] = await Promise.all([
+    prisma.reversePickupRequest.findMany({
+      where: { remark: { contains: "cancel", mode: "insensitive" } },
+      orderBy: { updatedAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.reversePickupRequest.count({
+      where: { remark: { contains: "cancel", mode: "insensitive" } },
+    }),
+  ]);
+
+  const items = raw.map(r => ({
+    id: r.id,
+    requestNumber: r.requestNumber,
+    employeeName: r.employeeName,
+    serialNumber: r.serialNumber,
+    model: r.model,
+    status: r.status,
+    sla: r.sla,
+    caseId: r.caseId,
+    remark: r.remark,
+  }));
+
+  return { items, total };
+}
+
+export interface TableInventoryData {
+  id: string;
+  serialNumber: string;
+  model: string;
+  employeeName: string | null;
+  status: string;
+  slaStatus: string | null;
+}
+
+export async function getInventoryBySlaStatus(
+  slaValue: string,
+  page: number = 1,
+  limit: number = 50
+): Promise<{ items: TableInventoryData[]; total: number }> {
+  const skip = (page - 1) * limit;
+
+  const [raw, total] = await Promise.all([
+    prisma.inventoryItem.findMany({
+      where: { slaStatus: { equals: slaValue, mode: "insensitive" } },
+      orderBy: { updatedAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.inventoryItem.count({
+      where: { slaStatus: { equals: slaValue, mode: "insensitive" } },
+    }),
+  ]);
+
+  const items = raw.map(i => ({
+    id: i.id,
+    serialNumber: i.serialNumber,
+    model: i.model,
+    employeeName: i.employeeName,
+    status: i.status,
+    slaStatus: i.slaStatus,
+  }));
+
+  return { items, total };
 }
