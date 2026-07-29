@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import type { OrderStatus, ReversePickupStatus } from "@prisma/client";
+import type { OrderStatus, ReversePickupStatus, Prisma } from "@prisma/client";
 
 export interface TableOrderData {
   id: string;
@@ -168,6 +168,60 @@ export async function getInventoryBySlaStatus(
     employeeName: i.employeeName,
     status: i.status,
     slaStatus: i.slaStatus,
+  }));
+
+  return { items, total };
+}
+
+export interface TableInventoryDeliveryData {
+  id: string;
+  serialNumber: string;
+  model: string;
+  employeeName: string | null;
+  trackingStatus: string | null;
+  trackingSubStatus: string | null;
+  city: string | null;
+  state: string | null;
+  dcNumber: string | null;
+}
+
+export async function getInventoryItemsByTrackingKeywords(
+  keywords: string[],
+  page: number = 1,
+  limit: number = 50
+): Promise<{ items: TableInventoryDeliveryData[]; total: number }> {
+  const skip = (page - 1) * limit;
+
+  const orConditions = keywords.flatMap(keyword => [
+    { trackingStatus: { contains: keyword, mode: "insensitive" as const } },
+    { trackingSubStatus: { contains: keyword, mode: "insensitive" as const } },
+  ]);
+
+  const where: Prisma.InventoryItemWhereInput = {
+    status: "ALLOCATED",
+    OR: orConditions,
+  };
+
+  const [raw, total] = await Promise.all([
+    prisma.inventoryItem.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.inventoryItem.count({ where }),
+  ]);
+
+  const items = raw.map(i => ({
+    id: i.id,
+    serialNumber: i.serialNumber,
+    model: i.model,
+    employeeName: i.employeeName,
+    trackingStatus: i.trackingStatus,
+    trackingSubStatus: i.trackingSubStatus,
+    city: i.city,
+    state: i.state,
+    dcNumber: i.dcNumber,
   }));
 
   return { items, total };

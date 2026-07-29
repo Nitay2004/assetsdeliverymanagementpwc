@@ -77,7 +77,7 @@ export default async function DashboardPage(props: {
   const reverseWhere = createdAt ? { createdAt } : undefined;
 
   // Fetch all data in parallel
-  const [orders, inventoryItems, recentOrders, recentInventory, reversePickups] = await Promise.all([
+  const [orders, inventoryItems, recentOrders, recentInventory, reversePickups, deliveredInventoryCount] = await Promise.all([
     prisma.order.findMany({
       where: orderWhere,
       include: { assets: true },
@@ -98,14 +98,25 @@ export default async function DashboardPage(props: {
     prisma.reversePickupRequest.findMany({
       where: reverseWhere,
     }),
+    prisma.inventoryItem.count({
+      where: {
+        status: "ALLOCATED",
+        OR: [
+          { trackingStatus: { contains: "shipped to user", mode: "insensitive" } },
+          { trackingStatus: { contains: "delivered", mode: "insensitive" } },
+          { trackingSubStatus: { contains: "shipped to user", mode: "insensitive" } },
+          { trackingSubStatus: { contains: "delivered", mode: "insensitive" } },
+        ],
+      },
+    }),
   ]);
 
   // Compute stats
   const inProvisioningCount = orders.filter(o => o.status === "IN_PROVISIONING").length;
   const pendingAllocationCount = orders.filter(o => o.status === "ORDER_PLACED").length;
   const inTransitCount = orders.filter(o => o.status === "DISPATCHED").length;
-  const packedAndLabelledCount = orders.filter(o => o.status === "PACKED_AND_LABELLED").length;
-  const deliveredCount = orders.filter(o => ["DELIVERED", "DELIVERY_CONFIRMED"].includes(o.status)).length;
+  const packedAndLabelledCount = orders.filter(o => o.status === "PACKED_AND_LABELLED").length + deliveredInventoryCount;
+  const deliveredCount = orders.filter(o => ["DELIVERED", "DELIVERY_CONFIRMED"].includes(o.status)).length + deliveredInventoryCount;
   const rtoCount = orders.filter(o => ["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"].includes(o.status)).length;
 
   const totalInventory = inventoryItems.length;
@@ -280,6 +291,7 @@ export default async function DashboardPage(props: {
           modalIcon={<Package className="size-5 text-violet-600" />}
           modalIconBg="bg-violet-100"
           statuses={["PACKED_AND_LABELLED"]}
+          inventoryTrackingKeywords={["shipped to user", "delivered"]}
         />
         <OrderStatCard
           icon={<Truck className="size-5 text-orange-600" />}
@@ -302,6 +314,7 @@ export default async function DashboardPage(props: {
           modalIcon={<CheckCircle className="size-5 text-green-600" />}
           modalIconBg="bg-green-100"
           statuses={["DELIVERED", "DELIVERY_CONFIRMED"]}
+          inventoryTrackingKeywords={["shipped to user", "delivered"]}
         />
         <OrderStatCard
           icon={<AlertTriangle className="size-5 text-red-500" />}

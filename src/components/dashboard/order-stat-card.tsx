@@ -15,9 +15,10 @@ interface Props {
   modalIcon: React.ReactNode;
   modalIconBg: string;
   statuses: OrderStatus[];
+  inventoryTrackingKeywords?: string[];
 }
 
-export function OrderStatCard({ icon, iconBg, label, value, subtitle, modalTitle, modalIcon, modalIconBg, statuses }: Props) {
+export function OrderStatCard({ icon, iconBg, label, value, subtitle, modalTitle, modalIcon, modalIconBg, statuses, inventoryTrackingKeywords }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -37,6 +38,7 @@ export function OrderStatCard({ icon, iconBg, label, value, subtitle, modalTitle
         icon={modalIcon}
         iconBg={modalIconBg}
         statuses={statuses}
+        inventoryTrackingKeywords={inventoryTrackingKeywords}
       />
     </>
   );
