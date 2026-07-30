@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getSupabaseStorage, POD_BUCKET } from "@/lib/supabase/storage";
 import * as XLSX from "xlsx";
-import * as archiver from "archiver";
+import { ZipArchive } from "archiver";
 
 function getVal(obj: Record<string, unknown>, field: string): unknown {
   const val = obj[field];
@@ -86,7 +86,7 @@ export async function GET() {
     }
   }
 
-  const archive = archiver("zip", { zlib: { level: 5 } });
+  const archive = new ZipArchive({ zlib: { level: 5 } });
   const buffers: Buffer[] = [];
   archive.on("data", (d) => buffers.push(d));
   const zipPromise = new Promise<void>((resolve, reject) => {
