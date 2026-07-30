@@ -101,7 +101,6 @@ export const routeToModule: Record<string, ModuleId> = {
 };
 
 export function canViewModule(permissions: unknown | null, role: string | null, moduleId: ModuleId): boolean {
-  if (role === "ADMIN") return true;
   const perms = (permissions as Permissions) || getDefaultPermissions(role || undefined);
   return perms[moduleId]?.canView ?? false;
 }

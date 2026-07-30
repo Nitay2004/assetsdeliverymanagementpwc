@@ -5,11 +5,11 @@ import { getSession } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getDefaultPermissions, type Permissions, canViewModule } from "@/lib/permissions";
+import { getDefaultPermissions, type Permissions } from "@/lib/permissions";
 
 async function requireAdmin() {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN" || !canViewModule(user.permissions, user.role, "admin")) {
+  if (!user || user.role !== "ADMIN") {
     throw new Error("Unauthorized");
   }
   return user;
