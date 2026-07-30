@@ -76,8 +76,8 @@ export async function GET() {
   const wb = XLSX.utils.book_new();
   const sheet = XLSX.utils.json_to_sheet(xlsxRows);
   XLSX.utils.book_append_sheet(wb, sheet, "PODs");
-  const xlsxUint8 = XLSX.write(wb, { type: "uint8array", bookType: "xlsx" });
-  zip.file(`pod-report-${new Date().toISOString().split("T")[0]}.xlsx`, xlsxUint8);
+  const xlsxData = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  zip.file(`pod-report-${new Date().toISOString().split("T")[0]}.xlsx`, xlsxData);
 
   const zipData = await zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
 
