@@ -17,6 +17,7 @@ import {
   Users,
   Menu,
   X,
+  UserCog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,8 +35,17 @@ const navItems = [
   { href: "/dashboard/vendor-master", label: "Vendor Master", icon: Building2 },
 ];
 
-function NavContent({ collapsed, onLinkClick }: { collapsed: boolean; onLinkClick?: () => void }) {
+const adminNavItems = [
+  { href: "/dashboard/admin", label: "Admin", icon: UserCog },
+];
+
+function NavContent({ collapsed, onLinkClick, role }: { collapsed: boolean; onLinkClick?: () => void; role: string | null }) {
   const pathname = usePathname();
+
+  const items = [
+    ...navItems,
+    ...(role === "ADMIN" ? adminNavItems : []),
+  ];
 
   return (
     <nav className={cn("grid gap-0.5", collapsed ? "px-2" : "px-3")}>
@@ -45,7 +55,7 @@ function NavContent({ collapsed, onLinkClick }: { collapsed: boolean; onLinkClic
         </div>
       )}
 
-      {navItems.map((item) => {
+      {items.map((item) => {
         const isActive = pathname === item.href;
         const Icon = item.icon;
 
@@ -83,7 +93,7 @@ function NavContent({ collapsed, onLinkClick }: { collapsed: boolean; onLinkClic
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ role }: { role: string | null }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
@@ -148,7 +158,7 @@ export function Sidebar() {
         </div>
 
         <div className="flex-1 overflow-y-auto py-5">
-          <NavContent collapsed={false} onLinkClick={() => setMobileOpen(false)} />
+          <NavContent collapsed={false} onLinkClick={() => setMobileOpen(false)} role={role} />
         </div>
       </aside>
 
@@ -190,7 +200,7 @@ export function Sidebar() {
         </div>
 
         <div className="flex-1 overflow-y-auto py-5">
-          <NavContent collapsed={collapsed} />
+          <NavContent collapsed={collapsed} role={role} />
         </div>
       </aside>
     </>

@@ -1,16 +1,20 @@
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Header } from "@/components/dashboard/header";
 import { BackgroundGrid } from "@/components/dashboard/floating-gradient-mesh";
+import { getSession } from "@/lib/auth";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const user = await getSession();
+  const role = user?.role ?? null;
+
   return (
     <div className="relative flex min-h-screen bg-gradient-to-br from-blue-50 via-sky-50/80 to-indigo-100 dark:from-[#0a0a0f] dark:via-[#0d0d1a] dark:to-[#0a0a14]">
       <div className="relative z-10 flex flex-1 min-w-0">
-        <Sidebar />
+        <Sidebar role={role} />
         <div className="relative flex flex-col min-w-0 flex-1">
           <BackgroundGrid />
           <Header />
