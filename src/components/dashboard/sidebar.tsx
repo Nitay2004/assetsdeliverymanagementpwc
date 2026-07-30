@@ -20,31 +20,39 @@ import {
   UserCog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { canViewModule } from "@/lib/permissions";
 
-const navItems = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/dashboard/inventory", label: "Inventory", icon: Package },
-  { href: "/dashboard/assigned-assets", label: "Assigned Assets", icon: Users },
-  { href: "/dashboard/warehouse", label: "Warehouse", icon: Package },
-  { href: "/dashboard/provisioning", label: "Provisioning", icon: Laptop },
-  { href: "/dashboard/finance", label: "Finance", icon: Wallet },
-  { href: "/dashboard/logistics", label: "Logistics", icon: Truck },
-  { href: "/dashboard/reverse-pickup", label: "Reverse Pickup", icon: ArrowLeftRight },
-  { href: "/dashboard/warranty", label: "Warranty", icon: ShieldCheck },
-  { href: "/dashboard/product-master", label: "Product Master", icon: Database },
-  { href: "/dashboard/vendor-master", label: "Vendor Master", icon: Building2 },
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  moduleId?: string;
+}
+
+const navItems: NavItem[] = [
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard, moduleId: undefined },
+  { href: "/dashboard/inventory", label: "Inventory", icon: Package, moduleId: "inventory" },
+  { href: "/dashboard/assigned-assets", label: "Assigned Assets", icon: Users, moduleId: "assigned-assets" },
+  { href: "/dashboard/warehouse", label: "Warehouse", icon: Package, moduleId: "warehouse" },
+  { href: "/dashboard/provisioning", label: "Provisioning", icon: Laptop, moduleId: "provisioning" },
+  { href: "/dashboard/finance", label: "Finance", icon: Wallet, moduleId: "finance" },
+  { href: "/dashboard/logistics", label: "Logistics", icon: Truck, moduleId: "logistics" },
+  { href: "/dashboard/reverse-pickup", label: "Reverse Pickup", icon: ArrowLeftRight, moduleId: "reverse-pickup" },
+  { href: "/dashboard/warranty", label: "Warranty", icon: ShieldCheck, moduleId: "warranty" },
+  { href: "/dashboard/product-master", label: "Product Master", icon: Database, moduleId: "product-master" },
+  { href: "/dashboard/vendor-master", label: "Vendor Master", icon: Building2, moduleId: "vendor-master" },
 ];
 
-const adminNavItems = [
-  { href: "/dashboard/admin", label: "Admin", icon: UserCog },
+const adminNavItems: NavItem[] = [
+  { href: "/dashboard/admin", label: "Admin", icon: UserCog, moduleId: "admin" },
 ];
 
-function NavContent({ collapsed, onLinkClick, role }: { collapsed: boolean; onLinkClick?: () => void; role: string | null }) {
+function NavContent({ collapsed, onLinkClick, role, permissions }: { collapsed: boolean; onLinkClick?: () => void; role: string | null; permissions: unknown | null }) {
   const pathname = usePathname();
 
   const items = [
-    ...navItems,
-    ...(role === "ADMIN" ? adminNavItems : []),
+    ...navItems.filter(i => !i.moduleId || canViewModule(permissions, role, i.moduleId as any)),
+    ...(role === "ADMIN" ? adminNavItems.filter(i => !i.moduleId || canViewModule(permissions, role, i.moduleId as any)) : []),
   ];
 
   return (
@@ -93,7 +101,7 @@ function NavContent({ collapsed, onLinkClick, role }: { collapsed: boolean; onLi
   );
 }
 
-export function Sidebar({ role }: { role: string | null }) {
+export function Sidebar({ role, permissions }: { role: string | null; permissions: unknown | null }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
@@ -158,7 +166,7 @@ export function Sidebar({ role }: { role: string | null }) {
         </div>
 
         <div className="flex-1 overflow-y-auto py-5">
-          <NavContent collapsed={false} onLinkClick={() => setMobileOpen(false)} role={role} />
+          <NavContent collapsed={false} onLinkClick={() => setMobileOpen(false)} role={role} permissions={permissions} />
         </div>
       </aside>
 
@@ -200,7 +208,7 @@ export function Sidebar({ role }: { role: string | null }) {
         </div>
 
         <div className="flex-1 overflow-y-auto py-5">
-          <NavContent collapsed={collapsed} role={role} />
+          <NavContent collapsed={collapsed} role={role} permissions={permissions} />
         </div>
       </aside>
     </>

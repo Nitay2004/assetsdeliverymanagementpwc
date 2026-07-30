@@ -5,11 +5,11 @@ import { getSession } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getDefaultPermissions, type Permissions } from "@/lib/permissions";
+import { getDefaultPermissions, type Permissions, canViewModule } from "@/lib/permissions";
 
 async function requireAdmin() {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") {
+  if (!user || user.role !== "ADMIN" || !canViewModule(user.permissions, user.role, "admin")) {
     throw new Error("Unauthorized");
   }
   return user;
@@ -73,6 +73,9 @@ export async function updateUser(userId: string, formData: FormData) {
   const password = formData.get("password") as string;
   const isActive = formData.get("isActive") === "true";
 
+  const existing = await prisma.user.findUnique({ where: { id: userId } });
+  if (!existing) return { success: false, error: "User not found." };
+
   const updateData: Record<string, unknown> = {
     name: name || null,
     role: role as any,
@@ -81,6 +84,10 @@ export async function updateUser(userId: string, formData: FormData) {
 
   if (password) {
     updateData.passwordHash = await bcrypt.hash(password, 10);
+  }
+
+  if (role && role !== existing.role) {
+    updateData.permissions = getDefaultPermissions(role) as any;
   }
 
   await prisma.user.update({

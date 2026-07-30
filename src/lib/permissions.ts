@@ -83,3 +83,25 @@ export const moduleLabels: Record<ModuleId, string> = {
   "vendor-master": "Vendor Master",
   admin: "Admin",
 };
+
+export const routeToModule: Record<string, ModuleId> = {
+  "/dashboard": "inventory",
+  "/dashboard/inventory": "inventory",
+  "/dashboard/assigned-assets": "assigned-assets",
+  "/dashboard/warehouse": "warehouse",
+  "/dashboard/provisioning": "provisioning",
+  "/dashboard/finance": "finance",
+  "/dashboard/logistics": "logistics",
+  "/dashboard/reverse-pickup": "reverse-pickup",
+  "/dashboard/warranty": "warranty",
+  "/dashboard/product-master": "product-master",
+  "/dashboard/vendor-master": "vendor-master",
+  "/dashboard/admin": "admin",
+  "/dashboard/admin/users": "admin",
+};
+
+export function canViewModule(permissions: unknown | null, role: string | null, moduleId: ModuleId): boolean {
+  if (role === "ADMIN") return true;
+  const perms = (permissions as Permissions) || getDefaultPermissions(role || undefined);
+  return perms[moduleId]?.canView ?? false;
+}
