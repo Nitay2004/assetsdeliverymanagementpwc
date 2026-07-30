@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getSupabaseStorage, POD_BUCKET } from "@/lib/supabase/storage";
 import * as XLSX from "xlsx";
-import AdmZip from "adm-zip";
 
 function getVal(obj: Record<string, unknown>, field: string): unknown {
   const val = obj[field];
@@ -41,62 +40,46 @@ export async function GET() {
     orderBy: { updatedAt: "desc" },
   });
 
-  const rows = orders.flatMap((order) =>
-    order.dockets.map((docket) => ({
-      "Client Name": order.clientName,
-      "Delivery Location": order.deliveryLocation,
-      "DC Number": order.dcNumber ?? "",
-      "Status": order.status,
-      "Docket Number": docket.docketNumber ?? "",
-      "E-Way Bill Number": docket.ewayBillNumber ?? "",
-      "POD File": docket.podDocumentUrl?.split("/").pop() ?? "",
-      "Serial Numbers": order.assets
-        .filter((a) => a.inventoryItem)
-        .map((a) => a.inventoryItem!.serialNumber)
-        .join(", "),
-      "Created At": getVal(docket as unknown as Record<string, unknown>, "createdAt"),
-    }))
+  const supabase = getSupabaseStorage();
+
+  const rows = await Promise.all(
+    orders.flatMap((order) =>
+      order.dockets.map(async (docket) => {
+        let podLink = "";
+        if (docket.podDocumentUrl) {
+          const { data } = await supabase.storage
+            .from(POD_BUCKET)
+            .createSignedUrl(docket.podDocumentUrl, 604800);
+          if (data) podLink = data.signedUrl;
+        }
+
+        return {
+          "Client Name": order.clientName,
+          "Delivery Location": order.deliveryLocation,
+          "DC Number": order.dcNumber ?? "",
+          "Status": order.status,
+          "Docket Number": docket.docketNumber ?? "",
+          "E-Way Bill Number": docket.ewayBillNumber ?? "",
+          "POD Download Link": podLink,
+          "Serial Numbers": order.assets
+            .filter((a) => a.inventoryItem)
+            .map((a) => a.inventoryItem!.serialNumber)
+            .join(", "),
+          "Created At": getVal(docket as unknown as Record<string, unknown>, "createdAt"),
+        };
+      })
+    )
   );
 
   const wb = XLSX.utils.book_new();
   const sheet = XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, sheet, "PODs");
-  const xlsxBuffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
-  const zip = new AdmZip();
-  zip.addFile(
-    `pod-report-${new Date().toISOString().split("T")[0]}.xlsx`,
-    xlsxBuffer
-  );
-
-  const supabase = getSupabaseStorage();
-
-  for (const order of orders) {
-    for (const docket of order.dockets) {
-      if (!docket.podDocumentUrl) continue;
-      const fileName = docket.podDocumentUrl.split("/").pop();
-      if (!fileName) continue;
-
-      const { data, error } = await supabase.storage
-        .from(POD_BUCKET)
-        .download(docket.podDocumentUrl);
-
-      if (error || !data) {
-        console.error(`Failed to download ${docket.podDocumentUrl}:`, error?.message);
-        continue;
-      }
-
-      const arrBuf = await data.arrayBuffer();
-      zip.addFile(`pod-files/${fileName}`, Buffer.from(arrBuf));
-    }
-  }
-
-  const zipBuffer = zip.toBuffer();
-
-  return new NextResponse(new Uint8Array(zipBuffer), {
+  return new NextResponse(buffer, {
     headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="pod-report-${new Date().toISOString().split("T")[0]}.zip"`,
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="pod-report-${new Date().toISOString().split("T")[0]}.xlsx"`,
     },
   });
 }
