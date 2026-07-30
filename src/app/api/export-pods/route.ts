@@ -93,7 +93,7 @@ export async function GET() {
 
   const zipBuffer = zip.toBuffer();
 
-  return new NextResponse(zipBuffer, {
+  return new NextResponse(new Uint8Array(zipBuffer), {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="pod-report-${new Date().toISOString().split("T")[0]}.zip"`,
