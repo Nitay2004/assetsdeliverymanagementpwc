@@ -2,8 +2,20 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getSupabaseStorage, POD_BUCKET } from "@/lib/supabase/storage";
-import JSZip from "jszip";
 import * as XLSX from "xlsx";
+
+function getVal(obj: Record<string, unknown>, field: string): unknown {
+  const val = obj[field];
+  if (val === null || val === undefined) return "";
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return "";
+    return val.toISOString().split("T")[0];
+  }
+  if (typeof val === "object" && "toString" in val) {
+    return String((val as { toString(): string }).toString());
+  }
+  return String(val);
+}
 
 export async function GET() {
   const user = await getSession();
@@ -29,62 +41,46 @@ export async function GET() {
   });
 
   const supabase = getSupabaseStorage();
-  const zip = new JSZip();
 
-  const xlsxRows: Record<string, string>[] = [];
+  const rows = await Promise.all(
+    orders.flatMap((order) =>
+      order.dockets.map(async (docket) => {
+        let podLink = "";
+        if (docket.podDocumentUrl) {
+          const { data } = await supabase.storage
+            .from(POD_BUCKET)
+            .createSignedUrl(docket.podDocumentUrl, 604800);
+          if (data) podLink = data.signedUrl;
+        }
 
-  for (const order of orders) {
-    for (const docket of order.dockets) {
-      if (!docket.podDocumentUrl) continue;
-      const fileName = docket.podDocumentUrl.split("/").pop();
-      if (!fileName) continue;
-
-      let signedUrl = "";
-      const { data: urlData } = await supabase.storage
-        .from(POD_BUCKET)
-        .createSignedUrl(docket.podDocumentUrl, 604800);
-      if (urlData) signedUrl = urlData.signedUrl;
-
-      const { data, error } = await supabase.storage
-        .from(POD_BUCKET)
-        .download(docket.podDocumentUrl);
-
-      if (!error && data) {
-        const arrBuf = await data.arrayBuffer();
-        zip.file(`pod-files/${fileName}`, new Uint8Array(arrBuf));
-      } else {
-        console.error(`Failed to download ${docket.podDocumentUrl}:`, error?.message);
-      }
-
-      xlsxRows.push({
-        "Client Name": order.clientName,
-        "Delivery Location": order.deliveryLocation,
-        "DC Number": order.dcNumber ?? "",
-        "Status": order.status,
-        "Docket Number": docket.docketNumber ?? "",
-        "E-Way Bill Number": docket.ewayBillNumber ?? "",
-        "POD File": fileName,
-        "POD Download Link": signedUrl,
-        "Serial Numbers": order.assets
-          .filter((a) => a.inventoryItem)
-          .map((a) => a.inventoryItem!.serialNumber)
-          .join(", "),
-      });
-    }
-  }
+        return {
+          "Client Name": order.clientName,
+          "Delivery Location": order.deliveryLocation,
+          "DC Number": order.dcNumber ?? "",
+          "Status": order.status,
+          "Docket Number": docket.docketNumber ?? "",
+          "E-Way Bill Number": docket.ewayBillNumber ?? "",
+          "POD File": docket.podDocumentUrl?.split("/").pop() ?? "",
+          "POD Download Link (click to download)": podLink,
+          "Serial Numbers": order.assets
+            .filter((a) => a.inventoryItem)
+            .map((a) => a.inventoryItem!.serialNumber)
+            .join(", "),
+          "Created At": getVal(docket as unknown as Record<string, unknown>, "createdAt"),
+        };
+      })
+    )
+  );
 
   const wb = XLSX.utils.book_new();
-  const sheet = XLSX.utils.json_to_sheet(xlsxRows);
+  const sheet = XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, sheet, "PODs");
-  const xlsxData = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  zip.file(`pod-report-${new Date().toISOString().split("T")[0]}.xlsx`, xlsxData);
+  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
-  const zipData = await zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
-
-  return new NextResponse(zipData, {
+  return new NextResponse(buffer, {
     headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="pods-${new Date().toISOString().split("T")[0]}.zip"`,
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="pod-report-${new Date().toISOString().split("T")[0]}.xlsx"`,
     },
   });
 }
