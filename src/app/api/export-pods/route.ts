@@ -2,11 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getSupabaseStorage, POD_BUCKET } from "@/lib/supabase/storage";
-import { Writable } from "stream";
-import { pipeline } from "stream/promises";
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const archiver = require("archiver");
+import JSZip from "jszip";
 
 export async function GET() {
   const user = await getSession();
@@ -31,8 +27,7 @@ export async function GET() {
   });
 
   const supabase = getSupabaseStorage();
-
-  const archive = archiver("zip", { zlib: { level: 5 } });
+  const zip = new JSZip();
 
   for (const order of orders) {
     for (const docket of order.dockets) {
@@ -50,23 +45,13 @@ export async function GET() {
       }
 
       const arrBuf = await data.arrayBuffer();
-      archive.append(Buffer.from(arrBuf), { name: fileName });
+      zip.file(fileName, new Uint8Array(arrBuf));
     }
   }
 
-  const buffers: Buffer[] = [];
-  const writable = new Writable({
-    write(chunk, _encoding, callback) {
-      buffers.push(Buffer.from(chunk));
-      callback();
-    },
-  });
+  const zipData = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
 
-  const zipDone = pipeline(archive, writable);
-  archive.finalize();
-  await zipDone;
-
-  return new NextResponse(Buffer.concat(buffers), {
+  return new NextResponse(zipData, {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="pods-${new Date().toISOString().split("T")[0]}.zip"`,
