@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getSupabaseStorage, POD_BUCKET } from "@/lib/supabase/storage";
-import archiver from "archiver";
+import archiver = require("archiver");
 import { Writable } from "stream";
 import { pipeline } from "stream/promises";
 
