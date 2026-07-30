@@ -49,7 +49,7 @@ export async function GET() {
     }
   }
 
-  const zipData = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+  const zipData = await zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
 
   return new NextResponse(zipData, {
     headers: {
