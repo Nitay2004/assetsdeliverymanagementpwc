@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { canViewModule, routeToModule } from "@/lib/permissions";
+import { canViewModule, resolveModuleFromPath } from "@/lib/permissions";
 
 export function ModuleGuard({
   children,
@@ -17,10 +17,9 @@ export function ModuleGuard({
   const router = useRouter();
 
   useEffect(() => {
-    if (role === "ADMIN") return;
     if (!pathname.startsWith("/dashboard")) return;
 
-    const moduleId = routeToModule[pathname];
+    const moduleId = resolveModuleFromPath(pathname);
     if (!moduleId) return;
 
     if (!canViewModule(permissions, role, moduleId)) {

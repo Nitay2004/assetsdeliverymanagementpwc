@@ -84,21 +84,29 @@ export const moduleLabels: Record<ModuleId, string> = {
   admin: "Admin",
 };
 
-export const routeToModule: Record<string, ModuleId> = {
-  "/dashboard": "inventory",
-  "/dashboard/inventory": "inventory",
-  "/dashboard/assigned-assets": "assigned-assets",
-  "/dashboard/warehouse": "warehouse",
-  "/dashboard/provisioning": "provisioning",
-  "/dashboard/finance": "finance",
-  "/dashboard/logistics": "logistics",
-  "/dashboard/reverse-pickup": "reverse-pickup",
-  "/dashboard/warranty": "warranty",
-  "/dashboard/product-master": "product-master",
-  "/dashboard/vendor-master": "vendor-master",
-  "/dashboard/admin": "admin",
-  "/dashboard/admin/users": "admin",
-};
+const routePrefixToModule: [string, ModuleId][] = [
+  ["/dashboard/admin", "admin"],
+  ["/dashboard/vendor-master", "vendor-master"],
+  ["/dashboard/product-master", "product-master"],
+  ["/dashboard/assigned-assets", "assigned-assets"],
+  ["/dashboard/reverse-pickup", "reverse-pickup"],
+  ["/dashboard/provisioning", "provisioning"],
+  ["/dashboard/inventory", "inventory"],
+  ["/dashboard/warehouse", "warehouse"],
+  ["/dashboard/finance", "finance"],
+  ["/dashboard/logistics", "logistics"],
+  ["/dashboard/warranty", "warranty"],
+  ["/dashboard", "inventory"],
+];
+
+export function resolveModuleFromPath(pathname: string): ModuleId | null {
+  for (const [prefix, moduleId] of routePrefixToModule) {
+    if (pathname === prefix || pathname.startsWith(prefix + "/")) {
+      return moduleId;
+    }
+  }
+  return null;
+}
 
 export function canViewModule(permissions: unknown | null, role: string | null, moduleId: ModuleId): boolean {
   const perms = (permissions as Permissions) || getDefaultPermissions(role || undefined);
