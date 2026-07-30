@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getSupabaseStorage, POD_BUCKET } from "@/lib/supabase/storage";
 import * as XLSX from "xlsx";
-import { ZipArchive } from "archiver";
+import AdmZip from "adm-zip";
 
 function getVal(obj: Record<string, unknown>, field: string): unknown {
   const val = obj[field];
@@ -61,10 +61,15 @@ export async function GET() {
   const wb = XLSX.utils.book_new();
   const sheet = XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, sheet, "PODs");
-  const xlsxBuffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  const xlsxBuffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+
+  const zip = new AdmZip();
+  zip.addFile(
+    `pod-report-${new Date().toISOString().split("T")[0]}.xlsx`,
+    xlsxBuffer
+  );
 
   const supabase = getSupabaseStorage();
-  const chunks: { name: string; buffer: Buffer }[] = [];
 
   for (const order of orders) {
     for (const docket of order.dockets) {
@@ -82,26 +87,11 @@ export async function GET() {
       }
 
       const arrBuf = await data.arrayBuffer();
-      chunks.push({ name: fileName, buffer: Buffer.from(arrBuf) });
+      zip.addFile(`pod-files/${fileName}`, Buffer.from(arrBuf));
     }
   }
 
-  const archive = new ZipArchive({ zlib: { level: 5 } });
-  const buffers: Buffer[] = [];
-  archive.on("data", (d) => buffers.push(d));
-  const zipPromise = new Promise<void>((resolve, reject) => {
-    archive.on("end", resolve);
-    archive.on("error", reject);
-  });
-
-  archive.append(xlsxBuffer, { name: `pod-report-${new Date().toISOString().split("T")[0]}.xlsx` });
-  for (const chunk of chunks) {
-    archive.append(chunk.buffer, { name: `pod-files/${chunk.name}` });
-  }
-  archive.finalize();
-  await zipPromise;
-
-  const zipBuffer = Buffer.concat(buffers);
+  const zipBuffer = zip.toBuffer();
 
   return new NextResponse(zipBuffer, {
     headers: {
