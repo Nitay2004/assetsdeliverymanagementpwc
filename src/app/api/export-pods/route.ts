@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getSupabaseStorage, POD_BUCKET } from "@/lib/supabase/storage";
-import archiver = require("archiver");
 import { Writable } from "stream";
 import { pipeline } from "stream/promises";
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const archiver = require("archiver");
 
 export async function GET() {
   const user = await getSession();
