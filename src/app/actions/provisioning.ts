@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
 
@@ -22,9 +23,7 @@ async function syncInventoryWarehouseLocation(orderId: string, warehouseLocation
 
 export async function updateAssetStatus(assetId: string, status: string) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "provisioning", "canEdit");
 
   await prisma.asset.update({
     where: { id: assetId },
@@ -40,9 +39,7 @@ export async function advanceOrderToProvisioning(
   data: { warehouseLocation: string; provisioningLocation: string; engineerName: string }
 ) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING" && user.role !== "WAREHOUSE")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "provisioning", "canEdit");
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -117,7 +114,7 @@ export async function getProvisioningDropdowns() {
 
 export async function addProvisioningDropdownOption(category: string, value: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "provisioning", "canCreate");
 
   await prisma.dropdownOption.upsert({
     where: { category_value: { category, value } },
@@ -131,7 +128,7 @@ export async function addProvisioningDropdownOption(category: string, value: str
 
 export async function deleteProvisioningDropdownOption(id: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "provisioning", "canDelete");
 
   await prisma.dropdownOption.delete({ where: { id } });
 
@@ -144,9 +141,7 @@ export async function updateOrderProvisioningDetails(
   data: { warehouseLocation: string; provisioningLocation: string; engineerName: string }
 ) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "provisioning", "canEdit");
 
   await prisma.order.update({
     where: { id: orderId },
@@ -163,9 +158,7 @@ export async function updateOrderProvisioningDetails(
 
 export async function bulkMarkOsInstalled(assetIds: string[]) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "provisioning", "canEdit");
 
   await prisma.asset.updateMany({
     where: { id: { in: assetIds }, status: "allocated" },
@@ -180,9 +173,7 @@ export async function bulkAdvanceOrdersToProvisioning(
   data: { warehouseLocation: string; provisioningLocation: string; engineerName: string }
 ) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING" && user.role !== "WAREHOUSE")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "provisioning", "canEdit");
 
   const orders = await prisma.order.findMany({
     where: { id: { in: orderIds } },
@@ -217,9 +208,7 @@ export async function bulkAdvanceOrdersToProvisioning(
 
 export async function handoverToLogistics(orderIds: string[]) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "provisioning", "canEdit");
 
   // Advance order status to DOCKET_REQUESTED so it moves to logistics
   await prisma.order.updateMany({
@@ -249,7 +238,7 @@ export async function handoverToLogistics(orderIds: string[]) {
 
 export async function removeFromProvisioning(orderId: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "provisioning", "canEdit");
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },

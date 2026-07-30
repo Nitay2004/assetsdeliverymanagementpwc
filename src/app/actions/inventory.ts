@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
@@ -20,9 +21,7 @@ function parseIntValue(value: string | null): number | null {
 
 export async function addInventoryItem(formData: FormData) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "inventory", "canCreate");
 
   const serialNumber = formData.get("serialNumber") as string;
   const model = formData.get("model") as string;
@@ -121,9 +120,7 @@ export async function addInventoryItem(formData: FormData) {
 
 export async function updateInventoryItem(id: string, formData: FormData) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "inventory", "canEdit");
 
   const serialNumber = formData.get("serialNumber") as string;
   const model = formData.get("model") as string;
@@ -228,9 +225,7 @@ export async function updateInventoryItem(id: string, formData: FormData) {
 
 export async function deleteInventoryItem(id: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "inventory", "canDelete");
 
   try {
     await prisma.inventoryItem.delete({ where: { id } });
@@ -244,9 +239,7 @@ export async function deleteInventoryItem(id: string) {
 
 export async function returnItemToStock(id: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "inventory", "canEdit");
 
   const existing = await prisma.inventoryItem.findUnique({ where: { id } });
 
@@ -339,7 +332,7 @@ export async function checkSerialNumber(serialNumber: string) {
 
 export async function seedDropdownOptions() {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") return;
+  requirePermission(user, "inventory", "canCreate");
 
   const [existingEntities, existingPurposes, existingImageTypes, existingAdaptors, existingHeadset, existingStickers, existingWarehouseLocs] = await Promise.all([
     prisma.inventoryItem.findMany({
@@ -403,7 +396,7 @@ export async function seedDropdownOptions() {
 
 export async function addDropdownOption(category: string, value: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "inventory", "canCreate");
 
   await prisma.dropdownOption.upsert({
     where: { category_value: { category, value } },
@@ -416,7 +409,7 @@ export async function addDropdownOption(category: string, value: string) {
 
 export async function deleteDropdownOption(id: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "inventory", "canDelete");
 
   await prisma.dropdownOption.delete({ where: { id } });
 
@@ -431,9 +424,7 @@ export async function getInventoryItem(id: string) {
 
 export async function reassignItem(id: string, formData: FormData) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "inventory", "canEdit");
 
   const employeeName = (formData.get("employeeName") as string) || null;
   const emailId = (formData.get("emailId") as string) || null;
@@ -573,9 +564,7 @@ export async function getAssignmentHistory(itemId: string) {
 
 export async function sendToWarehouse(inventoryItemIds: string[]) {
   const user = await getSession();
-  if (!user) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "inventory", "canCreate");
 
   const items = await prisma.inventoryItem.findMany({
     where: { id: { in: inventoryItemIds }, status: { in: ["AVAILABLE", "ALLOCATED"] } },
@@ -642,7 +631,7 @@ export async function sendToWarehouse(inventoryItemIds: string[]) {
 
 export async function fixInventoryStatusConsistency() {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "inventory", "canEdit");
 
   const r1 = await prisma.inventoryItem.updateMany({
     where: { status: "AVAILABLE", employeeName: { not: null } },

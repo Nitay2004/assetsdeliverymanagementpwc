@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
 
@@ -14,9 +15,7 @@ export async function markAsRto(
   }
 ) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "LOGISTICS")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "logistics", "canCreate");
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -62,9 +61,7 @@ export async function markAsRto(
 
 export async function addDocket(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "LOGISTICS")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "logistics", "canCreate");
 
   const orderId = formData.get("orderId") as string;
   const docketNumber = formData.get("docketNumber") as string;
@@ -103,9 +100,7 @@ export async function addDocket(formData: FormData) {
 
 export async function updateDocket(id: string, formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "LOGISTICS")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "logistics", "canEdit");
 
   const docketNumber = formData.get("docketNumber") as string;
   const ewayBillNumber = formData.get("ewayBillNumber") as string;
@@ -128,9 +123,7 @@ export async function updateDocket(id: string, formData: FormData) {
 
 export async function updateDocketPod(docketId: string, podDocumentUrl: string) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "LOGISTICS")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "logistics", "canEdit");
 
   await prisma.docket.update({
     where: { id: docketId },
@@ -143,9 +136,7 @@ export async function updateDocketPod(docketId: string, podDocumentUrl: string) 
 
 export async function deleteDocket(id: string) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "LOGISTICS")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "logistics", "canDelete");
 
   await prisma.docket.delete({ where: { id } });
 
@@ -155,9 +146,7 @@ export async function deleteDocket(id: string) {
 
 export async function advanceOrderStatus(orderId: string, status: string) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "LOGISTICS")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "logistics", "canEdit");
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },

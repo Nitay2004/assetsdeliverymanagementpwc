@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -38,6 +39,7 @@ export async function getReversePickupRequest(id: string) {
 export async function createReversePickupRequest(formData: FormData) {
   const user = await getSession();
   if (!user) throw new Error("Unauthorized");
+  requirePermission(user, "reverse-pickup", "canCreate");
 
   const serialNumber = formData.get("serialNumber") as string;
   const model = formData.get("model") as string;
@@ -143,9 +145,7 @@ export async function createReversePickupRequest(formData: FormData) {
 
 export async function assignPartner(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "REVERSE_PICKUP")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
   const partnerName = formData.get("partnerName") as string;
@@ -167,9 +167,7 @@ export async function assignPartner(formData: FormData) {
 
 export async function requestDocket(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "REVERSE_PICKUP")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
   if (!id) throw new Error("Request ID is required.");
@@ -184,9 +182,7 @@ export async function requestDocket(formData: FormData) {
 
 export async function requestDc(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "REVERSE_PICKUP")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
   if (!id) throw new Error("Request ID is required.");
@@ -201,9 +197,7 @@ export async function requestDc(formData: FormData) {
 
 export async function requestEwayBill(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "REVERSE_PICKUP")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
   if (!id) throw new Error("Request ID is required.");
@@ -218,9 +212,7 @@ export async function requestEwayBill(formData: FormData) {
 
 export async function recordInspection(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "REVERSE_PICKUP")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
   const inspectionRemarks = formData.get("inspectionRemarks") as string;
@@ -242,9 +234,7 @@ export async function recordInspection(formData: FormData) {
 
 export async function markAsPickedUp(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "REVERSE_PICKUP")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
   const pickupDate = parseDate(formData.get("pickupDate") as string);
@@ -266,9 +256,7 @@ export async function markAsPickedUp(formData: FormData) {
 
 export async function receiveAtWarehouse(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "REVERSE_PICKUP" && user.role !== "WAREHOUSE")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
   const warehouseLocation = formData.get("warehouseLocation") as string;
@@ -292,9 +280,7 @@ export async function receiveAtWarehouse(formData: FormData) {
 
 export async function recordQc(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "REVERSE_PICKUP" && user.role !== "PROVISIONING")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
   const qcResult = formData.get("qcResult") as string;
@@ -320,9 +306,7 @@ export async function recordQc(formData: FormData) {
 
 export async function uploadBlancoCertificate(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "REVERSE_PICKUP")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
   const blancoCertificateUrl = formData.get("blancoCertificateUrl") as string;
@@ -344,9 +328,7 @@ export async function uploadBlancoCertificate(formData: FormData) {
 
 export async function completeReversePickup(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "REVERSE_PICKUP")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
   const finalDisposition = formData.get("finalDisposition") as string;
@@ -393,9 +375,7 @@ export async function completeReversePickup(formData: FormData) {
 
 export async function assignReversePickupDocket(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "LOGISTICS")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
   const docketNumber = formData.get("docketNumber") as string;
@@ -412,9 +392,7 @@ export async function assignReversePickupDocket(formData: FormData) {
 
 export async function generateReversePickupEwayBill(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "FINANCE")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
   const eWayBillNo = formData.get("eWayBillNo") as string;
@@ -431,9 +409,7 @@ export async function generateReversePickupEwayBill(formData: FormData) {
 
 export async function deleteReversePickupRequest(id: string) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "reverse-pickup", "canDelete");
 
   await prisma.reversePickupRequest.delete({ where: { id } });
   revalidatePath("/dashboard/reverse-pickup");
@@ -503,7 +479,7 @@ export async function getReversePickupDropdowns() {
 
 export async function addReversePickupDropdownOption(category: string, value: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "reverse-pickup", "canCreate");
 
   await prisma.dropdownOption.upsert({
     where: { category_value: { category, value } },
@@ -516,7 +492,7 @@ export async function addReversePickupDropdownOption(category: string, value: st
 
 export async function deleteReversePickupDropdownOption(id: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "reverse-pickup", "canDelete");
 
   await prisma.dropdownOption.delete({ where: { id } });
 
@@ -525,7 +501,7 @@ export async function deleteReversePickupDropdownOption(id: string) {
 
 export async function seedReversePickupDropdowns() {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") return;
+  requirePermission(user, "reverse-pickup", "canCreate");
 
   const { SEED_CATEGORIES } = await import("@/lib/reverse-pickup-config");
 

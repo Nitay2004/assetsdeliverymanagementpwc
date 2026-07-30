@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 
 export async function getProducts() {
@@ -23,7 +24,7 @@ export async function getAllPartNumbers() {
 
 export async function addProduct(formData: FormData) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "product-master", "canCreate");
 
   await prisma.productMaster.create({
     data: {
@@ -42,7 +43,7 @@ export async function addProduct(formData: FormData) {
 
 export async function updateProduct(id: string, formData: FormData) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "product-master", "canEdit");
 
   await prisma.productMaster.update({
     where: { id },
@@ -90,7 +91,7 @@ export async function getProductsForDropdown() {
 
 export async function deleteProduct(id: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "product-master", "canDelete");
 
   await prisma.productMaster.delete({ where: { id } });
 

@@ -108,7 +108,27 @@ export function resolveModuleFromPath(pathname: string): ModuleId | null {
   return null;
 }
 
-export function canViewModule(permissions: unknown | null, role: string | null, moduleId: ModuleId): boolean {
+export function canModuleAction(
+  permissions: unknown | null,
+  role: string | null,
+  moduleId: ModuleId,
+  action: keyof ModulePermission
+): boolean {
   const perms = (permissions as Permissions) || getDefaultPermissions(role || undefined);
-  return perms[moduleId]?.canView ?? false;
+  return perms[moduleId]?.[action] ?? false;
+}
+
+export function canViewModule(permissions: unknown | null, role: string | null, moduleId: ModuleId): boolean {
+  return canModuleAction(permissions, role, moduleId, "canView");
+}
+
+export function requirePermission(
+  user: { permissions: unknown; role: string } | null,
+  moduleId: ModuleId,
+  action: keyof ModulePermission
+): void {
+  if (!user) throw new Error("Unauthorized");
+  if (!canModuleAction(user.permissions, user.role, moduleId, action)) {
+    throw new Error("Permission denied");
+  }
 }

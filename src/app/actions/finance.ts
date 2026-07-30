@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
 
@@ -17,9 +18,7 @@ export async function updateOrderFinance(
   }
 ) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "FINANCE")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "finance", "canEdit");
 
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) throw new Error("Order not found.");
@@ -46,9 +45,7 @@ export async function updateOrderFinance(
 
 export async function deleteOrder(orderId: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") {
-    throw new Error("Only admins can delete orders.");
-  }
+  requirePermission(user, "finance", "canDelete");
 
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) throw new Error("Order not found.");
@@ -60,9 +57,7 @@ export async function deleteOrder(orderId: string) {
 
 export async function generateEwayBill(orderId: string, ewayBillNumber: string) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "FINANCE")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "finance", "canCreate");
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },

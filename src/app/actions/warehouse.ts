@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 
 const orderStatusTrackingMap: Record<string, string> = {
@@ -28,6 +29,8 @@ const orderStatusTrackingMap: Record<string, string> = {
 };
 
 export async function syncOrderTrackingStatus(orderId: string, orderStatus: string) {
+  const user = await getSession();
+  requirePermission(user, "warehouse", "canEdit");
   const assets = await prisma.asset.findMany({
     where: { orderId, inventoryItemId: { not: null } },
     select: { inventoryItemId: true },
@@ -54,6 +57,8 @@ export async function allocateInventoryToOrder(
   orderId: string,
   inventoryItemIds: string[]
 ) {
+  const user = await getSession();
+  requirePermission(user, "warehouse", "canEdit");
   // Fetch the order's assets that are still pending (not yet allocated)
   const pendingAssets = await prisma.asset.findMany({
     where: { orderId, inventoryItemId: null, status: "pending" },
@@ -86,7 +91,7 @@ export async function allocateInventoryToOrder(
 
 export async function updateOrderStatus(orderId: string, status: string) {
   const user = await getSession();
-  if (!user) throw new Error("Unauthorized");
+  requirePermission(user, "warehouse", "canEdit");
   
   await prisma.order.update({
     where: { id: orderId },

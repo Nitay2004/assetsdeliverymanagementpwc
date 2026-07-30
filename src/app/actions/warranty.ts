@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 
 function parseDate(value: string | null): Date | null {
@@ -12,9 +13,7 @@ function parseDate(value: string | null): Date | null {
 
 export async function updateItemWarranty(id: string, formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "WARRANTY")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "warranty", "canEdit");
 
   await prisma.inventoryItem.update({
     where: { id },
@@ -30,9 +29,7 @@ export async function updateItemWarranty(id: string, formData: FormData) {
 
 export async function markOrderWarrantyUpdated(orderId: string) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "WARRANTY")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "warranty", "canEdit");
 
   await prisma.order.update({
     where: { id: orderId },

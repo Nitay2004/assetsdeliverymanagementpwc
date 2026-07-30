@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
 
@@ -67,9 +68,7 @@ export async function getWarehouses() {
 
 export async function createWarehouse(name: string, location?: string) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "FINANCE")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "finance", "canCreate");
   return prisma.warehouse.create({ data: { name, location } });
 }
 
@@ -98,9 +97,7 @@ export interface DcFormData {
 
 export async function generateDC(orderId: string, data: DcFormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "FINANCE")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "finance", "canCreate");
 
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) throw new Error("Order not found");
@@ -262,9 +259,7 @@ export async function getReversePickupForDc(rpId: string) {
 
 export async function generateReversePickupDc(rpId: string, data: DcFormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "FINANCE")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "finance", "canCreate");
 
   const rp = await prisma.reversePickupRequest.findUnique({ where: { id: rpId } });
   if (!rp) throw new Error("Reverse pickup request not found");
@@ -356,7 +351,7 @@ export async function getDispatchedThroughOptions() {
 
 export async function addDispatchedThroughOption(value: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "finance", "canCreate");
   await prisma.dropdownOption.upsert({
     where: { category_value: { category: "dispatchedThrough", value } },
     update: {},
@@ -366,7 +361,7 @@ export async function addDispatchedThroughOption(value: string) {
 
 export async function deleteDispatchedThroughOption(id: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "finance", "canDelete");
   await prisma.dropdownOption.delete({ where: { id } });
 }
 
@@ -382,7 +377,7 @@ export async function getBillToLocationOptions() {
 
 export async function addBillToLocationOption(value: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "finance", "canCreate");
   await prisma.dropdownOption.upsert({
     where: { category_value: { category: "billToLocation", value } },
     update: {},
@@ -392,7 +387,7 @@ export async function addBillToLocationOption(value: string) {
 
 export async function deleteBillToLocationOption(id: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "finance", "canDelete");
   await prisma.dropdownOption.delete({ where: { id } });
 }
 

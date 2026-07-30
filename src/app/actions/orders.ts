@@ -2,14 +2,13 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 export async function addOrder(formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "WAREHOUSE")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "warehouse", "canCreate");
 
   const clientName = formData.get("clientName") as string;
   const intermediary = formData.get("intermediary") as string;
@@ -41,9 +40,7 @@ export async function addOrder(formData: FormData) {
 
 export async function updateOrder(id: string, formData: FormData) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "WAREHOUSE")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "warehouse", "canEdit");
 
   const clientName = formData.get("clientName") as string;
   const intermediary = formData.get("intermediary") as string;
@@ -98,9 +95,7 @@ export async function updateOrder(id: string, formData: FormData) {
 
 export async function deleteOrder(id: string) {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "WAREHOUSE")) {
-    throw new Error("Unauthorized");
-  }
+  requirePermission(user, "warehouse", "canDelete");
 
   await prisma.order.delete({ where: { id } });
 

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 
 async function getNextGrnNumber(): Promise<string> {
@@ -27,7 +28,7 @@ export async function getVendors() {
 
 export async function addVendor(formData: FormData) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "vendor-master", "canCreate");
 
   const grnNumber = await getNextGrnNumber();
 
@@ -50,7 +51,7 @@ export async function addVendor(formData: FormData) {
 
 export async function updateVendor(id: string, formData: FormData) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "vendor-master", "canEdit");
 
   await prisma.vendorMaster.update({
     where: { id },
@@ -69,7 +70,7 @@ export async function updateVendor(id: string, formData: FormData) {
 
 export async function deleteVendor(id: string) {
   const user = await getSession();
-  if (!user || user.role !== "ADMIN") throw new Error("Unauthorized");
+  requirePermission(user, "vendor-master", "canDelete");
 
   await prisma.vendorMaster.delete({ where: { id } });
 
