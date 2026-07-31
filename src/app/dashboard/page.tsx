@@ -60,6 +60,7 @@ export default async function DashboardPage(props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await getSession();
+  const isPwc = user?.role === "PWC";
   const searchParams = await props.searchParams;
   const fromRaw = typeof searchParams.from === "string" ? searchParams.from : undefined;
   const toRaw = typeof searchParams.to === "string" ? searchParams.to : undefined;
@@ -325,6 +326,7 @@ export default async function DashboardPage(props: {
           modalIconBg="bg-red-50"
           statuses={["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"]}
         />
+        {!isPwc && (
           <InventorySlaStatCard
             icon={<CheckCircle className="size-5 text-green-600" />}
             iconBg="bg-green-50"
@@ -336,6 +338,7 @@ export default async function DashboardPage(props: {
             modalIconBg="bg-green-50"
             slaValue="MET"
           />
+        )}
         </div>
       </div>
 
@@ -408,17 +411,19 @@ export default async function DashboardPage(props: {
             modalIconBg="bg-violet-50"
             statuses={["DC_REQUESTED", "QC_COMPLETED", "DC_GENERATED"]}
           />
-          <ReverseStatCard
-            icon={<CheckCircle className="size-5 text-green-600" />}
-            iconBg="bg-green-50"
-            label="SLA Met"
-            value={reverseSlaMet}
-            subtitle="Within TAT"
-            modalTitle="SLA Met Requests"
-            modalIcon={<CheckCircle className="size-5 text-green-600" />}
-            modalIconBg="bg-green-50"
-            statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "INSPECTED", "PICKED_UP", "RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "BLANCO_CERTIFIED", "COMPLETED"]}
-          />
+          {!isPwc && (
+            <ReverseStatCard
+              icon={<CheckCircle className="size-5 text-green-600" />}
+              iconBg="bg-green-50"
+              label="SLA Met"
+              value={reverseSlaMet}
+              subtitle="Within TAT"
+              modalTitle="SLA Met Requests"
+              modalIcon={<CheckCircle className="size-5 text-green-600" />}
+              modalIconBg="bg-green-50"
+              statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "INSPECTED", "PICKED_UP", "RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "BLANCO_CERTIFIED", "COMPLETED"]}
+            />
+          )}
         </div>
       </div>
 

@@ -67,6 +67,24 @@ export function getDefaultPermissions(role?: string): Permissions {
     defaults.warranty = { canView: true, canCreate: false, canEdit: true, canDelete: false };
   }
 
+  if (role === "PWC") {
+    const viewOnlyModules: ModuleId[] = [
+      "inventory",
+      "assigned-assets",
+      "warehouse",
+      "provisioning",
+      "finance",
+      "logistics",
+      "reverse-pickup",
+      "warranty",
+      "product-master",
+      "vendor-master",
+    ];
+    for (const key of viewOnlyModules) {
+      defaults[key] = { canView: true, canCreate: false, canEdit: false, canDelete: false };
+    }
+  }
+
   return defaults;
 }
 

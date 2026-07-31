@@ -275,6 +275,7 @@ export function UsersTable({ users }: { users: UserRow[] }) {
                   <option value="LOGISTICS">Logistics</option>
                   <option value="REVERSE_PICKUP">Reverse Pickup</option>
                   <option value="WARRANTY">Warranty</option>
+                  <option value="PWC">PWC</option>
                 </select>
               </div>
               <button

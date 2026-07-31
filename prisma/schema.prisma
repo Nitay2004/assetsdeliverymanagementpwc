@@ -64,6 +64,7 @@ enum UserRole {
   LOGISTICS
   WARRANTY
   REVERSE_PICKUP
+  PWC
 }
 
 model User {
