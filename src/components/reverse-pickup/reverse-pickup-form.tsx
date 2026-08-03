@@ -252,21 +252,6 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
         </div>
       </div>
 
-      {/* ── Warehouse / Logistics ── */}
-      <div className="rounded-xl glass shadow-sm p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">Warehouse &amp; Logistics</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <DDField name="warehouseLocation" label="Warehouse" category="warehouseLocation" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
-          <ManualInput name="receiverSerialNo" label="Receiver Serial No" placeholder="Receiver SN" />
-          <AutoField label="Receiver S NO Entity" value="(auto)" />
-          <DDField name="displayStatus" label="Status" category="displayStatus" placeholder="Select status..." dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
-          <ManualInput name="eta" label="ETA" type="date" />
-          <ManualInput name="futureDatePickup" label="Future Date Pickup" type="date" />
-          <DDField name="dependency" label="Dependency" category="dependency" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
-          <ManualInput name="remarks" label="Remarks" colSpan type="textarea" placeholder="General remarks..." />
-        </div>
-      </div>
-
       {/* ── SLA / TAT ── */}
       <div className="rounded-xl glass shadow-sm p-6 space-y-4">
         <h2 className="text-lg font-semibold text-foreground">SLA &amp; TAT</h2>
@@ -283,42 +268,6 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
           <ManualInput name="actualDeliveryPodDate" label="Actual Delivery/POD Date" type="date" />
           <AutoField label="SLA" value="(auto)" />
           <AutoField label="Laptop Acceptance Date" value="(auto)" />
-        </div>
-      </div>
-
-      {/* ── Courier / Tracking ── */}
-      <div className="rounded-xl glass shadow-sm p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">Courier &amp; Tracking</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <DDField name="courierName" label="Courier Name" category="courierName" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
-          <ManualInput name="docketNumber" label="Docket No" placeholder="Docket / AWB" />
-          <ManualInput name="pickupDate" label="Pickup Date" type="date" />
-          <AutoField label="DC No" value="(auto)" />
-          <ManualInput name="srnNo" label="SRN No" placeholder="SRN number" />
-          <AutoField label="E Way Bill No" value="(auto)" />
-          <ManualInput name="etaForUnitReceived" label="ETA for Unit to be Received" type="date" />
-          <AutoField label="Case Age" value="(auto)" />
-        </div>
-      </div>
-
-      {/* ── Blancco ── */}
-      <div className="rounded-xl glass shadow-sm p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">Blancco</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <DDField name="blanccoYesNo" label="Blancco Yes/No" category="blanccoYesNo" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
-          <ManualInput name="blanccoDate" label="Blancco Date" type="date" />
-        </div>
-      </div>
-
-      {/* ── Case Info ── */}
-      <div className="rounded-xl glass shadow-sm p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">Case Info</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ManualInput name="caseId" label="Case ID" placeholder="CASE-001" />
-          <ManualInput name="issueReported" label="Issue Reported" placeholder="Describe the issue" colSpan type="textarea" />
-          <ManualInput name="replacementPart" label="Replacement Part" placeholder="Part name / number" colSpan />
-          <ManualInput name="exceptionRemarks" label="Exception Remarks" colSpan type="textarea" placeholder="Exception details..." />
-          <ManualInput name="remark" label="Remark" colSpan type="textarea" placeholder="Additional remark..." />
         </div>
       </div>
 

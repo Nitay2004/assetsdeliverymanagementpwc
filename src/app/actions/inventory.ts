@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
+import { hasPriorDelivery, createAssignmentOrder } from "@/app/actions/assignment";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -105,6 +106,8 @@ export async function addInventoryItem(formData: FormData) {
         dcNumber: (formData.get("dcNumber") as string) || null,
         date: parseDate(formData.get("date") as string),
         csvStatus: (formData.get("csvStatus") as string) || null,
+        inwardDate1: parseDate(formData.get("inwardDate") as string),
+        outwardDate1: parseDate(formData.get("outwardDate") as string),
       },
     });
   } catch (e) {
@@ -209,6 +212,8 @@ export async function updateInventoryItem(id: string, formData: FormData) {
         dcNumber: (formData.get("dcNumber") as string) || null,
         date: parseDate(formData.get("date") as string),
         csvStatus: (formData.get("csvStatus") as string) || null,
+        inwardDate1: parseDate(formData.get("inwardDate") as string),
+        outwardDate1: parseDate(formData.get("outwardDate") as string),
       },
     });
   } catch (e: any) {
@@ -243,34 +248,39 @@ export async function returnItemToStock(id: string) {
 
   const existing = await prisma.inventoryItem.findUnique({ where: { id } });
 
-  // Save current assignment to history before clearing
+  // Save current assignment to history before clearing (skip if already recorded)
   if (existing?.employeeName) {
-    await prisma.assignmentRecord.create({
-      data: {
-        inventoryItemId: id,
-        employeeName: existing.employeeName,
-        emailId: existing.emailId,
-        mobileNumber: existing.mobileNumber,
-        alternatePhoneNumber: existing.alternatePhoneNumber,
-        shippingAddress: existing.shippingAddress,
-        landMark: existing.landMark,
-        city: existing.city,
-        state: existing.state,
-        pinCode: existing.pinCode,
-        purpose: existing.purpose,
-        requestDate: existing.requestDate,
-        userBaseLocation: existing.userBaseLocation,
-        imageType: existing.imageType,
-        count: existing.count,
-        pwcRemarks: existing.pwcRemarks,
-        trackingStatus: existing.trackingStatus,
-        trackingSubStatus: existing.trackingSubStatus,
-        dcNumber: existing.dcNumber,
-        docketNumber: existing.docketNumber,
-        deliveryDate: existing.deliveryDate,
-        assignedAt: new Date(),
-      },
+    const alreadyRecorded = await prisma.assignmentRecord.findFirst({
+      where: { inventoryItemId: id, employeeName: existing.employeeName },
     });
+    if (!alreadyRecorded) {
+      await prisma.assignmentRecord.create({
+        data: {
+          inventoryItemId: id,
+          employeeName: existing.employeeName,
+          emailId: existing.emailId,
+          mobileNumber: existing.mobileNumber,
+          alternatePhoneNumber: existing.alternatePhoneNumber,
+          shippingAddress: existing.shippingAddress,
+          landMark: existing.landMark,
+          city: existing.city,
+          state: existing.state,
+          pinCode: existing.pinCode,
+          purpose: existing.purpose,
+          requestDate: existing.requestDate,
+          userBaseLocation: existing.userBaseLocation,
+          imageType: existing.imageType,
+          count: existing.count,
+          pwcRemarks: existing.pwcRemarks,
+          trackingStatus: existing.trackingStatus,
+          trackingSubStatus: existing.trackingSubStatus,
+          dcNumber: existing.dcNumber,
+          docketNumber: existing.docketNumber,
+          deliveryDate: existing.deliveryDate,
+          assignedAt: new Date(),
+        },
+      });
+    }
   }
 
   await prisma.inventoryItem.update({
@@ -463,84 +473,140 @@ export async function reassignItem(id: string, formData: FormData) {
 
   // Always save current assignment to history before applying the new one
   const existing = await prisma.inventoryItem.findUnique({ where: { id } });
+  if (!existing) throw new Error("Item not found.");
 
-  // Save the current assignment data as a history record (preserving tracking status)
+  // Save the current assignment data as a history record (preserving tracking status),
+  // only if that user is not already recorded for this item.
   if (existing?.employeeName) {
-    await prisma.assignmentRecord.create({
+    const alreadyRecorded = await prisma.assignmentRecord.findFirst({
+      where: { inventoryItemId: id, employeeName: existing.employeeName },
+    });
+    if (!alreadyRecorded) {
+      await prisma.assignmentRecord.create({
+        data: {
+          inventoryItemId: id,
+          employeeName: existing.employeeName,
+          emailId: existing.emailId,
+          mobileNumber: existing.mobileNumber,
+          alternatePhoneNumber: existing.alternatePhoneNumber,
+          shippingAddress: existing.shippingAddress,
+          landMark: existing.landMark,
+          city: existing.city,
+          state: existing.state,
+          pinCode: existing.pinCode,
+          purpose: existing.purpose,
+          requestDate: existing.requestDate,
+          userBaseLocation: existing.userBaseLocation,
+          imageType: existing.imageType,
+          count: existing.count,
+          pwcRemarks: existing.pwcRemarks,
+          trackingStatus: existing.trackingStatus,
+          trackingSubStatus: existing.trackingSubStatus,
+          dcNumber: existing.dcNumber,
+          docketNumber: existing.docketNumber,
+          deliveryDate: existing.deliveryDate,
+          assignedAt: new Date(),
+        },
+      });
+    }
+  }
+
+  // Record the new assignment only when a user is actually assigned
+  if (employeeName) {
+    const alreadyRecorded = await prisma.assignmentRecord.findFirst({
+      where: { inventoryItemId: id, employeeName },
+    });
+    if (!alreadyRecorded) {
+      await prisma.assignmentRecord.create({
+        data: {
+          inventoryItemId: id,
+          employeeName,
+          emailId,
+          mobileNumber,
+          alternatePhoneNumber,
+          shippingAddress,
+          landMark,
+          city,
+          state,
+          pinCode,
+          purpose,
+          requestDate,
+          userBaseLocation,
+          imageType,
+          count,
+          pwcRemarks,
+        },
+      });
+    }
+  }
+
+  // QC (Clean & Purge) is only required for laptops that were delivered to a user
+  // and returned. Fresh/RTO laptops go straight into the allocation flow.
+  const wasDelivered = await hasPriorDelivery(existing.id, existing.serialNumber);
+
+  const assignmentFields = {
+    employeeName,
+    emailId,
+    mobileNumber,
+    alternatePhoneNumber,
+    shippingAddress,
+    landMark,
+    city,
+    state,
+    pinCode,
+    purpose,
+    requestDate,
+    userBaseLocation,
+    imageType,
+    count,
+    pwcRemarks,
+    partner,
+    sr,
+    entity,
+  };
+
+  if (wasDelivered) {
+    await prisma.inventoryItem.update({
+      where: { id },
       data: {
-        inventoryItemId: id,
-        employeeName: existing.employeeName,
-        emailId: existing.emailId,
-        mobileNumber: existing.mobileNumber,
-        alternatePhoneNumber: existing.alternatePhoneNumber,
-        shippingAddress: existing.shippingAddress,
-        landMark: existing.landMark,
-        city: existing.city,
-        state: existing.state,
-        pinCode: existing.pinCode,
-        purpose: existing.purpose,
-        requestDate: existing.requestDate,
-        userBaseLocation: existing.userBaseLocation,
-        imageType: existing.imageType,
-        count: existing.count,
-        pwcRemarks: existing.pwcRemarks,
-        trackingStatus: existing.trackingStatus,
-        trackingSubStatus: existing.trackingSubStatus,
-        dcNumber: existing.dcNumber,
-        docketNumber: existing.docketNumber,
-        deliveryDate: existing.deliveryDate,
-        assignedAt: new Date(),
+        status: "QC_PENDING",
+        qcRequestedAt: new Date(),
+        qcCleanResult: null,
+        qcCleanRemarks: null,
+        qcCleanDate: null,
+        qcCleanBy: null,
+        qcPurgeResult: null,
+        qcPurgeRemarks: null,
+        qcPurgeDate: null,
+        qcPurgeBy: null,
+        qcFinalResult: null,
+        qcRemarks: null,
+        qcCompletedAt: null,
+        ...assignmentFields,
       },
+    });
+  } else {
+    await prisma.inventoryItem.update({
+      where: { id },
+      data: {
+        status: "ALLOCATED",
+        trackingStatus: "Order Placed",
+        ...assignmentFields,
+      },
+    });
+    await createAssignmentOrder({
+      id: existing.id,
+      employeeName: employeeName || existing.employeeName,
+      entity,
+      city,
+      state,
     });
   }
 
-  await prisma.assignmentRecord.create({
-    data: {
-      inventoryItemId: id,
-      employeeName,
-      emailId,
-      mobileNumber,
-      alternatePhoneNumber,
-      shippingAddress,
-      landMark,
-      city,
-      state,
-      pinCode,
-      purpose,
-      requestDate,
-      userBaseLocation,
-      imageType,
-      count,
-      pwcRemarks,
-    },
-  });
-
-  await prisma.inventoryItem.update({
-    where: { id },
-    data: {
-      status: "ALLOCATED",
-      employeeName,
-      emailId,
-      mobileNumber,
-      alternatePhoneNumber,
-      shippingAddress,
-      landMark,
-      city,
-      state,
-      pinCode,
-      purpose,
-      requestDate,
-      userBaseLocation,
-      imageType,
-      count,
-      pwcRemarks,
-      partner,
-      sr,
-      entity,
-    },
-  });
-
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard/provisioning");
+  revalidatePath("/dashboard");
 }
 
 function safeToDateISO(val: Date | null | undefined): string | null {

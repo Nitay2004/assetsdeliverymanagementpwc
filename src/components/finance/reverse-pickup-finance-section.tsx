@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowUpRight, Loader2, FileText } from "lucide-react";
+import { ArrowUpRight, Loader2, FileText, Download } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { generateReversePickupEwayBill } from "@/app/actions/reverse-pickup";
@@ -16,6 +16,7 @@ interface RpRequest {
   status: string;
   dcNo: string | null;
   eWayBillNo: string | null;
+  eWayBillDocumentUrl: string | null;
 }
 
 interface Props {
@@ -31,6 +32,22 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
   const [saving, setSaving] = useState<string | null>(null);
   const [dcModalId, setDcModalId] = useState<string | null>(null);
   const [ewayInputs, setEwayInputs] = useState<Record<string, string>>({});
+  const [ewayFiles, setEwayFiles] = useState<Record<string, File>>({});
+
+  async function handleViewFile(path: string) {
+    try {
+      if (/^https?:\/\//i.test(path)) {
+        window.open(path, "_blank");
+        return;
+      }
+      const res = await fetch(`/api/pod-url?path=${encodeURIComponent(path)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load file");
+      window.open(data.url, "_blank");
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : String(err), variant: "error" });
+    }
+  }
 
   async function handleGenerateEway(requestId: string) {
     const eWayBillNo = ewayInputs[requestId];
@@ -38,14 +55,31 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
       toast({ title: "Error", description: "E-Way bill number is required.", variant: "error" });
       return;
     }
+    const file = ewayFiles[requestId];
     setSaving(requestId);
     try {
+      let attachmentUrl: string | null = null;
+      if (file) {
+        const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+        if (!["pdf", "jpg", "jpeg", "png"].includes(ext)) {
+          toast({ title: "Error", description: "Only PDF, JPG, JPEG and PNG files are allowed.", variant: "error" });
+          return;
+        }
+        const fd = new FormData();
+        fd.set("file", file);
+        const res = await fetch("/api/upload", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Upload failed");
+        attachmentUrl = data.url;
+      }
       const fd = new FormData();
       fd.set("id", requestId);
       fd.set("eWayBillNo", eWayBillNo.trim());
+      if (attachmentUrl) fd.set("eWayBillDocumentUrl", attachmentUrl);
       await generateReversePickupEwayBill(fd);
       toast({ title: "E-Way Bill Generated", description: "Reverse pickup E-Way bill has been generated.", variant: "success" });
       setEwayInputs(prev => { const n = { ...prev }; delete n[requestId]; return n; });
+      setEwayFiles(prev => { const n = { ...prev }; delete n[requestId]; return n; });
       router.refresh();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });
@@ -126,7 +160,23 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
                       </span>
                     ) : <span className="text-muted-foreground italic">—</span>}
                   </td>
-                  <td className="px-6 py-4 font-mono text-xs">{r.eWayBillNo || <span className="text-muted-foreground italic">—</span>}</td>
+                  <td className="px-6 py-4 font-mono text-xs">
+                    {r.eWayBillNo ? (
+                      <span className="inline-flex items-center gap-1">
+                        {r.eWayBillNo}
+                        {r.eWayBillDocumentUrl && (
+                          <button
+                            type="button"
+                            onClick={() => { if (r.eWayBillDocumentUrl) handleViewFile(r.eWayBillDocumentUrl); }}
+                            className="p-0.5 text-muted-foreground hover:text-orange-600 transition-colors"
+                            title="View E-Way Bill attachment"
+                          >
+                            <Download className="size-3.5" />
+                          </button>
+                        )}
+                      </span>
+                    ) : <span className="text-muted-foreground italic">—</span>}
+                  </td>
                   {canManage && (
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -144,6 +194,15 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
                           {saving === r.id ? <Loader2 className="size-3 animate-spin" /> : null}
                           {saving === r.id ? "Saving..." : "Generate"}
                         </button>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          onChange={e => { const f = e.target.files?.[0] ?? null; if (f) setEwayFiles(prev => ({ ...prev, [r.id]: f })); }}
+                          className="text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+                        />
+                        {ewayFiles[r.id] && <span className="text-xs text-muted-foreground truncate max-w-[100px]">{ewayFiles[r.id].name}</span>}
                       </div>
                     </td>
                   )}

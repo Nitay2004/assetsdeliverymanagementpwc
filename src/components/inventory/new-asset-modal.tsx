@@ -35,6 +35,7 @@ export function NewAssetModal({ open, onClose }: Props) {
   const [description, setDescription] = useState("");
   const [warrantyStart, setWarrantyStart] = useState(formatDate(new Date()));
   const [warrantyPeriod, setWarrantyPeriod] = useState("");
+  const [inwardDate, setInwardDate] = useState(formatDate(new Date()));
   const [loadingLookup, setLoadingLookup] = useState(false);
   const [warehouseLocation, setWarehouseLocation] = useState("");
   const { data: dropdownData, handleAddOption, handleDeleteOption } = useDropdownData();
@@ -114,6 +115,7 @@ export function NewAssetModal({ open, onClose }: Props) {
       fd.set("warrantyPeriod", warrantyPeriod);
       fd.set("warrantyEndPeriod", warrantyEnd);
       fd.set("invoicingWarehouse", warehouseLocation);
+      fd.set("inwardDate", inwardDate);
 
       await addInventoryItem(fd);
       toast({ title: "Added", description: "New asset added to inventory.", variant: "success" });
@@ -135,6 +137,7 @@ export function NewAssetModal({ open, onClose }: Props) {
     setDescription("");
     setWarrantyPeriod("");
     setWarrantyStart(formatDate(new Date()));
+    setInwardDate(formatDate(new Date()));
   }
 
   if (!open) return null;
@@ -268,6 +271,15 @@ export function NewAssetModal({ open, onClose }: Props) {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Inward Date</label>
+              <input
+                type="date"
+                value={inwardDate}
+                onChange={e => setInwardDate(e.target.value)}
+                className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-foreground">Warranty Start Date</label>
               <input

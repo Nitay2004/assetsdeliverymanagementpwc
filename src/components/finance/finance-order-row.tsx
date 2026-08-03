@@ -44,6 +44,7 @@ interface DocketData {
   id: string;
   docketNumber: string | null;
   ewayBillNumber: string | null;
+  ewayBillDocumentUrl: string | null;
 }
 
 interface AssetItem {
@@ -96,6 +97,7 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
   const [showDcModal, setShowDcModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [ewayBillInput, setEwayBillInput] = useState("");
+  const [ewayFile, setEwayFile] = useState<File | null>(null);
 
   const [formData, setFormData] = useState({
     clientName: order.clientName,
@@ -150,13 +152,43 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
     }
     setSaving(true);
     try {
-      await generateEwayBill(order.id, ewayBillInput.trim());
+      let attachmentUrl: string | null = null;
+      if (ewayFile) {
+        const ext = ewayFile.name.split(".").pop()?.toLowerCase() ?? "";
+        if (!["pdf", "jpg", "jpeg", "png"].includes(ext)) {
+          toast({ title: "Error", description: "Only PDF, JPG, JPEG and PNG files are allowed.", variant: "error" });
+          return;
+        }
+        const fd = new FormData();
+        fd.set("file", ewayFile);
+        const res = await fetch("/api/upload", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Upload failed");
+        attachmentUrl = data.url;
+      }
+      await generateEwayBill(order.id, ewayBillInput.trim(), attachmentUrl);
       toast({ title: "E-Way Bill Generated", description: "E-Way bill number has been saved.", variant: "success" });
       setEwayBillInput("");
+      setEwayFile(null);
       router.refresh();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });
     } finally { setSaving(false); }
+  }
+
+  async function handleViewFile(path: string) {
+    try {
+      if (/^https?:\/\//i.test(path)) {
+        window.open(path, "_blank");
+        return;
+      }
+      const res = await fetch(`/api/pod-url?path=${encodeURIComponent(path)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load file");
+      window.open(data.url, "_blank");
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : String(err), variant: "error" });
+    }
   }
 
   async function handleDownloadDc(dcId: string) {
@@ -210,7 +242,22 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
             <span className="text-amber-600 text-xs italic">Awaiting Finance</span>
           ) : (
             <span>
-              {order.dockets.map(d => d.ewayBillNumber).filter(Boolean).join(", ") || <span className="text-muted-foreground italic text-xs">—</span>}
+              {order.dockets.map((d, i) => (
+                <span key={d.id} className="inline-flex items-center gap-1">
+                  {i > 0 && <span>, </span>}
+                  {d.ewayBillNumber || <span className="text-muted-foreground italic text-xs">—</span>}
+                  {d.ewayBillDocumentUrl && (
+                    <button
+                      type="button"
+                      onClick={() => { if (d.ewayBillDocumentUrl) handleViewFile(d.ewayBillDocumentUrl); }}
+                      className="p-0.5 text-muted-foreground hover:text-orange-600 transition-colors"
+                      title="View E-Way Bill attachment"
+                    >
+                      <Download className="size-3.5" />
+                    </button>
+                  )}
+                </span>
+              ))}
             </span>
           )}
         </td>
@@ -355,6 +402,15 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
                       <span key={d.id} className="px-2.5 py-1 rounded-md bg-background border text-xs font-mono">
                         {d.docketNumber}
                         {d.ewayBillNumber && <span className="text-orange-600 ml-2">E-Way: {d.ewayBillNumber}</span>}
+                        {d.ewayBillDocumentUrl && (
+                          <button
+                            type="button"
+                            onClick={() => { if (d.ewayBillDocumentUrl) handleViewFile(d.ewayBillDocumentUrl); }}
+                            className="text-primary ml-2 hover:underline"
+                          >
+                            View attachment
+                          </button>
+                        )}
                       </span>
                     ))}
                   </div>
@@ -374,6 +430,15 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
                       className="px-3 py-1.5 rounded text-xs font-semibold bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 transition-colors">
                       {saving ? "Saving..." : "Generate E-Way Bill"}
                     </button>
+                  </div>
+                  <div className="flex items-center gap-3 mt-3">
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={e => setEwayFile(e.target.files?.[0] ?? null)}
+                      className="text-xs file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+                    />
+                    {ewayFile && <span className="text-xs text-muted-foreground">{ewayFile.name}</span>}
                   </div>
                 </div>
               )}

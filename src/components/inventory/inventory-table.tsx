@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Trash2, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2, Send, ClipboardCheck } from "lucide-react";
 import { deleteInventoryItem, sendToWarehouse, getInventoryItem } from "@/app/actions/inventory";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { InventoryDetailDrawer } from "./inventory-detail-drawer";
+import { SendToQcModal } from "./send-to-qc-modal";
 import { DataTableFilter, filterRows, UrlDataTableFilter } from "@/components/shared/data-table-filter";
 
 interface LatestAssignment {
@@ -106,6 +107,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
   // Selection state for bulk operations
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSending, setIsSending] = useState(false);
+  const [qcItem, setQcItem] = useState<InventoryItem | null>(null);
 
   // Auto-open drawer when selectedId is set (from search)
   useEffect(() => {
@@ -265,7 +267,6 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
               </tr>
             ) : (
               filteredItems.map(item => {
-                const a = item._latestAssignment;
                 const canSend = item.status === "AVAILABLE" || item.status === "ALLOCATED";
                 const isSelected = selectedIds.has(item.id);
 
@@ -293,16 +294,18 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
                       item.status === 'NEW' ? 'bg-purple-100 text-purple-700' :
                       item.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
+                      item.status === 'QC_PENDING' ? 'bg-amber-100 text-amber-700' :
                       item.status === 'ALLOCATED' ? 'bg-blue-100 text-blue-700' :
-                      'bg-red-100 text-red-700'
+                      item.status === 'DEFECTIVE' ? 'bg-red-100 text-red-700' :
+                      'bg-slate-100 text-slate-700'
                     }`}>
-                      {item.status}
+                      {item.status === 'QC_PENDING' ? 'QC Pending' : item.status}
                     </span>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-muted-foreground">
                     {item.invoicingWarehouse || "—"}
                   </td>
-                  <td className="px-4 py-4 whitespace-nowrap">{a?.employeeName ?? item.employeeName}</td>
+                  <td className="px-4 py-4 whitespace-nowrap">{item.employeeName || "—"}</td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     {item.trackingStatus ? (
                       <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
@@ -314,6 +317,16 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                      {item.status === "AVAILABLE" && (
+                        <button
+                          onClick={() => setQcItem(item)}
+                          className="flex items-center gap-1.5 rounded-md bg-amber-50 text-amber-700 px-2.5 py-1 text-xs font-semibold hover:bg-amber-100 transition-colors"
+                          title="Fill user details and send for QC"
+                        >
+                          <ClipboardCheck className="size-3.5" />
+                          QC
+                        </button>
+                      )}
                       {canSend && (
                         <button
                           onClick={() => handleSendToWarehouse([item.id])}
@@ -388,6 +401,12 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
           onClose={() => setSelectedItem(null)}
         />
       )}
+
+      <SendToQcModal
+        open={!!qcItem}
+        onClose={() => setQcItem(null)}
+        item={qcItem}
+      />
     </div>
   );
 }

@@ -35,6 +35,7 @@ enum OrderStatus {
 enum InventoryStatus {
   NEW
   AVAILABLE
+  QC_PENDING
   ALLOCATED
   DEFECTIVE
   RETIRED
@@ -46,7 +47,19 @@ enum ReversePickupStatus {
   DOCKET_REQUESTED
   INSPECTED
   PICKED_UP
+  PICKUP_CANCELLED
+  DUPLICATE
+  ALREADY_SUBMITTED_TO_PWC_OFFICE
+  PENDING
+  PWC_CONFIRMATION_AWAITED
+  GATEPASS_PENDING
+  ALIGN_FOR_PICKUP
+  IN_TRANSIT
+  ON_HOLD
+  RTO_CASE
+  LOST_DEVICE
   RECEIVED_AT_WAREHOUSE
+  QC_CLEANED
   QC_COMPLETED
   DC_REQUESTED
   DC_GENERATED
@@ -203,6 +216,62 @@ model InventoryItem {
   dcNumber                  String?         @map("dc_number")
   date                      DateTime?       @map("date") @db.Date
   csvStatus                 String?         @map("csv_status")
+
+  // Provisioning asset tracking (from provisioning/asset import)
+  engineerName          String?         @map("engineer_name")
+  condition             String?         @map("condition")
+  storageStatus         String?         @map("storage_status")
+  rackNo                String?         @map("rack_no")
+  devItInwardLotNo      String?         @map("dev_it_inward_lot_no")
+  hpLotNumber           String?         @map("hp_lot_number")
+  lotReceivedDate       DateTime?         @map("lot_received_date") @db.Date
+  shippingDate          DateTime?         @map("shipping_date") @db.Date
+  assetRemarks          String?           @map("asset_remarks")
+  previousImageDate     DateTime?         @map("previous_image_date") @db.Date
+  latestShippedDate     DateTime?         @map("latest_shipped_date") @db.Date
+  latestCourierName     String?           @map("latest_courier_name")
+  latestDocketNumber    String?           @map("latest_docket_number")
+  latestTrackingStatus  String?           @map("latest_tracking_status")
+  latestEwayBill        String?           @map("latest_eway_bill")
+  latestDeliveryDate    DateTime?         @map("latest_delivery_date") @db.Date
+  latestDc              String?           @map("latest_dc")
+  inwardDate1           DateTime?         @map("inward_date_1") @db.Date
+  outwardDate1          DateTime?         @map("outward_date_1") @db.Date
+  inwardDate2           DateTime?         @map("inward_date_2") @db.Date
+  outwardDate2          DateTime?         @map("outward_date_2") @db.Date
+  inwardDate3           DateTime?         @map("inward_date_3") @db.Date
+  outwardDate3          DateTime?         @map("outward_date_3") @db.Date
+  inwardDate4           DateTime?         @map("inward_date_4") @db.Date
+  outwardDate4          DateTime?         @map("outward_date_4") @db.Date
+  inwardDate5           DateTime?         @map("inward_date_5") @db.Date
+  outwardDate5          DateTime?         @map("outward_date_5") @db.Date
+  inwardDate6           DateTime?         @map("inward_date_6") @db.Date
+  outwardDate6          DateTime?         @map("outward_date_6") @db.Date
+
+  // ── Assignment file fields (remote/office assignments) ──
+  reqDateToDevIt        DateTime?         @map("req_date_to_dev_it") @db.Date
+  deliveryTatDate       DateTime?         @map("delivery_tat_date") @db.Date
+  ewayBill              String?           @map("eway_bill")
+  docketDate            DateTime?         @map("docket_date") @db.Date
+  fromWarehouseLocation String?           @map("from_warehouse_location")
+
+
+  // ── QC before assignment (Clean & Purge) ──
+  qcRequestedAt             DateTime?       @map("qc_requested_at")
+  qcEngineer                String?         @map("qc_engineer")
+  qcAssignedAt              DateTime?       @map("qc_assigned_at")
+  qcLocation                String?         @map("qc_location")
+  qcCleanResult             String?         @map("qc_clean_result")
+  qcCleanRemarks            String?         @map("qc_clean_remarks")
+  qcCleanDate               DateTime?       @map("qc_clean_date")
+  qcCleanBy                 String?         @map("qc_clean_by")
+  qcPurgeResult             String?         @map("qc_purge_result")
+  qcPurgeRemarks            String?         @map("qc_purge_remarks")
+  qcPurgeDate               DateTime?       @map("qc_purge_date")
+  qcPurgeBy                 String?         @map("qc_purge_by")
+  qcFinalResult             String?         @map("qc_final_result")
+  qcRemarks                 String?         @map("qc_remarks")
+  qcCompletedAt             DateTime?       @map("qc_completed_at")
   createdAt                 DateTime        @default(now()) @map("created_at")
   updatedAt                 DateTime        @updatedAt @map("updated_at")
 
@@ -390,6 +459,7 @@ model ReversePickupRequest {
   dcNo                  String?              @map("dc_no") // Automatic
   srnNo                 String?              @map("srn_no")
   eWayBillNo            String?              @map("e_way_bill_no") // Automatic
+  eWayBillDocumentUrl   String?              @map("e_way_bill_document_url")
   etaForUnitReceived    DateTime?            @map("eta_for_unit_received") @db.Date
   caseAge               String?              @map("case_age") // Automatic
 
@@ -410,6 +480,18 @@ model ReversePickupRequest {
   qcDate                DateTime?            @map("qc_date") @db.Date
   qcPerformedBy         String?              @map("qc_performed_by")
   qcResult              String?              @map("qc_result")
+
+  // ── QC Level 1: Clean ──
+  qcCleanResult         String?              @map("qc_clean_result")
+  qcCleanRemarks        String?              @map("qc_clean_remarks")
+  qcCleanDate           DateTime?            @map("qc_clean_date") @db.Date
+  qcCleanBy             String?              @map("qc_clean_by")
+
+  // ── QC Level 2: Purge ──
+  qcPurgeResult         String?              @map("qc_purge_result")
+  qcPurgeRemarks        String?              @map("qc_purge_remarks")
+  qcPurgeDate           DateTime?            @map("qc_purge_date") @db.Date
+  qcPurgeBy             String?              @map("qc_purge_by")
 
   // ── Blancco ──
   blanccoYesNo          String?              @map("blancco_yes_no") // DD
@@ -478,14 +560,15 @@ model ProductMaster {
 }
 
 model Docket {
-  id             String   @id @default(uuid()) @db.Uuid
-  orderId        String   @map("order_id") @db.Uuid
-  docketNumber   String?  @map("docket_number")
-  ewayBillNumber String?  @map("eway_bill_number")
-  podDocumentUrl String?  @map("pod_document_url")
-  createdAt      DateTime @default(now()) @map("created_at")
+  id                   String   @id @default(uuid()) @db.Uuid
+  orderId              String   @map("order_id") @db.Uuid
+  docketNumber         String?  @map("docket_number")
+  ewayBillNumber       String?  @map("eway_bill_number")
+  ewayBillDocumentUrl  String?  @map("eway_bill_document_url")
+  podDocumentUrl       String?  @map("pod_document_url")
+  createdAt            DateTime @default(now()) @map("created_at")
 
-  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order                Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("dockets")
 }

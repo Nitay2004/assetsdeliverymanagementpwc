@@ -74,7 +74,19 @@ export const STATUS_LABELS: Record<string, string> = {
   DOCKET_REQUESTED: "Docket Requested",
   INSPECTED: "Inspected",
   PICKED_UP: "Picked Up",
+  PICKUP_CANCELLED: "Pickup Cancelled",
+  DUPLICATE: "Duplicate",
+  ALREADY_SUBMITTED_TO_PWC_OFFICE: "Already Submitted to PWC Office",
+  PENDING: "Pending",
+  PWC_CONFIRMATION_AWAITED: "PwC Confirmation Awaited",
+  GATEPASS_PENDING: "Gatepass Pending",
+  ALIGN_FOR_PICKUP: "Align for Pickup",
+  IN_TRANSIT: "In Transit",
+  ON_HOLD: "On Hold",
+  RTO_CASE: "RTO Case",
+  LOST_DEVICE: "Lost Device",
   RECEIVED_AT_WAREHOUSE: "At Warehouse",
+  QC_CLEANED: "Clean QC",
   QC_COMPLETED: "QC Completed",
   DC_REQUESTED: "DC Requested",
   DC_GENERATED: "DC Generated",
@@ -87,16 +99,17 @@ export const STATUS_LABELS: Record<string, string> = {
 export const STATUS_FLOW: Record<string, { next: string; label: string } | null> = {
   REQUESTED:              { next: "PARTNER_ASSIGNED",      label: "Assign Partner" },
   PARTNER_ASSIGNED:       { next: "DOCKET_REQUESTED",      label: "Request Docket" },
-  DOCKET_REQUESTED:       null,  // Logistics assigns docket and advances to INSPECTED
-  INSPECTED:              { next: "PICKED_UP",             label: "Mark Picked Up" },
-  PICKED_UP:              { next: "RECEIVED_AT_WAREHOUSE", label: "Receive at Warehouse" },
-  RECEIVED_AT_WAREHOUSE:  { next: "QC_COMPLETED",          label: "Record QC" },
-  QC_COMPLETED:           { next: "DC_REQUESTED",          label: "Request DC" },
+  DOCKET_REQUESTED:       null,  // Logistics assigns docket and advances to DC_REQUESTED
   DC_REQUESTED:           null,  // Finance generates DC
   DC_GENERATED:           { next: "EWAY_BILL_REQUESTED",   label: "Request E-Way Bill" },
   EWAY_BILL_REQUESTED:    null,  // Finance generates e-way bill
-  EWAY_BILL_GENERATED:    { next: "BLANCO_CERTIFIED",      label: "Upload Blanco Certificate" },
-  BLANCO_CERTIFIED:       { next: "COMPLETED",             label: "Complete" },
+  EWAY_BILL_GENERATED:    { next: "INSPECTED",             label: "Record Inspection" },
+  INSPECTED:              { next: "PICKED_UP",             label: "Mark Picked Up" },
+  PICKED_UP:              { next: "RECEIVED_AT_WAREHOUSE", label: "Receive at Warehouse" },
+  RECEIVED_AT_WAREHOUSE:  { next: "QC_CLEANED",          label: "Record Clean QC" },
+  QC_CLEANED:             { next: "QC_COMPLETED",        label: "Record Purge QC" },
+  QC_COMPLETED:           { next: "BLANCO_CERTIFIED",      label: "Upload Blanco Certificate" },
+  BLANCO_CERTIFIED:       { next: "COMPLETED",             label: "Move to Inventory" },
   COMPLETED:              null,
 };
 

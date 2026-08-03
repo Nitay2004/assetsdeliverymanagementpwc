@@ -18,6 +18,25 @@ function parseIntValue(value: string | null): number | null {
   return isNaN(n) ? null : n;
 }
 
+async function nextReversePickupRequestNumber(): Promise<string> {
+  const last = await prisma.reversePickupRequest.findFirst({
+    where: { requestNumber: { startsWith: "RPU-" } },
+    orderBy: { requestNumber: "desc" },
+    select: { requestNumber: true },
+  });
+
+  let seq = 1;
+  if (last) {
+    const match = last.requestNumber.match(/RPU-(\d+)$/);
+    if (match) {
+      const n = parseInt(match[1], 10);
+      if (!isNaN(n)) seq = n + 1;
+    }
+  }
+
+  return `RPU-${String(seq).padStart(4, "0")}`;
+}
+
 export async function getReversePickupRequests() {
   const user = await getSession();
   if (!user) throw new Error("Unauthorized");
@@ -50,8 +69,7 @@ export async function createReversePickupRequest(formData: FormData) {
     throw new Error("Serial number, model, employee name, and pickup address are required.");
   }
 
-  const count = await prisma.reversePickupRequest.count();
-  const requestNumber = `RPU-${String(count + 1).padStart(4, "0")}`;
+  const requestNumber = await nextReversePickupRequestNumber();
 
   const year = formData.get("year") as string;
   const currentYear = year ? parseIntValue(year) : new Date().getFullYear();
@@ -242,12 +260,17 @@ export async function markAsPickedUp(formData: FormData) {
 
   if (!id) throw new Error("Request ID is required.");
 
+  const existing = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: { docketNumber: true },
+  });
+
   await prisma.reversePickupRequest.update({
     where: { id },
     data: {
       status: "PICKED_UP",
       pickupDate,
-      docketNumber: docketNumber || null,
+      docketNumber: docketNumber || existing?.docketNumber || null,
     },
   });
 
@@ -278,26 +301,52 @@ export async function receiveAtWarehouse(formData: FormData) {
   revalidatePath("/dashboard/reverse-pickup");
 }
 
-export async function recordQc(formData: FormData) {
+export async function recordCleanQc(formData: FormData) {
   const user = await getSession();
   requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
-  const qcResult = formData.get("qcResult") as string;
-  const qcRemarks = formData.get("qcRemarks") as string;
-  const qcDate = parseDate(formData.get("qcDate") as string);
-  const qcPerformedBy = formData.get("qcPerformedBy") as string;
+  const qcCleanResult = formData.get("qcCleanResult") as string;
+  const qcCleanRemarks = formData.get("qcCleanRemarks") as string;
+  const qcCleanDate = parseDate(formData.get("qcCleanDate") as string);
+  const qcCleanBy = formData.get("qcCleanBy") as string;
 
-  if (!id || !qcResult) throw new Error("Request ID and QC result are required.");
+  if (!id || !qcCleanResult) throw new Error("Request ID and Clean QC result are required.");
+
+  await prisma.reversePickupRequest.update({
+    where: { id },
+    data: {
+      status: "QC_CLEANED",
+      qcCleanResult,
+      qcCleanRemarks: qcCleanRemarks || null,
+      qcCleanDate,
+      qcCleanBy: qcCleanBy || null,
+    },
+  });
+
+  revalidatePath("/dashboard/reverse-pickup");
+}
+
+export async function recordPurgeQc(formData: FormData) {
+  const user = await getSession();
+  requirePermission(user, "reverse-pickup", "canEdit");
+
+  const id = formData.get("id") as string;
+  const qcPurgeResult = formData.get("qcPurgeResult") as string;
+  const qcPurgeRemarks = formData.get("qcPurgeRemarks") as string;
+  const qcPurgeDate = parseDate(formData.get("qcPurgeDate") as string);
+  const qcPurgeBy = formData.get("qcPurgeBy") as string;
+
+  if (!id || !qcPurgeResult) throw new Error("Request ID and Purge QC result are required.");
 
   await prisma.reversePickupRequest.update({
     where: { id },
     data: {
       status: "QC_COMPLETED",
-      qcResult,
-      qcRemarks: qcRemarks || null,
-      qcDate,
-      qcPerformedBy: qcPerformedBy || null,
+      qcPurgeResult,
+      qcPurgeRemarks: qcPurgeRemarks || null,
+      qcPurgeDate,
+      qcPurgeBy: qcPurgeBy || null,
     },
   });
 
@@ -331,44 +380,98 @@ export async function completeReversePickup(formData: FormData) {
   requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
-  const finalDisposition = formData.get("finalDisposition") as string;
-  const inventoryItemId = formData.get("inventoryItemId") as string;
+  if (!id) throw new Error("Request ID is required.");
 
-  if (!id || !finalDisposition) throw new Error("Request ID and final disposition are required.");
-
-  const updateData: Record<string, string | null> = {
-    status: "COMPLETED",
-    finalDisposition,
-  };
-
-  if (inventoryItemId) {
-    updateData.inventoryItemId = inventoryItemId;
-  }
-
-  if (finalDisposition === "RESTOCKED" && inventoryItemId) {
-    await prisma.inventoryItem.update({
-      where: { id: inventoryItemId },
-      data: { status: "AVAILABLE" },
-    });
-  } else if (finalDisposition === "DEFECTIVE" && inventoryItemId) {
-    await prisma.inventoryItem.update({
-      where: { id: inventoryItemId },
-      data: { status: "DEFECTIVE" },
-    });
-  } else if (finalDisposition === "RETIRED" && inventoryItemId) {
-    await prisma.inventoryItem.update({
-      where: { id: inventoryItemId },
-      data: { status: "RETIRED" },
-    });
-  }
-
-  await prisma.reversePickupRequest.update({
+  const request = await prisma.reversePickupRequest.findUnique({
     where: { id },
-    data: updateData,
+    select: { serialNumber: true, inventoryItemId: true },
+  });
+  if (!request) throw new Error("Reverse pickup request not found.");
+
+  const inventoryItem = request.inventoryItemId
+    ? await prisma.inventoryItem.findUnique({ where: { id: request.inventoryItemId } })
+    : await prisma.inventoryItem.findUnique({ where: { serialNumber: request.serialNumber } });
+
+  await prisma.$transaction(async (tx) => {
+    if (inventoryItem) {
+      if (inventoryItem.employeeName) {
+        const alreadyRecorded = await tx.assignmentRecord.findFirst({
+          where: {
+            inventoryItemId: inventoryItem.id,
+            employeeName: inventoryItem.employeeName,
+          },
+        });
+        if (!alreadyRecorded) {
+          await tx.assignmentRecord.create({
+            data: {
+              inventoryItemId: inventoryItem.id,
+              employeeName: inventoryItem.employeeName,
+              emailId: inventoryItem.emailId,
+              mobileNumber: inventoryItem.mobileNumber,
+              alternatePhoneNumber: inventoryItem.alternatePhoneNumber,
+              shippingAddress: inventoryItem.shippingAddress,
+              landMark: inventoryItem.landMark,
+              city: inventoryItem.city,
+              state: inventoryItem.state,
+              pinCode: inventoryItem.pinCode,
+              purpose: inventoryItem.purpose,
+              requestDate: inventoryItem.requestDate,
+              userBaseLocation: inventoryItem.userBaseLocation,
+              imageType: inventoryItem.imageType,
+              count: inventoryItem.count,
+              pwcRemarks: inventoryItem.pwcRemarks,
+              trackingStatus: inventoryItem.trackingStatus,
+              trackingSubStatus: inventoryItem.trackingSubStatus,
+              dcNumber: inventoryItem.dcNumber,
+              docketNumber: inventoryItem.docketNumber,
+              deliveryDate: inventoryItem.deliveryDate,
+              assignedAt: new Date(),
+            },
+          });
+        }
+      }
+
+      await tx.inventoryItem.update({
+        where: { id: inventoryItem.id },
+        data: {
+          status: "AVAILABLE",
+          trackingStatus: null,
+          trackingSubStatus: null,
+          employeeName: null,
+          emailId: null,
+          mobileNumber: null,
+          alternatePhoneNumber: null,
+          shippingAddress: null,
+          landMark: null,
+          city: null,
+          state: null,
+          pinCode: null,
+          purpose: null,
+          requestDate: null,
+          userBaseLocation: null,
+          imageType: null,
+          count: null,
+          pwcRemarks: null,
+          dcNumber: null,
+          docketNumber: null,
+          deliveryDate: null,
+        },
+      });
+    }
+
+    await tx.reversePickupRequest.update({
+      where: { id },
+      data: {
+        status: "COMPLETED",
+        finalDisposition: "RESTOCKED",
+        inventoryItemId: inventoryItem?.id ?? request.inventoryItemId,
+      },
+    });
   });
 
   revalidatePath("/dashboard/reverse-pickup");
   revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 }
 
 // ─── Logistics / Finance handover actions ───
@@ -383,7 +486,7 @@ export async function assignReversePickupDocket(formData: FormData) {
 
   await prisma.reversePickupRequest.update({
     where: { id },
-    data: { docketNumber, status: "INSPECTED" },
+    data: { docketNumber, status: "DC_REQUESTED" },
   });
 
   revalidatePath("/dashboard/logistics");
@@ -396,11 +499,12 @@ export async function generateReversePickupEwayBill(formData: FormData) {
 
   const id = formData.get("id") as string;
   const eWayBillNo = formData.get("eWayBillNo") as string;
+  const eWayBillDocumentUrl = (formData.get("eWayBillDocumentUrl") as string) || null;
   if (!id || !eWayBillNo) throw new Error("Request ID and e-way bill number are required.");
 
   await prisma.reversePickupRequest.update({
     where: { id },
-    data: { eWayBillNo, status: "EWAY_BILL_GENERATED" },
+    data: { eWayBillNo, eWayBillDocumentUrl, status: "EWAY_BILL_GENERATED" },
   });
 
   revalidatePath("/dashboard/finance");

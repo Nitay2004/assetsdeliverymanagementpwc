@@ -78,7 +78,7 @@ export default async function DashboardPage(props: {
   const reverseWhere = createdAt ? { createdAt } : undefined;
 
   // Fetch all data in parallel
-  const [orders, inventoryItems, recentOrders, recentInventory, reversePickups, deliveredInventoryCount] = await Promise.all([
+  const [orders, inventoryItems, recentOrders, recentInventory, reversePickups, deliveredInventoryCount, inTransitInventoryCount, rtoInventoryCount] = await Promise.all([
     prisma.order.findMany({
       where: orderWhere,
       include: { assets: true },
@@ -110,15 +110,33 @@ export default async function DashboardPage(props: {
         ],
       },
     }),
+    prisma.inventoryItem.count({
+      where: {
+        status: "ALLOCATED",
+        OR: [
+          { trackingStatus: { contains: "in transit", mode: "insensitive" } },
+          { trackingSubStatus: { contains: "in transit", mode: "insensitive" } },
+        ],
+      },
+    }),
+    prisma.inventoryItem.count({
+      where: {
+        status: "ALLOCATED",
+        OR: [
+          { trackingStatus: { contains: "rto", mode: "insensitive" } },
+          { trackingSubStatus: { contains: "rto", mode: "insensitive" } },
+        ],
+      },
+    }),
   ]);
 
   // Compute stats
   const inProvisioningCount = orders.filter(o => o.status === "IN_PROVISIONING").length;
   const pendingAllocationCount = orders.filter(o => o.status === "ORDER_PLACED").length;
-  const inTransitCount = orders.filter(o => o.status === "DISPATCHED").length;
+  const inTransitCount = orders.filter(o => o.status === "DISPATCHED").length + inTransitInventoryCount;
   const packedAndLabelledCount = orders.filter(o => o.status === "PACKED_AND_LABELLED").length + deliveredInventoryCount;
   const deliveredCount = orders.filter(o => ["DELIVERED", "DELIVERY_CONFIRMED"].includes(o.status)).length + deliveredInventoryCount;
-  const rtoCount = orders.filter(o => ["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"].includes(o.status)).length;
+  const rtoCount = orders.filter(o => ["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"].includes(o.status)).length + rtoInventoryCount;
 
   const totalInventory = inventoryItems.length;
   const newStock = inventoryItems.filter((i) => i.status === "NEW").length;
@@ -131,10 +149,10 @@ export default async function DashboardPage(props: {
   // Reverse Shipment stats
   const reversePickupCount = reversePickups.length;
   const reversePickupsDone = reversePickups.filter((r) => ["PICKED_UP", "COMPLETED"].includes(r.status)).length;
-  const reversePickupsCancelled = reversePickups.filter((r) => r.remark?.toLowerCase().includes("cancel")).length;
-  const reverseInTransit = reversePickups.filter((r) => ["DOCKET_REQUESTED", "INSPECTED"].includes(r.status)).length;
-  const reverseReceivedInWh = reversePickups.filter((r) => r.status === "RECEIVED_AT_WAREHOUSE").length;
-  const reverseAlignQc = reversePickups.filter((r) => ["DC_REQUESTED", "QC_COMPLETED", "DC_GENERATED"].includes(r.status)).length;
+  const reversePickupsCancelled = reversePickups.filter((r) => r.status === "PICKUP_CANCELLED" || r.remark?.toLowerCase().includes("cancel")).length;
+  const reverseInTransit = reversePickups.filter((r) => ["IN_TRANSIT", "DOCKET_REQUESTED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "INSPECTED", "PICKED_UP"].includes(r.status)).length;
+  const reverseReceivedInWh = reversePickups.filter((r) => ["RECEIVED_AT_WAREHOUSE", "COMPLETED"].includes(r.status)).length;
+  const reverseAlignQc = reversePickups.filter((r) => ["QC_CLEANED", "QC_COMPLETED", "BLANCO_CERTIFIED"].includes(r.status)).length;
   const reverseSlaMet = reversePickups.filter((r) => r.sla?.toLowerCase() === "met").length;
 
   // Group inventory items by invoicing warehouse
@@ -302,6 +320,7 @@ export default async function DashboardPage(props: {
           modalIcon={<Truck className="size-5 text-orange-600" />}
           modalIconBg="bg-orange-100"
           statuses={["DISPATCHED"]}
+          inventoryTrackingKeywords={["in transit"]}
         />
         <OrderStatCard
           icon={<CheckCircle className="size-5 text-green-600" />}
@@ -325,6 +344,7 @@ export default async function DashboardPage(props: {
           modalIcon={<AlertTriangle className="size-5 text-red-500" />}
           modalIconBg="bg-red-50"
           statuses={["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"]}
+          inventoryTrackingKeywords={["rto"]}
         />
         {!isPwc && (
           <InventorySlaStatCard
@@ -355,7 +375,7 @@ export default async function DashboardPage(props: {
             modalTitle="All Reverse Requests"
             modalIcon={<Target className="size-5 text-blue-600" />}
             modalIconBg="bg-blue-50"
-            statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "INSPECTED", "PICKED_UP", "RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "BLANCO_CERTIFIED", "COMPLETED"]}
+            statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "INSPECTED", "PICKED_UP", "PICKUP_CANCELLED", "DUPLICATE", "ALREADY_SUBMITTED_TO_PWC_OFFICE", "PENDING", "PWC_CONFIRMATION_AWAITED", "GATEPASS_PENDING", "ALIGN_FOR_PICKUP", "IN_TRANSIT", "ON_HOLD", "RTO_CASE", "LOST_DEVICE", "RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED", "BLANCO_CERTIFIED", "COMPLETED"]}
           />
           <ReverseStatCard
             icon={<CheckCircle className="size-5 text-green-600" />}
@@ -387,7 +407,7 @@ export default async function DashboardPage(props: {
             modalTitle="In-Transit Requests"
             modalIcon={<Truck className="size-5 text-cyan-600" />}
             modalIconBg="bg-cyan-50"
-            statuses={["DOCKET_REQUESTED", "INSPECTED"]}
+            statuses={["IN_TRANSIT", "PICKED_UP", "DOCKET_REQUESTED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "INSPECTED"]}
           />
           <ReverseStatCard
             icon={<Warehouse className="size-5 text-emerald-600" />}
@@ -398,7 +418,7 @@ export default async function DashboardPage(props: {
             modalTitle="Received in Warehouse"
             modalIcon={<Warehouse className="size-5 text-emerald-600" />}
             modalIconBg="bg-emerald-50"
-            statuses={["RECEIVED_AT_WAREHOUSE"]}
+            statuses={["RECEIVED_AT_WAREHOUSE", "COMPLETED"]}
           />
           <ReverseStatCard
             icon={<ClipboardCheck className="size-5 text-violet-600" />}
@@ -409,7 +429,7 @@ export default async function DashboardPage(props: {
             modalTitle="Align for QC & Blancco"
             modalIcon={<ClipboardCheck className="size-5 text-violet-600" />}
             modalIconBg="bg-violet-50"
-            statuses={["DC_REQUESTED", "QC_COMPLETED", "DC_GENERATED"]}
+            statuses={["QC_CLEANED", "QC_COMPLETED", "BLANCO_CERTIFIED"]}
           />
           {!isPwc && (
             <ReverseStatCard
@@ -421,7 +441,7 @@ export default async function DashboardPage(props: {
               modalTitle="SLA Met Requests"
               modalIcon={<CheckCircle className="size-5 text-green-600" />}
               modalIconBg="bg-green-50"
-              statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "INSPECTED", "PICKED_UP", "RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "BLANCO_CERTIFIED", "COMPLETED"]}
+              statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "INSPECTED", "PICKED_UP", "PICKUP_CANCELLED", "DUPLICATE", "ALREADY_SUBMITTED_TO_PWC_OFFICE", "PENDING", "PWC_CONFIRMATION_AWAITED", "GATEPASS_PENDING", "ALIGN_FOR_PICKUP", "IN_TRANSIT", "ON_HOLD", "RTO_CASE", "LOST_DEVICE", "RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED", "BLANCO_CERTIFIED", "COMPLETED"]}
             />
           )}
         </div>

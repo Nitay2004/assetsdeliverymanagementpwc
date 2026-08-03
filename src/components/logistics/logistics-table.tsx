@@ -28,6 +28,7 @@ interface DocketData {
   id: string;
   docketNumber: string | null;
   ewayBillNumber: string | null;
+  ewayBillDocumentUrl: string | null;
   podDocumentUrl: string | null;
 }
 
@@ -260,6 +261,17 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
     }
   }
 
+  async function handleViewEwayBill(filePath: string) {
+    try {
+      const res = await fetch(`/api/pod-url?path=${encodeURIComponent(filePath)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load E-Way Bill");
+      window.open(data.url, "_blank");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "error" });
+    }
+  }
+
   function handleDownloadDc(dcId: string) {
     window.open(`/api/dc/${dcId}/pdf`, "_blank");
   }
@@ -368,8 +380,14 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
                       {order.dockets.some(d => d.ewayBillNumber) ? (
                         <div className="flex flex-wrap gap-1">
                           {order.dockets.filter(d => d.ewayBillNumber).map(d => (
-                            <span key={d.id} className="px-2 py-0.5 rounded bg-orange-50 text-orange-700 text-xs font-mono">
+                            <span key={d.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-orange-50 text-orange-700 text-xs font-mono">
                               {d.ewayBillNumber}
+                              {d.ewayBillDocumentUrl && (
+                                <button onClick={() => handleViewEwayBill(d.ewayBillDocumentUrl!)}
+                                  className="text-orange-600 hover:text-orange-800 transition-colors" title="View E-Way Bill document">
+                                  <Download className="size-3" />
+                                </button>
+                              )}
                             </span>
                           ))}
                         </div>
@@ -447,6 +465,22 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
                             E-Way bill has been requested from Finance. Once generated, it will appear here.
                           </p>
                         )}
+
+                        {/* E-Way Bill Documents */}
+                        {order.dockets.filter(d => d.ewayBillNumber).map(d => (
+                          <div key={d.id} className="flex items-center gap-3 p-3 rounded-lg bg-background border">
+                            <FileText className="size-4 text-orange-600" />
+                            <span className="font-mono font-semibold text-sm">{d.ewayBillNumber}</span>
+                            {d.ewayBillDocumentUrl ? (
+                              <button onClick={() => handleViewEwayBill(d.ewayBillDocumentUrl!)}
+                                className="px-2 py-1 rounded text-xs font-medium border hover:bg-muted transition-colors flex items-center gap-1">
+                                <Download className="size-3" /> Download Document
+                              </button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">Document not uploaded</span>
+                            )}
+                          </div>
+                        ))}
 
                         {/* Dockets */}
                         {order.dockets.length > 0 && (

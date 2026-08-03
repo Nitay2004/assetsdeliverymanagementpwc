@@ -3,24 +3,61 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import * as XLSX from "xlsx";
 
-function getVal(obj: Record<string, unknown>, field: string): unknown {
-  const val = obj[field];
-  if (val === null || val === undefined) return "";
-  if (val instanceof Date) {
-    if (isNaN(val.getTime())) return "";
-    return val.toISOString().split("T")[0];
-  }
-  if (typeof val === "object" && "toString" in val) {
-    return String((val as { toString(): string }).toString());
-  }
-  return String(val);
-}
+const HEADERS = [
+  "S.no",
+  "LOT Received date",
+  "Product",
+  "Serial No",
+  "Model",
+  "Owner of the Asset",
+  "Dev IT Inward Lot No",
+  "HP Lot Number",
+  "Provisioning Location",
+  "Provisioned Date",
+  "Master Provision Status-1 NEW",
+  "Asset Remarks",
+  "Condition (Working/Non Working)",
+  "Current warehouse location",
+  "Engineer Name",
+  "PWC Image",
+  "PWCEntity",
+  "Shipping Date",
+  "Storage Status",
+  "Courier Name",
+  "Docket #",
+  "CONFIRMATION DISPLAY",
+  "RACK NO",
+  "REMARKS",
+  "Delivery Date",
+  "Warranty End Date",
+  "Previous image date",
+  "Latest Employee Name",
+  "Location - City",
+  "Latest Shipped Date (Provision Image)",
+  "Courier Name",
+  "Latest Docket No",
+  "Latest Tracking Status",
+  "Latest Eway Bill",
+  "Latest Delivery Date",
+  "Latest DC",
+  "Outward date - 1",
+  "Inward date - 1",
+  "Outward date - 2",
+  "Inward date - 2",
+  "Outward date - 3",
+  "Inward date - 3",
+  "Outward date - 4",
+  "Inward date - 4",
+  "Outward date - 5",
+  "Inward date - 5",
+  "Outward date - 6",
+  "Inward date - 6",
+];
 
-const ASSET_STATUS_MAP: Record<string, string> = {
-  pending: "Pending",
-  allocated: "Allocated",
-  os_installed: "OS Installed",
-};
+function dateStr(d: Date | null | undefined): string {
+  if (!d || isNaN(d.getTime())) return "";
+  return d.toISOString().split("T")[0];
+}
 
 export async function GET() {
   const user = await getSession();
@@ -31,70 +68,67 @@ export async function GET() {
     );
   }
 
-  const orders = await prisma.order.findMany({
-    where: { status: { not: "ORDER_PLACED" } },
-    include: {
-      assets: { include: { inventoryItem: true }, orderBy: { createdAt: "asc" } },
-      dockets: { orderBy: { createdAt: "asc" } },
-      deliveryChallans: { orderBy: { createdAt: "asc" } },
-    },
-    orderBy: { updatedAt: "desc" },
+  const items = await prisma.inventoryItem.findMany({
+    orderBy: [{ sr: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
   });
 
   let sr = 1;
-  const rows: Record<string, unknown>[] = [];
-  for (const order of orders) {
-    const firstDocket = order.dockets[0];
-    const firstDC = order.deliveryChallans[0];
-    for (const asset of order.assets) {
-      const inv = asset.inventoryItem;
-      rows.push({
-        "Sr.no": sr++,
-        "Inward Date": inv ? getVal(inv as unknown as Record<string, unknown>, "requestDate") : "",
-        "Product Part no": inv?.partNo ?? "",
-        "Serial No": inv?.serialNumber ?? "",
-        "Model": inv?.model ?? "",
-        "Product Description": inv?.invoiceProductDescription ?? inv?.description ?? "",
-        "Owner of the Asset": inv?.employeeName ?? "",
-        "Inward Lot No": inv?.sr?.toString() ?? "",
-        "HP Lot No": "",
-        "Warehouse Location": order.warehouseLocation ?? "",
-        "Provisioning Location": order.provisioningLocation ?? "",
-        "Provisioned Date": (asset.status === "os_installed" || asset.status === "allocated")
-          ? getVal(order as unknown as Record<string, unknown>, "updatedAt")
-          : "",
-        "Provisioned Status": ASSET_STATUS_MAP[asset.status] ?? asset.status,
-        "Engineer Name": order.engineerName ?? "",
-        "Sticker": inv?.stickerColour ?? "",
-        "PWC Image": inv?.imageType ?? "",
-        "PWC Entity": inv?.entity ?? "",
-        "Shipping Date": inv ? getVal(inv as unknown as Record<string, unknown>, "actualDeliveryDate") : "",
-        "Courier Name": firstDocket ? "" : "",
-        "Docket #": firstDocket?.docketNumber ?? "",
-        "Employee Name": inv?.employeeName ?? "",
-        "Location - City": inv?.city ?? "",
-        "Delivery Date": inv ? getVal(inv as unknown as Record<string, unknown>, "deliveryDate") : "",
-        "Warranty Start Date": inv ? getVal(inv as unknown as Record<string, unknown>, "servicesStartDate") : "",
-        "Warranty End Date": inv ? getVal(inv as unknown as Record<string, unknown>, "warrantyEndPeriod") : "",
-        "Delivery Challans No.": firstDC?.dcNumber ?? order.dcNumber ?? "",
-        "Previous Image Date": "",
-        "Inward Date - 1": "",
-        "Outward Date - 1": "",
-        "Inward Date - 2": "",
-        "Outward Date - 2": "",
-        "Inward Date - 3": "",
-        "Outward Date - 3": "",
-        "Inward Date - 4": "",
-        "HASH ID": inv?.id ?? "",
-        "Blancco": "",
-        "Blancco DATE": "",
-        "Blancco CERTIFICATE": "",
-      });
-    }
+  const rows: unknown[][] = [];
+  for (const inv of items) {
+    rows.push([
+      sr++,
+      dateStr(inv.lotReceivedDate),
+      inv.partNo ?? "",
+      inv.serialNumber ?? "",
+      inv.model ?? "",
+      inv.partner ?? "",
+      inv.devItInwardLotNo ?? "",
+      inv.hpLotNumber ?? "",
+      inv.userBaseLocation ?? "",
+      dateStr(inv.requestDate),
+      inv.processStatus ?? "",
+      inv.assetRemarks ?? "",
+      inv.condition ?? "",
+      inv.invoicingWarehouse ?? "",
+      inv.engineerName ?? "",
+      inv.imageType ?? "",
+      inv.entity ?? "",
+      dateStr(inv.shippingDate),
+      inv.storageStatus ?? "",
+      inv.vendor ?? "",
+      inv.docketNumber ?? "",
+      inv.checkField ?? "",
+      inv.rackNo ?? "",
+      inv.remark ?? "",
+      dateStr(inv.deliveryDate),
+      dateStr(inv.warrantyEndPeriod),
+      dateStr(inv.previousImageDate),
+      inv.employeeName ?? "",
+      inv.city ?? "",
+      dateStr(inv.latestShippedDate),
+      inv.latestCourierName ?? inv.vendor ?? "",
+      inv.latestDocketNumber ?? "",
+      inv.latestTrackingStatus ?? "",
+      inv.latestEwayBill ?? "",
+      dateStr(inv.latestDeliveryDate),
+      inv.latestDc ?? "",
+      dateStr(inv.outwardDate1),
+      dateStr(inv.inwardDate1),
+      dateStr(inv.outwardDate2),
+      dateStr(inv.inwardDate2),
+      dateStr(inv.outwardDate3),
+      dateStr(inv.inwardDate3),
+      dateStr(inv.outwardDate4),
+      dateStr(inv.inwardDate4),
+      dateStr(inv.outwardDate5),
+      dateStr(inv.inwardDate5),
+      dateStr(inv.outwardDate6),
+      dateStr(inv.inwardDate6),
+    ]);
   }
 
   const wb = XLSX.utils.book_new();
-  const sheet = XLSX.utils.json_to_sheet(rows);
+  const sheet = XLSX.utils.aoa_to_sheet([HEADERS, ...rows]);
   XLSX.utils.book_append_sheet(wb, sheet, "Provisioning Report");
 
   const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });

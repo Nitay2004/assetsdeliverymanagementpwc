@@ -13,6 +13,7 @@ interface DocketData {
   id: string;
   docketNumber: string | null;
   ewayBillNumber: string | null;
+  ewayBillDocumentUrl: string | null;
 }
 
 interface DcItemData {

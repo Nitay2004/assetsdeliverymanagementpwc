@@ -15,12 +15,6 @@ export default async function ReversePickupDetailPage(props: { params: Promise<{
     ? await prisma.deliveryChallan.findFirst({ where: { reversePickupRequestId: id }, orderBy: { createdAt: "desc" }, select: { id: true } })
     : null;
 
-  const availableItems = await prisma.inventoryItem.findMany({
-    where: { status: "AVAILABLE" },
-    orderBy: { serialNumber: "asc" },
-    select: { id: true, serialNumber: true, model: true },
-  });
-
   return (
     <ReversePickupDetail
       dcId={dc?.id ?? null}
@@ -41,10 +35,11 @@ export default async function ReversePickupDetailPage(props: { params: Promise<{
         inspectionDate: request.inspectionDate?.toISOString() ?? null,
         receivedDate: request.receivedDate?.toISOString() ?? null,
         qcDate: request.qcDate?.toISOString() ?? null,
+        qcCleanDate: request.qcCleanDate?.toISOString() ?? null,
+        qcPurgeDate: request.qcPurgeDate?.toISOString() ?? null,
         blanccoDate: request.blanccoDate?.toISOString() ?? null,
         blancoCertificateDate: request.blancoCertificateDate?.toISOString() ?? null,
       }}
-      availableItems={availableItems}
       userRole={user.role}
     />
   );

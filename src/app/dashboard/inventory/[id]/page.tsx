@@ -26,5 +26,7 @@ export default async function EditInventoryPage(props: { params: Promise<{ id: s
     dateOfWs1Update: safeISO(item.dateOfWs1Update),
     servicesStartDate: safeISO(item.servicesStartDate),
     date: safeISO(item.date),
+    inwardDate1: safeISO(item.inwardDate1),
+    outwardDate1: safeISO(item.outwardDate1),
   }} />;
 }

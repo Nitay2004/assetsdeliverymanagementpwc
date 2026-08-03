@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Upload, Download, Loader2, Database, UserPlus } from "lucide-react";
+import { Plus, Upload, Download, Loader2, Database, UserPlus, FileSpreadsheet } from "lucide-react";
 import Link from "next/link";
 import { NewAssetModal } from "./new-asset-modal";
 import { AssignUserModal } from "./assign-user-modal";
@@ -13,6 +13,7 @@ interface Props {
 export function InventoryHeader({ isAdmin }: Props) {
   const [showNewAsset, setShowNewAsset] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [casesExporting, setCasesExporting] = useState(false);
   const [showAssignSingle, setShowAssignSingle] = useState(false);
 
   async function handleExport() {
@@ -38,6 +39,29 @@ export function InventoryHeader({ isAdmin }: Props) {
     }
   }
 
+  async function handleCasesExport() {
+    setCasesExporting(true);
+    try {
+      const res = await fetch("/api/export-cases");
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Export failed");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cases-report-${new Date().toISOString().split("T")[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setCasesExporting(false);
+    }
+  }
+
   return (
     <>
       <div className="p-3 sm:p-6 border-b bg-muted/20 border-b-black/5 dark:border-b-white/5">
@@ -54,6 +78,15 @@ export function InventoryHeader({ isAdmin }: Props) {
             {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
             <span className="hidden xs:inline">{exporting ? "Exporting..." : "Export"}</span>
             <span className="xs:hidden">{exporting ? "..." : "Export"}</span>
+          </button>
+          <button
+            onClick={handleCasesExport}
+            disabled={casesExporting}
+            className="flex items-center gap-1.5 sm:gap-2 rounded-lg border px-3 sm:px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-all hover:bg-muted active:translate-y-px disabled:opacity-50"
+          >
+            {casesExporting ? <Loader2 className="size-3.5 animate-spin" /> : <FileSpreadsheet className="size-3.5" />}
+            <span className="hidden xs:inline">{casesExporting ? "Preparing..." : "Cases Report"}</span>
+            <span className="xs:hidden">{casesExporting ? "..." : "Cases"}</span>
           </button>
           {isAdmin && (
             <>

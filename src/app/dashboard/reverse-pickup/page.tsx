@@ -10,7 +10,19 @@ const STATUS_STYLES: Record<string, { label: string; color: string }> = {
   PARTNER_ASSIGNED:       { label: "Partner Assigned",       color: "bg-blue-100 text-blue-700" },
   INSPECTED:              { label: "Inspected",              color: "bg-indigo-100 text-indigo-700" },
   PICKED_UP:              { label: "Picked Up",              color: "bg-purple-100 text-purple-700" },
+  PICKUP_CANCELLED:       { label: "Pickup Cancelled",       color: "bg-red-100 text-red-700" },
+  DUPLICATE:              { label: "Duplicate",              color: "bg-gray-200 text-gray-700" },
+  ALREADY_SUBMITTED_TO_PWC_OFFICE: { label: "Submitted to PWC Office", color: "bg-slate-100 text-slate-700" },
+  PENDING:                { label: "Pending",                color: "bg-orange-100 text-orange-700" },
+  PWC_CONFIRMATION_AWAITED: { label: "PwC Confirmation Awaited", color: "bg-amber-100 text-amber-700" },
+  GATEPASS_PENDING:       { label: "Gatepass Pending",       color: "bg-teal-100 text-teal-700" },
+  ALIGN_FOR_PICKUP:       { label: "Align for Pickup",       color: "bg-cyan-100 text-cyan-700" },
+  IN_TRANSIT:             { label: "In Transit",             color: "bg-sky-100 text-sky-700" },
+  ON_HOLD:                { label: "On Hold",                color: "bg-zinc-100 text-zinc-700" },
+  RTO_CASE:               { label: "RTO Case",               color: "bg-rose-100 text-rose-700" },
+  LOST_DEVICE:            { label: "Lost Device",            color: "bg-stone-100 text-stone-700" },
   RECEIVED_AT_WAREHOUSE:  { label: "At Warehouse",           color: "bg-cyan-100 text-cyan-700" },
+  QC_CLEANED:             { label: "Clean QC",               color: "bg-lime-100 text-lime-700" },
   QC_COMPLETED:           { label: "QC Completed",           color: "bg-green-100 text-green-700" },
   BLANCO_CERTIFIED:       { label: "Blanco Certified",       color: "bg-teal-100 text-teal-700" },
   COMPLETED:              { label: "Completed",              color: "bg-emerald-100 text-emerald-700" },
@@ -21,7 +33,19 @@ const STATUS_ICONS: Record<string, typeof Truck> = {
   PARTNER_ASSIGNED: Truck,
   INSPECTED: ClipboardCheck,
   PICKED_UP: Truck,
+  PICKUP_CANCELLED: Clock,
+  DUPLICATE: FileText,
+  ALREADY_SUBMITTED_TO_PWC_OFFICE: FileText,
+  PENDING: Clock,
+  PWC_CONFIRMATION_AWAITED: Clock,
+  GATEPASS_PENDING: FileText,
+  ALIGN_FOR_PICKUP: Truck,
+  IN_TRANSIT: Truck,
+  ON_HOLD: Clock,
+  RTO_CASE: ArrowLeftRight,
+  LOST_DEVICE: FileText,
   RECEIVED_AT_WAREHOUSE: Warehouse,
+  QC_CLEANED: ShieldCheck,
   QC_COMPLETED: ShieldCheck,
   BLANCO_CERTIFIED: FileText,
   COMPLETED: CheckCircle,
@@ -29,13 +53,18 @@ const STATUS_ICONS: Record<string, typeof Truck> = {
 
 const STRING_SEARCH_FIELDS = [
   "requestNumber", "employeeName", "serialNumber", "model", "type",
-  "courierName", "partnerName", "warehouseLocation", "displayStatus", "qcResult", "finalDisposition",
+  "courierName", "partnerName", "warehouseLocation", "displayStatus", "qcResult",
+  "qcCleanResult", "qcPurgeResult", "finalDisposition",
 ] as const;
 
 const ALL_STATUSES = [
-  "REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "INSPECTED",
-  "PICKED_UP", "RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "DC_REQUESTED",
+  "REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "DC_REQUESTED",
   "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED",
+  "INSPECTED", "PICKED_UP", "PICKUP_CANCELLED", "DUPLICATE",
+  "ALREADY_SUBMITTED_TO_PWC_OFFICE", "PENDING", "PWC_CONFIRMATION_AWAITED",
+  "GATEPASS_PENDING", "ALIGN_FOR_PICKUP", "IN_TRANSIT", "ON_HOLD",
+  "RTO_CASE", "LOST_DEVICE",
+  "RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED",
   "BLANCO_CERTIFIED", "COMPLETED",
 ] as const;
 
@@ -45,7 +74,19 @@ const STATUS_LABELS: Record<string, string> = {
   DOCKET_REQUESTED: "docket requested",
   INSPECTED: "inspected",
   PICKED_UP: "picked up",
+  PICKUP_CANCELLED: "pickup cancelled",
+  DUPLICATE: "duplicate",
+  ALREADY_SUBMITTED_TO_PWC_OFFICE: "already submitted to pwc office",
+  PENDING: "pending",
+  PWC_CONFIRMATION_AWAITED: "pwc confirmation awaited",
+  GATEPASS_PENDING: "gatepass pending",
+  ALIGN_FOR_PICKUP: "align for pickup",
+  IN_TRANSIT: "in transit",
+  ON_HOLD: "on hold",
+  RTO_CASE: "rto case",
+  LOST_DEVICE: "lost device",
   RECEIVED_AT_WAREHOUSE: "received at warehouse",
+  QC_CLEANED: "clean qc",
   QC_COMPLETED: "qc completed",
   DC_REQUESTED: "dc requested",
   DC_GENERATED: "dc generated",
@@ -90,6 +131,9 @@ export default async function ReversePickupPage({
       orderBy: { createdAt: "desc" },
       skip,
       take: limit,
+      include: {
+        deliveryChallans: { select: { id: true }, orderBy: { createdAt: "desc" }, take: 1 },
+      },
     }),
     prisma.reversePickupRequest.count({ where }),
   ]);
@@ -104,7 +148,7 @@ export default async function ReversePickupPage({
     ["REQUESTED", "PARTNER_ASSIGNED", "INSPECTED", "PICKED_UP"].includes(r.status)
   ).length;
   const atWarehouse = allRequests.filter(r =>
-    ["RECEIVED_AT_WAREHOUSE", "QC_COMPLETED"].includes(r.status)
+    ["RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "COMPLETED"].includes(r.status)
   ).length;
   const completedCount = allRequests.filter(r =>
     ["BLANCO_CERTIFIED", "COMPLETED"].includes(r.status)
@@ -184,6 +228,8 @@ export default async function ReversePickupPage({
       <ReversePickupTable
         requests={requests.map(r => ({
           ...r,
+          dcId: r.deliveryChallans[0]?.id ?? null,
+          deliveryChallans: undefined,
           createdAt: r.createdAt.toISOString(),
           updatedAt: r.updatedAt.toISOString(),
           pickupDate: r.pickupDate?.toISOString() ?? null,

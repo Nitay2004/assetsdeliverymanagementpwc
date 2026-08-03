@@ -7,6 +7,8 @@ export const fields: Record<string, { label: string; type: string; required?: bo
     { label: "Partner", type: "text" },
     { label: "Sr #", type: "number" },
     { label: "Entity", type: "text" },
+    { label: "Inward Date", type: "date" },
+    { label: "Outward Date", type: "date" },
   ],
   "Request Details": [
     { label: "User Base Location", type: "text" },

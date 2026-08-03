@@ -132,18 +132,22 @@ function statusColor(value: string): string {
   return "bg-slate-100 text-slate-700";
 }
 
-function AssignmentCard({ record, index, item }: { record: HistoryRecord; index: number; item: InventoryItem }) {
-  const [open, setOpen] = useState(index === 0);
-  const label = index === 0 ? "Current Assignment" : `Previous #${index}`;
+function AssignmentCard({
+  label,
+  values,
+  defaultOpen = false,
+}: {
+  label: string;
+  values: Record<string, unknown>;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
 
   function assignValue(fieldName: string): string {
-    const recordKey = fieldName as keyof HistoryRecord;
-    if (recordKey in record && record[recordKey] != null) {
-      return formatValue(record[recordKey]);
-    }
-    const itemKey = fieldName as keyof InventoryItem;
-    return formatValue(item[itemKey]);
+    return formatValue(values[fieldName]);
   }
+
+  const dateValue = values.assignedAt || values.requestDate;
 
   return (
     <div className="rounded-lg border overflow-hidden">
@@ -155,11 +159,13 @@ function AssignmentCard({ record, index, item }: { record: HistoryRecord; index:
         <User className="size-3 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <span className="text-xs font-semibold text-muted-foreground">{label}</span>
-          <p className="text-sm font-medium truncate">{record.employeeName || "—"}</p>
+          <p className="text-sm font-medium truncate">{String(values.employeeName ?? "—")}</p>
         </div>
-        <span className="text-xs text-muted-foreground shrink-0">
-          {new Date(record.assignedAt).toLocaleDateString("en-CA")}
-        </span>
+        {dateValue != null && (
+          <span className="text-xs text-muted-foreground shrink-0">
+            {new Date(String(dateValue)).toLocaleDateString("en-CA")}
+          </span>
+        )}
         {open ? <ChevronDown className="size-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
       </button>
       {open && (
@@ -319,6 +325,18 @@ export function InventoryDetailDrawer({
     }
   }
 
+  const currentName = displayItem.employeeName;
+  const currentRecord =
+    records !== null && currentName && records[0]?.employeeName === currentName ? records[0] : null;
+  const rawPrevious = records !== null ? (currentRecord ? records.slice(1) : records) : [];
+  const seen = new Set<string>();
+  const previousRecords = rawPrevious.filter((r) => {
+    const name = r.employeeName ?? "";
+    if (!name || seen.has(name)) return false;
+    seen.add(name);
+    return true;
+  });
+
   return (
     <>
       <div
@@ -372,15 +390,34 @@ export function InventoryDetailDrawer({
 
             {records === null ? (
               <p className="text-xs text-muted-foreground">Loading...</p>
-            ) : records.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-                No assignment records yet.
-              </div>
             ) : (
               <div className="space-y-2">
-                {records.map((r, i) => (
-                  <AssignmentCard key={r.id} record={r} index={i} item={displayItem} />
-                ))}
+                {displayItem.employeeName ? (
+                  <AssignmentCard
+                    label="Current Assignment"
+                    values={displayItem as unknown as Record<string, unknown>}
+                    defaultOpen
+                  />
+                ) : (
+                  <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
+                    No current assignment.
+                  </div>
+                )}
+
+                {previousRecords.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Previous Assignments
+                    </h4>
+                    {previousRecords.map((r, i) => (
+                      <AssignmentCard
+                        key={r.id}
+                        label={i === 0 ? "Previous User" : `Previous #${i + 1}`}
+                        values={r as unknown as Record<string, unknown>}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

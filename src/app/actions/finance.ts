@@ -55,7 +55,7 @@ export async function deleteOrder(orderId: string) {
   revalidatePath("/dashboard/finance");
 }
 
-export async function generateEwayBill(orderId: string, ewayBillNumber: string) {
+export async function generateEwayBill(orderId: string, ewayBillNumber: string, ewayBillDocumentUrl?: string | null) {
   const user = await getSession();
   requirePermission(user, "finance", "canCreate");
 
@@ -70,7 +70,7 @@ export async function generateEwayBill(orderId: string, ewayBillNumber: string) 
 
   await prisma.docket.update({
     where: { id: docket.id },
-    data: { ewayBillNumber },
+    data: { ewayBillNumber, ewayBillDocumentUrl: ewayBillDocumentUrl ?? null },
   });
 
   const isRto = order.status === "RTO_EWAY_BILL_REQUESTED";

@@ -186,6 +186,15 @@ const dateFields = new Set([
   "laptopAcceptanceDate", "etaForUnitReceived", "slaStartDate",
 ]);
 
+// User-facing fields can repeat in the file (e.g. user pickup block vs warehouse
+// shipping block). The FIRST occurrence (user data) must win — the later
+// warehouse/dup column must not overwrite it.
+const firstWinsFields = new Set([
+  "pickupAddress", "landmark", "city", "state", "pinCode",
+  "accessories", "entity", "employeeName", "imageType", "reason",
+  "receiverSerialNo", "receiverSnEntity", "warehouseLocation", "type",
+]);
+
 const intFields = new Set([
   "year",
 ]);
@@ -227,6 +236,9 @@ function buildPrismaData(
     }
     const parsed = parseValue(row[i]?.trim() ?? "", column);
     if (parsed !== null && parsed !== undefined && parsed !== "") {
+      if (firstWinsFields.has(column) && data[column] !== undefined) {
+        continue;
+      }
       data[column] = parsed;
     }
   }

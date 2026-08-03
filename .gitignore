@@ -41,3 +41,11 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# temp / debug files
+*.tmp.js
+dev-server.log
+prov-test.csv
+
+# one-off scripts with hardcoded DB credentials (do not commit)
+/scripts/*.js

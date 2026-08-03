@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { Package, ShieldCheck, Laptop, Database } from "lucide-react";
+import { Package, ShieldCheck, Laptop, Database, ClipboardCheck } from "lucide-react";
 import { InventoryTable } from "@/components/inventory/inventory-table";
 import { InventoryHeader } from "@/components/inventory/inventory-header";
 import type { Prisma } from "@prisma/client";
@@ -35,7 +35,7 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
     ],
   } : baseWhere;
 
-  const [inventoryItems, totalCount, newCount, availableCount, allocatedCount] = await Promise.all([
+  const [inventoryItems, totalCount, newCount, availableCount, allocatedCount, qcPendingCount] = await Promise.all([
     prisma.inventoryItem.findMany({
       where,
       skip,
@@ -52,6 +52,7 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
     prisma.inventoryItem.count({ where: { status: "NEW" } }),
     prisma.inventoryItem.count({ where: { status: "AVAILABLE" } }),
     prisma.inventoryItem.count({ where: { status: "ALLOCATED" } }),
+    prisma.inventoryItem.count({ where: { status: "QC_PENDING" } }),
   ]);
 
   return (
@@ -63,7 +64,7 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
         </p>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-4 mt-8">
+      <div className="grid gap-6 sm:grid-cols-5 mt-8">
         <div className="p-6 rounded-xl glass shadow-sm flex flex-col gap-2">
           <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm uppercase tracking-wider">
             <Package className="size-4" />
@@ -84,6 +85,13 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
             Available
           </div>
           <p className="text-3xl font-bold text-primary">{availableCount}</p>
+        </div>
+        <div className="p-6 rounded-xl glass shadow-sm flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm uppercase tracking-wider">
+            <ClipboardCheck className="size-4" />
+            QC Pending
+          </div>
+          <p className="text-3xl font-bold text-amber-600">{qcPendingCount}</p>
         </div>
         <div className="p-6 rounded-xl glass shadow-sm flex flex-col gap-2">
           <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm uppercase tracking-wider">

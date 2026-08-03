@@ -17,7 +17,7 @@ const fieldKeywords: [string, string[]][] = [
   ["laptopModel",      ["laptop model"]],
   ["laptopMake",       ["laptop make", "laptop brand", "laptop manufacturer"]],
   ["invoiceProductDescription", ["invoice product", "invoice description", "product description", "invoice discription", "invoice product description", "invoice product discription"]],
-  ["employeeName",     ["employee", "emp name", "engineer", "user name", "assigned to", "owner name", "name of the employee", "engineer name"]],
+  ["employeeName",     ["employee", "emp name", "user name", "assigned to", "owner name", "name of the employee"]],
   ["emailId",          ["email", "email id", "email address", "mail id", "e mail"]],
   ["emailReceivedHour",["email received", "received hour", "email hour", "email recieved"]],
   ["mobileNumber",     ["mobile", "phone number", "contact number", "mobile number", "mobile no", "contact no", "phone no", "cell"]],
@@ -30,27 +30,27 @@ const fieldKeywords: [string, string[]][] = [
   ["partner",          ["partner", "owner of the asset", "asset owner", "owner"]],
   ["entity",           ["entity", "pwc entity", "pwcentity", "company"]],
   ["partNo",           ["part no", "part number", "part no.", "part#", "part #", "pn", "hp part", "material", "material number", "partno", "partnumber", "part num", "part no#", "material no", "material no."]],
-  ["model",            ["model", "product", "product name", "machine", "device"]],
+  ["model",            ["model", "product name", "machine", "device"]],
   ["specs",            ["spec", "specs", "specification", "configuration", "config"]],
   ["purpose",          ["purpose", "usage", "reason", "why"]],
   ["count",            ["count", "qty", "quantity", "no of", "num", "total"]],
 
   // Status fields (must be before generic status)
-  ["processStatus",    ["process status", "master provision status", "provision status", "master provision", "provisioning status"]],
+  ["processStatus",    ["process status", "master provision status", "master provision status 1 new", "provision status", "master provision", "provisioning status"]],
   ["trackingSubStatus",["tracking sub", "sub status", "sub-status", "provisioned sub status", "sub status"]],
   ["trackingStatus",   ["tracking status", "tracking", "shipment status", "current tracking"]],
   ["csvStatus",        ["status 1", "status_1", "csv status"]],
   ["cutOffStatus",     ["cut off", "cut-off", "cutoff", "cut off status"]],
   ["slaStatus",        ["sla missed", "sla met", "missed met", "miss met", "sla miss", "sla status", "sla missed met"]],
   ["machineWs1Status", ["ws1 status", "ws1", "machine ws1", "workspace one"]],
-  ["status",           ["status", "storage status", "storage", "condition", "current status", "asset status"]],
+  ["status",           ["status", "current status", "asset status"]],
 
   // Dates
   ["warrantyEndPeriod",     ["warranty end", "warranty expiry", "warranty till", "warranty valid till", "warranty upto"]],
   ["warrantyPeriod",        ["warranty period", "warranty term", "warranty", "warranty months", "warranty years"]],
   ["actualDeliveryDate",    ["actual delivery", "pod date", "proof of delivery", "pod"]],
-  ["deliveryDate",          ["delivery date", "shipping date", "dispatch date", "deliver date", "ship date"]],
-  ["requestDate",           ["request date", "received date", "lot received", "provisioned date", "provision date", "inward date", "request"]],
+  ["deliveryDate",          ["delivery date", "dispatch date", "deliver date", "ship date"]],
+  ["requestDate",           ["request date", "received date", "provisioned date", "provision date", "inward date", "request"]],
   ["slaStartDate",          ["sla start", "sla date"]],
   ["laptopAcceptanceDate",  ["acceptance date", "laptop acceptance", "accept date"]],
   ["pickupDate",            ["pickup", "pick up date", "pickup date", "pick up"]],
@@ -78,7 +78,7 @@ const fieldKeywords: [string, string[]][] = [
   ["dateOfWs1Update",       ["ws1 date", "ws1 update", "date of ws1"]],
 
   // Remarks
-  ["remark",            ["remark", "remarks", "asset remarks", "comments", "notes", "observation"]],
+  ["remark",            ["remark", "remarks", "comments", "notes", "observation"]],
   ["pwcRemarks",        ["pwc remark", "pwc comments", "pwc notes"]],
 
   // Additional
@@ -86,10 +86,47 @@ const fieldKeywords: [string, string[]][] = [
   ["adaptorAdded",      ["adaptor", "adapter", "adaptor added", "adapter added"]],
   ["accessoryHeadsetMouse", ["accessory", "headset", "mouse", "accessory headset", "accessory mouse"]],
   ["stickerColour",     ["sticker", "sticker colour", "sticker color", "sticker col", "sticker shade"]],
-  ["checkField",        ["check", "verified", "confirmation", "confirm", "checked"]],
+  ["checkField",        ["check", "verified", "confirmation", "confirmation display", "confirm", "checked"]],
   ["customerInstructionDoc", ["customer instruction", "instruction doc", "customer doc", "instruction"]],
   ["invoicedQuantity",  ["invoiced qty", "invoiced quantity", "invoice qty", "quantity invoiced", "invoiced", "invoice quantity"]],
   ["sr",                ["sr", "sr no", "sequence", "lot no", "inward lot", "lot number", "dev it inward lot", "hp lot", "hp lot number"]],
+
+  // Provisioning asset tracking columns (assets/user master file)
+  ["engineerName",          ["engineer", "engineer name", "provisioning engineer"]],
+  ["condition",             ["condition", "working", "non working", "working non working"]],
+  ["storageStatus",         ["storage status", "storage", "storage condition"]],
+  ["rackNo",                ["rack no", "rack", "rack number"]],
+  ["devItInwardLotNo",      ["dev it inward lot no", "dev it inward lot", "dev it inward", "inward lot no"]],
+  ["lotReceivedDate",       ["lot received date", "lot received", "lot date", "inward lot date"]],
+  ["shippingDate",          ["shipping date"]],
+  ["assetRemarks",          ["asset remarks", "asset remark"]],
+  ["hpLotNumber",           ["hp lot number", "hp lot no", "hp lot"]],
+  ["previousImageDate",     ["previous image date", "previous image", "old image date"]],
+  ["latestShippedDate",     ["latest shipped date", "latest shipped", "provision image"]],
+  ["latestCourierName",     ["latest courier name", "latest courier"]],
+  ["latestDocketNumber",    ["latest docket no", "latest docket number", "latest docket"]],
+  ["latestTrackingStatus",  ["latest tracking status", "latest tracking"]],
+  ["latestEwayBill",        ["latest eway bill", "latest eway", "latest e way bill"]],
+  ["latestDeliveryDate",    ["latest delivery date", "latest delivery"]],
+  ["latestDc",              ["latest dc", "latest dc no", "latest delivery challan"]],
+  ["inwardDate1",           ["inward date 1", "inward date - 1", "inward 1"]],
+  ["outwardDate1",          ["outward date 1", "outward date - 1", "outward 1"]],
+  ["inwardDate2",           ["inward date 2", "inward date - 2", "inward 2"]],
+  ["outwardDate2",          ["outward date 2", "outward date - 2", "outward 2"]],
+  ["inwardDate3",           ["inward date 3", "inward date - 3", "inward 3"]],
+  ["outwardDate3",          ["outward date 3", "outward date - 3", "outward 3"]],
+  ["inwardDate4",           ["inward date 4", "inward date - 4", "inward 4"]],
+  ["outwardDate4",          ["outward date 4", "outward date - 4", "outward 4"]],
+  ["inwardDate5",           ["inward date 5", "inward date - 5", "inward 5"]],
+  ["outwardDate5",          ["outward date 5", "outward date - 5", "outward 5"]],
+  ["inwardDate6",           ["inward date 6", "inward date - 6", "inward 6"]],
+  ["outwardDate6",          ["outward date 6", "outward date - 6", "outward 6"]],
+  // Assignment file fields (remote/office assignments)
+  ["reqDateToDevIt",        ["req date to dev it", "req date dev it", "request date to dev it"]],
+  ["deliveryTatDate",       ["delivery tat date", "tat date"]],
+  ["ewayBill",              ["eway bill", "e way bill", "ewaybill"]],
+  ["docketDate",            ["docket date"]],
+  ["fromWarehouseLocation", ["from warehouse location", "from warehouse"]],
 ];
 
 // Score a header against a field's keywords
@@ -204,20 +241,61 @@ const baseMapping: Record<string, string> = {
   "DC Number": "dcNumber",
   "Date": "date",
   "Status_1": "csvStatus",
+  "S.no": "sr",
+  "LOT Received date": "lotReceivedDate",
+  "Product": "partNo",
+  "Engineer Name": "engineerName",
+  "Condition (Working/Non Working)": "condition",
+  "Storage Status": "storageStatus",
+  "Shipping Date": "shippingDate",
+  "Asset Remarks": "assetRemarks",
+  "RACK NO": "rackNo",
+  "Dev IT Inward Lot No": "devItInwardLotNo",
+  "HP Lot Number": "hpLotNumber",
+  "Previous Image Date": "previousImageDate",
+  "Latest Shipped Date (Provision Image)": "latestShippedDate",
+  "Latest Courier Name": "latestCourierName",
+  "Latest Docket No": "latestDocketNumber",
+  "Latest Tracking Status": "latestTrackingStatus",
+  "Latest Eway Bill": "latestEwayBill",
+  "Latest Delivery Date": "latestDeliveryDate",
+  "Latest DC": "latestDc",
+  "Latest Employee Name": "employeeName",
+  "Master Provision Status-1 NEW": "processStatus",
+  "Inward Date - 1": "inwardDate1",
+  "Outward Date - 1": "outwardDate1",
+  "Inward Date - 2": "inwardDate2",
+  "Outward Date - 2": "outwardDate2",
+  "Inward Date - 3": "inwardDate3",
+  "Outward Date - 3": "outwardDate3",
+  "Inward Date - 4": "inwardDate4",
+  "Outward Date - 4": "outwardDate4",
+  "Inward Date - 5": "inwardDate5",
+  "Outward Date - 5": "outwardDate5",
+  "Inward Date - 6": "inwardDate6",
+  "Outward Date - 6": "outwardDate6",
+  // Assignment file fields
+  "Req Date to DEV IT": "reqDateToDevIt",
+  "Delivery TAT (Date)": "deliveryTatDate",
+  "Eway Bill": "ewayBill",
+  "Docket Date": "docketDate",
+  "From Warehouse Location": "fromWarehouseLocation",
 };
 
 const aliases: Record<string, string> = {
   "serial no": "serialNumber",
   "serial no.": "serialNumber",
   "serial number": "serialNumber",
-  "s no": "serialNumber",
+  "s no": "sr",
+  "s.no": "sr",
   "serialno": "serialNumber",
   "s/n": "serialNumber",
   "employee name": "employeeName",
   "name of the employee": "employeeName",
   "emp name": "employeeName",
-  "engineer name": "employeeName",
-  "product": "model",
+  "lot received": "lotReceivedDate",
+  "engineer name": "engineerName",
+  "product": "partNo",
   "part no": "partNo",
   "part number": "partNo",
   "partno": "partNo",
@@ -231,18 +309,18 @@ const aliases: Record<string, string> = {
   "pwc entity": "entity",
   "provisioning location": "userBaseLocation",
   "provisioned date": "requestDate",
-  "lot received date": "requestDate",
+  "lot received date": "lotReceivedDate",
   "master provision status 1": "processStatus",
   "provision status 1": "processStatus",
   "master provision sub status": "trackingSubStatus",
   "provisioned sub status": "trackingSubStatus",
   "current warehouse location": "invoicingWarehouse",
   "warehouse location": "invoicingWarehouse",
-  "asset remarks": "remark",
+  "asset remarks": "assetRemarks",
   "remarks": "remark",
   "pwc image": "imageType",
-  "shipping date": "deliveryDate",
-  "storage status": "status",
+  "shipping date": "shippingDate",
+  "storage status": "storageStatus",
   "courier name": "vendor",
   "docket #": "docketNumber",
   "docket no": "docketNumber",
@@ -323,6 +401,76 @@ const aliases: Record<string, string> = {
   "sla miss met": "slaStatus",
   "state sla": "slaState",
   "state (sla)": "slaState",
+  "latest employee name": "employeeName",
+  "engineer": "engineerName",
+  "condition": "condition",
+  "condition working non working": "condition",
+  "working non working": "condition",
+  "rack no": "rackNo",
+  "rack": "rackNo",
+  "dev it inward lot no": "devItInwardLotNo",
+  "dev it inward lot": "devItInwardLotNo",
+  "inward lot no": "devItInwardLotNo",
+  "hp lot number": "hpLotNumber",
+  "hp lot no": "hpLotNumber",
+  "hp lot": "hpLotNumber",
+  "previous image date": "previousImageDate",
+  "previous image": "previousImageDate",
+  "latest shipped date provision image": "latestShippedDate",
+  "latest shipped date": "latestShippedDate",
+  "latest shipped": "latestShippedDate",
+  "provision image": "latestShippedDate",
+  "latest courier name": "latestCourierName",
+  "latest courier": "latestCourierName",
+  "latest docket no": "latestDocketNumber",
+  "latest docket number": "latestDocketNumber",
+  "latest docket": "latestDocketNumber",
+  "latest tracking status": "latestTrackingStatus",
+  "latest tracking": "latestTrackingStatus",
+  "latest eway bill": "latestEwayBill",
+  "latest e way bill": "latestEwayBill",
+  "latest eway": "latestEwayBill",
+  "latest delivery date": "latestDeliveryDate",
+  "latest delivery": "latestDeliveryDate",
+  "latest dc": "latestDc",
+  "latest dc no": "latestDc",
+  "master provision status 1 new": "processStatus",
+  "confirmation display": "checkField",
+  "inward date 1": "inwardDate1",
+  "inward date - 1": "inwardDate1",
+  "outward date 1": "outwardDate1",
+  "outward date - 1": "outwardDate1",
+  "inward date 2": "inwardDate2",
+  "inward date - 2": "inwardDate2",
+  "outward date 2": "outwardDate2",
+  "outward date - 2": "outwardDate2",
+  "inward date 3": "inwardDate3",
+  "inward date - 3": "inwardDate3",
+  "outward date 3": "outwardDate3",
+  "outward date - 3": "outwardDate3",
+  "inward date 4": "inwardDate4",
+  "inward date - 4": "inwardDate4",
+  "outward date 4": "outwardDate4",
+  "outward date - 4": "outwardDate4",
+  "inward date 5": "inwardDate5",
+  "inward date - 5": "inwardDate5",
+  "outward date 5": "outwardDate5",
+  "outward date - 5": "outwardDate5",
+  "inward date 6": "inwardDate6",
+  "inward date - 6": "inwardDate6",
+  "outward date 6": "outwardDate6",
+  "outward date - 6": "outwardDate6",
+  // Assignment file aliases
+  "req date to dev it": "reqDateToDevIt",
+  "req date dev it": "reqDateToDevIt",
+  "delivery tat date": "deliveryTatDate",
+  "tat date": "deliveryTatDate",
+  "eway bill": "ewayBill",
+  "e way bill": "ewayBill",
+  "ewaybill": "ewayBill",
+  "docket date": "docketDate",
+  "from warehouse location": "fromWarehouseLocation",
+  "from warehouse": "fromWarehouseLocation",
 };
 
 const normLookup: Record<string, string> = {};
@@ -333,8 +481,40 @@ for (const [alias, col] of Object.entries(aliases)) {
   normLookup[normalize(alias)] = col;
 }
 
-function resolveColumn(header: string): string | undefined {
-  return intelligentResolve(header);
+// Resolve headers to fields, handling duplicate headers. The provisioning report has
+// "Courier Name" twice: the first occurrence is the original courier (vendor), the second
+// is the latest courier (latestCourierName). Any other duplicate column keeps its first
+// assignment.
+// Two passes: EXACT header matches (normLookup) are assigned before fuzzy/keyword matches,
+// so a canonical header like "Invoicing Warehouse" or "Image type" wins over a vague one
+// like "From Warehouse Location" or "Type" that only matches by keyword overlap.
+function resolveColumns(headers: string[]): Map<number, string> {
+  const resolvedMap = new Map<number, string>();
+  const used = new Set<string>();
+  const candidates: { index: number; column: string; exact: boolean; header: string }[] = [];
+  for (let i = 0; i < headers.length; i++) {
+    const header = (headers[i] ?? "").trim();
+    const column = intelligentResolve(header);
+    if (!column) continue;
+    candidates.push({ index: i, column, exact: !!normLookup[normalize(header)], header });
+  }
+
+  const assign = (c: { index: number; column: string; header: string }): void => {
+    if (used.has(c.column)) {
+      if (c.column === "vendor" && normalize(c.header) === "courier name") {
+        c.column = "latestCourierName";
+      } else {
+        return;
+      }
+    }
+    if (used.has(c.column)) return;
+    used.add(c.column);
+    resolvedMap.set(c.index, c.column);
+  };
+
+  for (const c of candidates) if (c.exact) assign(c);
+  for (const c of candidates) if (!c.exact) assign(c);
+  return resolvedMap;
 }
 
 const dateFields = new Set([
@@ -348,6 +528,26 @@ const dateFields = new Set([
   "dateOfWs1Update",
   "servicesStartDate",
   "date",
+  "lotReceivedDate",
+  "shippingDate",
+  "previousImageDate",
+  "latestShippedDate",
+  "latestDeliveryDate",
+  "inwardDate1",
+  "outwardDate1",
+  "inwardDate2",
+  "outwardDate2",
+  "inwardDate3",
+  "outwardDate3",
+  "inwardDate4",
+  "outwardDate4",
+  "inwardDate5",
+  "outwardDate5",
+  "inwardDate6",
+  "outwardDate6",
+  "reqDateToDevIt",
+  "deliveryTatDate",
+  "docketDate",
 ]);
 
 const intFields = new Set([
@@ -361,10 +561,118 @@ const validStatuses = new Set([
   "NEW", "AVAILABLE", "ALLOCATED", "DEFECTIVE", "RETIRED",
 ]);
 
+// The provisioning file carries the real business state in "Master Provision Status-1 NEW"
+// (processStatus). Derive the system `status` from it so dashboard counts match reality:
+// - Lost devices → DEFECTIVE
+// - Deployed (shipped / redeployed / reallocated) or has a user → ALLOCATED
+// - Returned to warehouse → AVAILABLE (physical stock)
+// - Registered to an entity → AVAILABLE
+// - Otherwise (no entity, not deployed) → NEW
+function deriveStatus(
+  processStatus: string | null | undefined,
+  hasEmployee: boolean,
+  hasEntity: boolean
+): string {
+  const v = (processStatus ?? "").toLowerCase();
+  if (v.includes("lost")) return "DEFECTIVE";
+  if (
+    v.includes("shipped to the user") ||
+    v.includes("shipped to user") ||
+    v.includes("redeploy") ||
+    v.includes("reallocat") ||
+    hasEmployee
+  ) {
+    return "ALLOCATED";
+  }
+  if (v.includes("return to warehouse") || v.includes("returned to warehouse")) {
+    return "AVAILABLE";
+  }
+  return hasEntity ? "AVAILABLE" : "NEW";
+}
+
 function excelSerialToDate(serial: number): Date {
   // Excel epoch: serial 1 = Jan 1, 1900. Lotus 1-2-3 bug: 1900 considered leap year.
-  // For serial >= 61: days from Dec 30, 1899
+  // Returns UTC midnight. Prisma stores @db.Date using the UTC date-part, so this
+  // keeps the date exact regardless of server timezone.
   return new Date((serial - 25569) * 86400000);
+}
+
+const MONTH_NAMES: Record<string, number> = {};
+[
+  "jan", "feb", "mar", "apr", "may", "jun",
+  "jul", "aug", "sep", "oct", "nov", "dec",
+].forEach((m, i) => { MONTH_NAMES[m] = i; });
+
+// Parse dates in many common formats. The source data is day-first (DD/MM/YYYY),
+// so ambiguous numeric dates are interpreted as day-first to avoid losing values.
+// All dates are built with Date.UTC so the stored date is exact (see excelSerialToDate).
+function parseFlexibleDate(value: string): Date | null {
+  const v = value.trim();
+  if (!v) return null;
+
+  // 1. Numeric dd/mm/yyyy, d/m/yy, also handles "23-05-2026", "23.05.2026"
+  const numeric = v.match(/^(\d{1,2})[/\-. ](\d{1,2})[/\-. ](\d{2,4})$/);
+  if (numeric) {
+    let d = parseInt(numeric[1], 10);
+    let mo = parseInt(numeric[2], 10);
+    let y = parseInt(numeric[3], 10);
+    if (y < 100) y += 2000;
+    // Day-first assumption: if second number is > 12 it must be the day, so swap
+    if (mo > 12 && d <= 12) {
+      const t = d;
+      d = mo;
+      mo = t;
+    }
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (
+      dt.getUTCFullYear() === y &&
+      dt.getUTCMonth() === mo - 1 &&
+      dt.getUTCDate() === d &&
+      y >= 1900
+    ) {
+      return dt;
+    }
+  }
+
+  // 2. ISO date "2026-05-23" or datetime "2026-05-23T00:00:00Z"
+  const iso = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    const y = parseInt(iso[1], 10);
+    const mo = parseInt(iso[2], 10);
+    const d = parseInt(iso[3], 10);
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d && y >= 1900) {
+      return dt;
+    }
+  }
+
+  // 3. "23 May 2026", "23-May-2026", "23/May/2026"
+  const textual = v.match(/^(\d{1,2})[/\-. ]\s*([A-Za-z]{3,9})[/\-. ]\s*(\d{2,4})$/);
+  if (textual) {
+    const d = parseInt(textual[1], 10);
+    const mon = MONTH_NAMES[textual[2].toLowerCase().slice(0, 3)];
+    let y = parseInt(textual[3], 10);
+    if (y < 100) y += 2000;
+    if (mon !== undefined) {
+      const dt = new Date(Date.UTC(y, mon, d));
+      if (dt.getUTCFullYear() === y && dt.getUTCMonth() === mon && dt.getUTCDate() === d) return dt;
+    }
+  }
+
+  // 4. "May 23, 2026", "May-23-2026"
+  const textual2 = v.match(/^([A-Za-z]{3,9})[/\-. ]\s*(\d{1,2})[/\-,.]?\s*(\d{2,4})$/);
+  if (textual2) {
+    const mon = MONTH_NAMES[textual2[1].toLowerCase().slice(0, 3)];
+    const d = parseInt(textual2[2], 10);
+    let y = parseInt(textual2[3], 10);
+    if (y < 100) y += 2000;
+    if (mon !== undefined) {
+      const dt = new Date(Date.UTC(y, mon, d));
+      if (dt.getUTCFullYear() === y && dt.getUTCMonth() === mon && dt.getUTCDate() === d) return dt;
+    }
+  }
+
+  return null;
 }
 
 function parseValue(value: string, field: string): unknown {
@@ -374,8 +682,7 @@ function parseValue(value: string, field: string): unknown {
     if (!isNaN(num) && num > 30000 && num < 60000 && String(Math.round(num)) === value.trim()) {
       return excelSerialToDate(num);
     }
-    const d = new Date(value);
-    return isNaN(d.getTime()) ? null : d;
+    return parseFlexibleDate(value);
   }
   if (intFields.has(field)) {
     const n = parseInt(value, 10);
@@ -412,7 +719,13 @@ function buildPrismaData(
   return data;
 }
 
-async function parseFile(file: File): Promise<{ headers: string[]; records: string[][] }> {
+interface ParsedSheet {
+  name: string;
+  headers: string[];
+  records: string[][];
+}
+
+async function parseFile(file: File): Promise<ParsedSheet[]> {
   const name = file.name.toLowerCase();
 
   if (name.endsWith(".csv")) {
@@ -421,28 +734,67 @@ async function parseFile(file: File): Promise<{ headers: string[]; records: stri
     if (parsed.length < 2) {
       throw new Error("File must have a header row and at least one data row.");
     }
-    return { headers: parsed[0], records: parsed.slice(1) };
+    return [{ name: "Sheet1", headers: parsed[0], records: parsed.slice(1) }];
   }
 
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const workbook = XLSX.read(buffer, { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    if (!sheet) throw new Error("Excel file has no sheets.");
-
-    const json = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
-    if (json.length < 2) {
-      throw new Error("File must have a header row and at least one data row.");
+    const sheets: ParsedSheet[] = [];
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) {
+        sheets.push({ name: sheetName, headers: [], records: [] });
+        continue;
+      }
+      const json = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
+      if (json.length < 2) {
+        sheets.push({ name: sheetName, headers: [], records: [] });
+        continue;
+      }
+      const headers = (json[0] as string[]).map(h => String(h ?? ""));
+      const records = json.slice(1).map((row: any) =>
+        (row as any[]).map((cell: any) => cell?.toString() ?? "")
+      );
+      sheets.push({ name: sheetName, headers, records });
+      // Free memory for this sheet as soon as it is converted
+      delete workbook.Sheets[sheetName];
     }
-
-    const headers = (json[0] as string[]).map(h => String(h ?? ""));
-    const records = json.slice(1).map((row: any) =>
-      (row as any[]).map((cell: any) => cell?.toString() ?? "")
-    );
-    return { headers, records };
+    return sheets;
   }
 
   throw new Error("Unsupported file format. Please upload a .csv or .xlsx file.");
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+}
+
+// Postgres has a limit of 65535 bind parameters per statement.
+// Chunk the IN(...) query so huge files never exceed it.
+const IN_CHUNK_SIZE = 500;
+
+async function findItemsBySerial(
+  serials: string[],
+  select: Record<string, boolean>
+): Promise<Map<string, any>> {
+  const unique = [...new Set(serials.map(s => s.trim()).filter(Boolean))];
+  const result = new Map<string, any>();
+  for (const part of chunk(unique, IN_CHUNK_SIZE)) {
+    if (part.length === 0) continue;
+    const found = await (prisma.inventoryItem.findMany as any)({
+      where: { serialNumber: { in: part } },
+      select,
+    });
+    for (const f of found) {
+      result.set(f.serialNumber, f);
+    }
+  }
+  return result;
 }
 
 export async function POST(request: Request) {
@@ -473,10 +825,9 @@ export async function POST(request: Request) {
     );
   }
 
-  let headers: string[];
-  let records: string[][];
+  let sheets: ParsedSheet[];
   try {
-    ({ headers, records } = await parseFile(file));
+    sheets = await parseFile(file);
   } catch (e: any) {
     return NextResponse.json(
       { success: false, error: e.message || "Failed to parse file." },
@@ -484,81 +835,186 @@ export async function POST(request: Request) {
     );
   }
 
-  // Resolve all headers upfront — intelligently
-  const resolvedMap = new Map<number, string>();
-  const headerMapping: { header: string; field: string | undefined }[] = [];
-  const unknownHeaders: string[] = [];
-
-  for (let i = 0; i < headers.length; i++) {
-    const header = headers[i].trim();
-    const column = intelligentResolve(header);
-    if (column) {
-      resolvedMap.set(i, column);
-      headerMapping.push({ header, field: column });
-    } else {
-      unknownHeaders.push(header);
-      headerMapping.push({ header, field: undefined });
-    }
+  if (sheets.length === 0) {
+    return NextResponse.json(
+      { success: false, error: "File contains no sheets." },
+      { status: 400 }
+    );
   }
 
+  const dataSheets = sheets.filter(s => s.headers.length > 0 && s.records.length > 0);
+  if (dataSheets.length === 0) {
+    return NextResponse.json(
+      { success: false, error: "File must have a header row and at least one data row." },
+      { status: 400 }
+    );
+  }
+
+  // ── PREVIEW MODE: return column mapping without touching the database ──
+  if (mode === "preview") {
+    const first = dataSheets[0];
+    const sample = first.records[0] ?? [];
+    const resolvedMap = resolveColumns(first.headers);
+    const unknownHeaders: string[] = [];
+    const seenUnknown = new Set<string>();
+    for (const sheet of dataSheets) {
+      for (const h of sheet.headers) {
+        if (!intelligentResolve(h.trim())) {
+          const trimmed = h.trim();
+          if (!seenUnknown.has(trimmed)) {
+            seenUnknown.add(trimmed);
+            unknownHeaders.push(trimmed);
+          }
+        }
+      }
+    }
+    return NextResponse.json({
+      success: true,
+      preview: true,
+      sheets: sheets.map(s => ({
+        name: s.name,
+        headerCount: s.headers.length,
+        rowCount: s.records.length,
+      })),
+      rowCount: first.records.length,
+      mapping: first.headers.map((h, i) => ({
+        header: h.trim(),
+        field: resolvedMap.get(i) ?? null,
+        sample: (sample[i] ?? "").trim(),
+      })),
+      unknown: unknownHeaders,
+    });
+  }
+
+  // ── REAL IMPORT / UPDATE MODE ──
+  const total = {
+    created: 0,
+    updated: 0,
+    mapped: 0,
+    notFound: 0,
+  };
   const errors: string[] = [];
+  const matchedHeaders: { header: string; field: string }[] = [];
+  let matchedSet = false;
 
-  const rows: { data: Record<string, unknown>; rowNum: number }[] = [];
-  for (let r = 0; r < records.length; r++) {
-    const row = records[r];
-    if (row.length === 0 || row.every(c => c.trim() === "")) continue;
+  const revalidateDone = false;
 
-    const data = buildPrismaData(headers, row, unknownHeaders, resolvedMap);
+  for (const sheet of dataSheets) {
+    const prefix = dataSheets.length > 1 ? `[${sheet.name}] ` : "";
 
-    if (!data.serialNumber || String(data.serialNumber).trim() === "") {
-      errors.push(`Row ${r + 2}: No serial number found, skipped`);
+    // Resolve all headers upfront — intelligently
+    const resolvedMap = resolveColumns(sheet.headers);
+    const sheetMapping: { header: string; field: string | undefined }[] = [];
+    const unknownHeaders: string[] = [];
+
+    for (let i = 0; i < sheet.headers.length; i++) {
+      const header = sheet.headers[i].trim();
+      const column = resolvedMap.get(i);
+      if (column) {
+        sheetMapping.push({ header, field: column });
+      } else {
+        unknownHeaders.push(header);
+        sheetMapping.push({ header, field: undefined });
+      }
+    }
+
+    if (!matchedSet) {
+      matchedSet = true;
+      for (const m of sheetMapping) {
+        if (m.field) matchedHeaders.push({ header: m.header, field: m.field });
+      }
+    }
+
+    if (unknownHeaders.length > 0) {
+      errors.push(`${prefix}Unrecognized columns ignored: ${[...new Set(unknownHeaders)].join(", ")}`);
+    }
+
+    // Build rows
+    const rows: { data: Record<string, unknown>; rowNum: number }[] = [];
+    for (let r = 0; r < sheet.records.length; r++) {
+      const row = sheet.records[r];
+      if (row.length === 0 || row.every(c => c.trim() === "")) continue;
+
+      const data = buildPrismaData(sheet.headers, row, unknownHeaders, resolvedMap);
+
+      if (!data.serialNumber || String(data.serialNumber).trim() === "") {
+        errors.push(`${prefix}Row ${r + 2}: No serial number found, skipped`);
+        continue;
+      }
+
+      if (!data.model && data.laptopModel) {
+        data.model = data.laptopModel;
+      }
+
+      rows.push({ data, rowNum: r + 2 });
+    }
+
+    if (rows.length === 0) {
+      errors.push(`${prefix}No valid data rows found.`);
       continue;
     }
 
-    if (!data.model && data.laptopModel) {
-      data.model = data.laptopModel;
+    // ── PRODUCT MASTER ENRICHMENT ──
+    const partNos = [...new Set(
+      rows.map(r => String(r.data.partNo ?? "").trim()).filter(Boolean)
+    )];
+
+    if (partNos.length > 0) {
+      const products = await prisma.productMaster.findMany({
+        where: { partNo: { in: partNos } },
+        select: { partNo: true, make: true, model: true, description: true, warranty: true },
+      });
+      const productMap = new Map(products.filter(p => p.partNo).map(p => [p.partNo!, p]));
+
+      for (const row of rows) {
+        const pn = String(row.data.partNo ?? "").trim();
+        if (!pn) continue;
+        const product = productMap.get(pn);
+        if (!product) continue;
+
+        row.data.model = product.model;
+        row.data.laptopMake = product.make;
+        row.data.invoiceProductDescription = product.description;
+        row.data.description = product.description;
+        row.data.warrantyPeriod = product.warranty;
+      }
     }
 
-    rows.push({ data, rowNum: r + 2 });
-  }
-
-  // ── PRODUCT MASTER ENRICHMENT ──
-  // Always override with ProductMaster values when partNo matches
-  const partNos = [...new Set(
-    rows.map(r => String(r.data.partNo ?? "").trim()).filter(Boolean)
-  )];
-
-  if (partNos.length > 0) {
-    const products = await prisma.productMaster.findMany({
-      where: { partNo: { in: partNos } },
-      select: { partNo: true, make: true, model: true, description: true, warranty: true },
-    });
-    const productMap = new Map(products.filter(p => p.partNo).map(p => [p.partNo!, p]));
-
-    for (const row of rows) {
-      const pn = String(row.data.partNo ?? "").trim();
-      if (!pn) continue;
-      const product = productMap.get(pn);
-      if (!product) continue;
-
-      row.data.model = product.model;
-      row.data.laptopMake = product.make;
-      row.data.invoiceProductDescription = product.description;
-      row.data.description = product.description;
-      row.data.warrantyPeriod = product.warranty;
+    let sheetResult;
+    if (mode === "update") {
+      sheetResult = await handleUpdateMode(rows, prefix, errors);
+    } else {
+      sheetResult = await handleUploadMode(rows, prefix, errors);
     }
+
+    total.created += sheetResult.created;
+    total.updated += sheetResult.updated;
+    total.mapped += sheetResult.mapped;
+    total.notFound += sheetResult.notFound;
+
+    // Release memory for this sheet before moving to the next
+    sheet.records.length = 0;
   }
 
-  // ── UPDATE MODE ──
-  if (mode === "update") {
-    return handleUpdateMode(rows, unknownHeaders, headerMapping, errors);
+  if (!revalidateDone) {
+    revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard");
   }
 
-  // ── UPLOAD MODE (default) ──
-  return handleUploadMode(rows, unknownHeaders, headerMapping, errors);
+  const uniqueUnknown = errors.filter(e => e.includes("Unrecognized columns"));
+  const warning = uniqueUnknown.length > 0 ? uniqueUnknown.join(" | ") : null;
+
+  return NextResponse.json({
+    success: true,
+    ...total,
+    matched: matchedHeaders,
+    errors: errors.length > 0 ? errors : null,
+    warning,
+  });
 }
 
-const BATCH_SIZE = 200;
+const BATCH_SIZE = 50;
+const TRANSACTION_TIMEOUT_MS = 60000;
 
 const assignmentFields = [
   "employeeName", "emailId", "mobileNumber", "alternatePhoneNumber",
@@ -583,7 +1039,26 @@ const inventoryItemUpdateFields = [
   "serialNoInWs1", "dateOfWs1Update", "servicesStartDate", "invoicingWarehouse",
   "boxSerialNo", "checkField", "remark", "date", "csvStatus",
   "model", "specs", "invoicedQuantity", "customerInstructionDoc", "pickupDate",
+  "engineerName", "condition", "storageStatus", "rackNo",
+  "devItInwardLotNo", "hpLotNumber", "lotReceivedDate", "shippingDate", "assetRemarks",
+  "previousImageDate", "latestShippedDate", "latestCourierName",
+  "latestDocketNumber", "latestTrackingStatus", "latestEwayBill",
+  "latestDeliveryDate", "latestDc",
+  "inwardDate1", "outwardDate1", "inwardDate2", "outwardDate2",
+  "inwardDate3", "outwardDate3", "inwardDate4", "outwardDate4",
+  "inwardDate5", "outwardDate5", "inwardDate6", "outwardDate6",
+  "reqDateToDevIt", "deliveryTatDate",
+  "ewayBill", "docketDate", "fromWarehouseLocation",
 ];
+
+const historySelect = {
+  id: true, serialNumber: true,
+  employeeName: true, emailId: true, mobileNumber: true, alternatePhoneNumber: true,
+  shippingAddress: true, landMark: true, city: true, state: true, pinCode: true,
+  purpose: true, requestDate: true, userBaseLocation: true, imageType: true,
+  count: true, pwcRemarks: true, trackingStatus: true, trackingSubStatus: true,
+  dcNumber: true, docketNumber: true, deliveryDate: true,
+} as const;
 
 function buildAssignmentRecord(itemId: string, data: Record<string, unknown>): Record<string, unknown> {
   const record: Record<string, unknown> = { inventoryItemId: itemId, assignedAt: new Date() };
@@ -600,43 +1075,23 @@ function buildUpdateData(data: Record<string, unknown>): Record<string, unknown>
       updateData[f] = data[f];
     }
   }
-  if (updateData.employeeName && String(updateData.employeeName).trim() !== "") {
-    updateData.status = "ALLOCATED";
-  }
+  const hasEmployee = !!data.employeeName && String(data.employeeName).trim() !== "";
+  const hasEntity = !!data.entity && String(data.entity).trim() !== "";
+  updateData.status = deriveStatus(data.processStatus as string, hasEmployee, hasEntity);
   return updateData;
-}
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size));
-  }
-  return chunks;
 }
 
 async function handleUpdateMode(
   rows: { data: Record<string, unknown>; rowNum: number }[],
-  unknownHeaders: string[],
-  headerMapping: { header: string; field: string | undefined }[],
+  prefix: string,
   errors: string[]
-) {
+): Promise<{ created: number; updated: number; mapped: number; notFound: number }> {
   const allSerials = [...new Set(
     rows.map(r => String(r.data.serialNumber ?? "").trim()).filter(Boolean)
   )];
 
-  const existingItems = await prisma.inventoryItem.findMany({
-    where: { serialNumber: { in: allSerials } },
-    select: {
-      id: true, serialNumber: true,
-      employeeName: true, emailId: true, mobileNumber: true, alternatePhoneNumber: true,
-      shippingAddress: true, landMark: true, city: true, state: true, pinCode: true,
-      purpose: true, requestDate: true, userBaseLocation: true, imageType: true,
-      count: true, pwcRemarks: true, trackingStatus: true, trackingSubStatus: true,
-      dcNumber: true, docketNumber: true, deliveryDate: true,
-    },
-  });
-
-  const existingMap = new Map(existingItems.map(item => [item.serialNumber, item]));
+  const existingItems = await findItemsBySerial(allSerials, historySelect);
+  const existingMap = new Map(existingItems);
 
   const historyRecords: Record<string, unknown>[] = [];
   const updateOps: { id: string; data: Record<string, unknown> }[] = [];
@@ -648,7 +1103,7 @@ async function handleUpdateMode(
 
     if (!existing) {
       notFound++;
-      errors.push(`Row ${item.rowNum}: Serial number "${sn}" not found in inventory`);
+      errors.push(`${prefix}Row ${item.rowNum}: Serial number "${sn}" not found in inventory`);
       continue;
     }
 
@@ -692,7 +1147,7 @@ async function handleUpdateMode(
       const result = await prisma.assignmentRecord.createMany({ data: batch as any[] });
       mapped += result.count;
     } catch (err: any) {
-      errors.push(`Failed to save assignment history batch: ${err?.message ?? "Unknown error"}`);
+      errors.push(`${prefix}Failed to save assignment history batch: ${err?.message ?? "Unknown error"}`);
     }
   }
 
@@ -701,69 +1156,47 @@ async function handleUpdateMode(
   for (const batch of chunk(updateOps, BATCH_SIZE)) {
     try {
       await prisma.$transaction(
-        batch.map(op => prisma.inventoryItem.update({ where: { id: op.id }, data: op.data as any }))
+        batch.map(op => prisma.inventoryItem.update({ where: { id: op.id }, data: op.data as any })),
+        { timeout: TRANSACTION_TIMEOUT_MS }
       );
       updated += batch.length;
     } catch (err: any) {
-      errors.push(`Failed to update inventory batch: ${err?.message ?? "Unknown error"}`);
+      errors.push(`${prefix}Failed to update inventory batch: ${err?.message ?? "Unknown error"}`);
     }
   }
 
-  revalidatePath("/dashboard/inventory");
-  revalidatePath("/dashboard");
-
-  const uniqueUnknown = [...new Set(unknownHeaders)];
-  let warning = uniqueUnknown.length > 0 ? `Unrecognized columns ignored: ${uniqueUnknown.join(", ")}.` : "";
-
-  return NextResponse.json({
-    success: true,
-    updated,
-    mapped,
-    notFound,
-    errors: errors.length > 0 ? errors : null,
-    warning: warning || null,
-  });
+  return { created: 0, updated, mapped, notFound };
 }
 
 async function handleUploadMode(
   rows: { data: Record<string, unknown>; rowNum: number }[],
-  unknownHeaders: string[],
-  headerMapping: { header: string; field: string | undefined }[],
+  prefix: string,
   errors: string[]
-) {
+): Promise<{ created: number; updated: number; mapped: number; notFound: number }> {
   const allSerials = [...new Set(
     rows.map(r => String(r.data.serialNumber ?? "").trim()).filter(Boolean)
   )];
 
-  const existingItems = await prisma.inventoryItem.findMany({
-    where: { serialNumber: { in: allSerials } },
-    select: { id: true, serialNumber: true },
-  });
+  const existingItems = await findItemsBySerial(allSerials, { id: true, serialNumber: true });
+  const existingMap = new Map(existingItems);
 
-  const existingMap = new Map(existingItems.map(item => [item.serialNumber, item.id]));
-
-  // Separate rows into new items and existing items
-  const newItems: { data: Record<string, unknown>; rowNum: number }[] = [];
+  // Assignment files only update existing inventory items. Serial numbers not found
+  // in inventory are skipped and reported — never auto-created.
   const existingRows: { data: Record<string, unknown>; rowNum: number; itemId: string }[] = [];
+  let notFound = 0;
+  const seenNotFound = new Set<string>();
 
   for (const item of rows) {
     const sn = String(item.data.serialNumber ?? "").trim();
     const itemId = existingMap.get(sn);
     if (itemId) {
-      existingRows.push({ ...item, itemId });
+      existingRows.push({ ...item, itemId: String(itemId.id) });
     } else {
-      newItems.push(item);
-    }
-  }
-
-  // Deduplicate newItems by serialNumber — CSV may have same serial for multiple assignments
-  const seenSerials = new Set<string>();
-  const dedupedNewItems: { data: Record<string, unknown>; rowNum: number }[] = [];
-  for (const item of newItems) {
-    const sn = String(item.data.serialNumber ?? "").trim();
-    if (!seenSerials.has(sn)) {
-      seenSerials.add(sn);
-      dedupedNewItems.push(item);
+      notFound++;
+      if (!seenNotFound.has(sn)) {
+        seenNotFound.add(sn);
+        errors.push(`${prefix}Row ${item.rowNum}: Serial number "${sn}" not found in inventory — skipped`);
+      }
     }
   }
 
@@ -783,126 +1216,31 @@ async function handleUploadMode(
   for (const batch of chunk(updateOps, BATCH_SIZE)) {
     try {
       await prisma.$transaction(
-        batch.map(op => prisma.inventoryItem.update({ where: { id: op.id }, data: op.data as any }))
+        batch.map(op => prisma.inventoryItem.update({ where: { id: op.id }, data: op.data as any })),
+        { timeout: TRANSACTION_TIMEOUT_MS }
       );
       updated += batch.length;
     } catch (err: any) {
-      errors.push(`Failed to update existing inventory batch: ${err?.message ?? "Unknown error"}`);
+      errors.push(`${prefix}Failed to update existing inventory batch: ${err?.message ?? "Unknown error"}`);
     }
   }
 
-  // Batch create new inventory items
-  const newItemsData: Record<string, unknown>[] = [];
-  const newItemsMeta: { sn: string; rowNum: number }[] = [];
-
-  for (const item of dedupedNewItems) {
-    const sn = String(item.data.serialNumber ?? "").trim();
-    const cleanData = Object.fromEntries(
-      Object.entries(item.data).filter(([_, v]) => v !== null && v !== undefined)
-    );
-    if (!cleanData.serialNumber) cleanData.serialNumber = sn;
-    const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
-    const hasEntity = cleanData.entity && String(cleanData.entity).trim() !== "";
-    if (!cleanData.status) {
-      cleanData.status = hasEmployee ? "ALLOCATED" : hasEntity ? "AVAILABLE" : "NEW";
-    } else if (cleanData.status === "AVAILABLE" && !hasEntity) {
-      cleanData.status = "NEW";
-    }
-    newItemsData.push(cleanData);
-    newItemsMeta.push({ sn, rowNum: item.rowNum });
-  }
-
-  // Insert new items in batches and collect their IDs
-  const newItemsWithIds: { itemId: string; data: Record<string, unknown>; rowNum: number }[] = [];
-
-  for (let i = 0; i < newItemsData.length; i += BATCH_SIZE) {
-    const batchData = newItemsData.slice(i, i + BATCH_SIZE);
-    const batchMeta = newItemsMeta.slice(i, i + BATCH_SIZE);
-    try {
-      await prisma.inventoryItem.createMany({ data: batchData as any[] });
-      // Fetch back the IDs
-      const batchSerials = batchMeta.map(m => m.sn);
-      const created = await prisma.inventoryItem.findMany({
-        where: { serialNumber: { in: batchSerials } },
-        select: { id: true, serialNumber: true },
-      });
-      const idMap = new Map(created.map(c => [c.serialNumber, c.id]));
-      for (let j = 0; j < batchMeta.length; j++) {
-        const id = idMap.get(batchMeta[j].sn);
-        if (id) {
-          newItemsWithIds.push({ itemId: id, data: batchData[j], rowNum: batchMeta[j].rowNum });
-        } else {
-          errors.push(`Row ${batchMeta[j].rowNum}: Failed to create item "${batchMeta[j].sn}"`);
-        }
-      }
-    } catch (err: any) {
-      // Batch failed — retry one by one to find the exact failing rows
-      for (let j = 0; j < batchData.length; j++) {
-        try {
-          await prisma.inventoryItem.create({ data: batchData[j] as any });
-          const created = await prisma.inventoryItem.findFirst({
-            where: { serialNumber: batchMeta[j].sn },
-            select: { id: true },
-          });
-          if (created) {
-            newItemsWithIds.push({ itemId: created.id, data: batchData[j], rowNum: batchMeta[j].rowNum });
-          }
-        } catch (singleErr: any) {
-          errors.push(`Row ${batchMeta[j].rowNum}: Failed to create item "${batchMeta[j].sn}" - ${singleErr?.message ?? "Unknown error"}`);
-        }
-      }
-    }
-  }
-
-  // Build all assignment records (new + duplicates + existing)
+  // Build assignment records for all existing rows (including duplicate serials)
   const allAssignments: Record<string, unknown>[] = [];
-  let mapped = 0;
-
-  // Map serialNumber → itemId for all created items
-  const serialToItemId = new Map<string, string>();
-  for (const item of newItemsWithIds) {
-    serialToItemId.set(String(item.data.serialNumber ?? "").trim(), item.itemId);
-  }
-  // Also add existing rows
-  for (const item of existingRows) {
-    serialToItemId.set(String(item.data.serialNumber ?? "").trim(), item.itemId);
-  }
-
-  // Create assignment records for ALL original rows (including duplicate serials)
-  for (const item of newItems) {
-    const sn = String(item.data.serialNumber ?? "").trim();
-    const itemId = serialToItemId.get(sn);
-    if (itemId) {
-      allAssignments.push(buildAssignmentRecord(itemId, item.data));
-    }
-  }
   for (const item of existingRows) {
     allAssignments.push(buildAssignmentRecord(item.itemId, item.data));
   }
 
   // Batch insert all assignment records
+  let mapped = 0;
   for (const batch of chunk(allAssignments, BATCH_SIZE)) {
     try {
       const result = await prisma.assignmentRecord.createMany({ data: batch as any[] });
       mapped += result.count;
     } catch (err: any) {
-      errors.push(`Failed to save assignment history batch: ${err?.message ?? "Unknown error"}`);
+      errors.push(`${prefix}Failed to save assignment history batch: ${err?.message ?? "Unknown error"}`);
     }
   }
 
-  revalidatePath("/dashboard/inventory");
-  revalidatePath("/dashboard");
-
-  const uniqueUnknown = [...new Set(unknownHeaders)];
-  let warning = uniqueUnknown.length > 0 ? `Unrecognized columns ignored: ${uniqueUnknown.join(", ")}.` : "";
-  const matchedHeaders = headerMapping.filter(h => h.field).map(h => `${h.header} → ${h.field}`);
-
-  return NextResponse.json({
-    success: true,
-    mapped,
-    updated,
-    matched: matchedHeaders,
-    errors: errors.length > 0 ? errors : null,
-    warning: warning || null,
-  });
+  return { created: 0, updated, mapped, notFound };
 }

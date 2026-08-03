@@ -80,6 +80,8 @@ interface Item {
   dcNumber: string | null;
   date: string | null;
   csvStatus: string | null;
+  inwardDate1: string | null;
+  outwardDate1: string | null;
 }
 
 export function EditInventoryForm({ item }: { item: Item }) {
@@ -132,6 +134,8 @@ export function EditInventoryForm({ item }: { item: Item }) {
   }
 
   function getValue(field: string): string | number | undefined {
+    if (field === "inwardDate") return formatDate(item.inwardDate1);
+    if (field === "outwardDate") return formatDate(item.outwardDate1);
     const key = field as keyof Item;
     const val = item[key];
     if (val === null || val === undefined) return undefined;

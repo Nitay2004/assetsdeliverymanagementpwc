@@ -339,8 +339,16 @@ export async function importInventoryCSV(formData: FormData) {
       for (const f of assignmentFields) {
         assignmentData[f] = (item.data as any)[f] ?? null;
       }
-      assignmentData.assignedAt = new Date();
-      await prisma.assignmentRecord.create({ data: assignmentData as any });
+      const empName = String(assignmentData.employeeName ?? "").trim();
+      if (empName) {
+        const alreadyRecorded = await prisma.assignmentRecord.findFirst({
+          where: { inventoryItemId: itemId, employeeName: empName },
+        });
+        if (!alreadyRecorded) {
+          assignmentData.assignedAt = new Date();
+          await prisma.assignmentRecord.create({ data: assignmentData as any });
+        }
+      }
       mapped++;
     } catch (err: any) {
       errors.push(`Row ${item.rowNum}: Failed to map assignment for "${sn}" - ${err?.message ?? "Unknown error"}`);

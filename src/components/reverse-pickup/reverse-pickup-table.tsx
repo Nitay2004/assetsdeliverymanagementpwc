@@ -3,7 +3,7 @@
 import { useState, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, ExternalLink, Trash2, Eye } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Trash2, Eye, FileText, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { deleteReversePickupRequest } from "@/app/actions/reverse-pickup";
@@ -25,7 +25,14 @@ interface RequestData {
   courierName: string | null;
   displayStatus: string | null;
   qcResult: string | null;
+  qcCleanResult: string | null;
+  qcPurgeResult: string | null;
   finalDisposition: string | null;
+  docketNumber: string | null;
+  dcNo: string | null;
+  eWayBillNo: string | null;
+  blancoCertificateUrl: string | null;
+  dcId: string | null;
   createdAt: string;
   pickupDate: string | null;
   [key: string]: any;
@@ -65,6 +72,21 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
     }
   };
 
+  const handleViewFile = async (path: string) => {
+    try {
+      if (/^https?:\/\//i.test(path)) {
+        window.open(path, "_blank");
+        return;
+      }
+      const res = await fetch(`/api/pod-url?path=${encodeURIComponent(path)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load file");
+      window.open(data.url, "_blank");
+    } catch (err) {
+      toast({ title: "Error", description: String(err), variant: "error" });
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const style = statusStyles[status] ?? { label: status, color: "bg-gray-100 text-gray-600" };
     return (
@@ -89,6 +111,10 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
               <th className="px-6 py-4 font-semibold">Model</th>
               <th className="px-6 py-4 font-semibold">Type</th>
               <th className="px-6 py-4 font-semibold">Status</th>
+              <th className="px-6 py-4 font-semibold">DC</th>
+              <th className="px-6 py-4 font-semibold">Docket</th>
+              <th className="px-6 py-4 font-semibold">E-Way Bill</th>
+              <th className="px-6 py-4 font-semibold">Blanco Cert</th>
               <th className="px-6 py-4 font-semibold">Partner/Courier</th>
               <th className="px-6 py-4 font-semibold">Created</th>
               {canManage && <th className="px-6 py-4 font-semibold">Actions</th>}
@@ -97,7 +123,7 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
           <tbody className="divide-y">
             {requests.length === 0 ? (
               <tr>
-                <td colSpan={canManage ? 9 : 8} className="px-6 py-12 text-center text-muted-foreground">
+                <td colSpan={canManage ? 13 : 12} className="px-6 py-12 text-center text-muted-foreground">
                   No reverse pickup requests found.
                 </td>
               </tr>
@@ -123,6 +149,57 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
                     <td className="px-6 py-4 text-muted-foreground">{req.model}</td>
                     <td className="px-6 py-4 text-muted-foreground">{req.type || "—"}</td>
                     <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
+                    <td className="px-6 py-4">
+                      {req.dcNo ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-xs font-mono">
+                          {req.dcNo}
+                          {req.dcId && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); window.open(`/api/dc/${req.dcId}/pdf`, "_blank"); }}
+                              className="p-0.5 text-muted-foreground hover:text-indigo-600 transition-colors"
+                              title="Download DC PDF"
+                            >
+                              <Download className="size-3.5" />
+                            </button>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {req.docketNumber ? (
+                        <span className="px-2 py-0.5 rounded bg-gray-50 text-gray-700 text-xs font-mono">
+                          {req.docketNumber}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {req.eWayBillNo ? (
+                        <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-700 text-xs font-mono">
+                          {req.eWayBillNo}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {req.blancoCertificateUrl ? (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); if (req.blancoCertificateUrl) handleViewFile(req.blancoCertificateUrl); }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-teal-50 text-teal-700 text-xs font-semibold hover:underline"
+                        >
+                          <FileText className="size-3" />
+                          View
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-muted-foreground">
                       {req.courierName || req.partnerName || "—"}
                     </td>
@@ -152,7 +229,7 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
                   </tr>
                   {expandedId === req.id && (
                     <tr className="bg-muted/5">
-                      <td colSpan={canManage ? 9 : 8} className="px-6 py-6">
+                      <td colSpan={canManage ? 13 : 12} className="px-6 py-6">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
                           <div>
                             <p className="text-xs font-semibold uppercase text-muted-foreground mb-1">Contact</p>
@@ -170,13 +247,22 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
                             <p className="text-xs font-semibold uppercase text-muted-foreground mb-1">Warehouse</p>
                             <p className="font-medium">{req.warehouseLocation || "—"}</p>
                             {req.displayStatus && <p className="text-muted-foreground">Status: {req.displayStatus}</p>}
-                            {req.qcResult && (
-                              <>
-                                <p className="text-xs font-semibold uppercase text-muted-foreground mt-2 mb-1">QC Result</p>
-                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                  req.qcResult === "PASS" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                                }`}>{req.qcResult}</span>
-                              </>
+                            {(req.qcCleanResult || req.qcPurgeResult) && (
+                              <p className="text-xs font-semibold uppercase text-muted-foreground mt-2 mb-1">QC</p>
+                            )}
+                            {req.qcCleanResult && (
+                              <p className="text-muted-foreground text-xs">
+                                Clean: <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                  req.qcCleanResult === "PASS" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                                }`}>{req.qcCleanResult}</span>
+                              </p>
+                            )}
+                            {req.qcPurgeResult && (
+                              <p className="text-muted-foreground text-xs">
+                                Purge: <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                  req.qcPurgeResult === "PASS" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                                }`}>{req.qcPurgeResult}</span>
+                              </p>
                             )}
                           </div>
                           <div>

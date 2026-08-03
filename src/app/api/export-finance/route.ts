@@ -178,6 +178,8 @@ export async function GET() {
     "Docket Number": rp.docketNumber ?? "",
     "E-Way Bill No": rp.eWayBillNo ?? "",
     "DC No": rp.dcNo ?? "",
+    "Clean QC": rp.qcCleanResult ?? "",
+    "Purge QC": rp.qcPurgeResult ?? "",
     "QC Result": rp.qcResult ?? "",
     "Created At": getVal(rp as unknown as Record<string, unknown>, "createdAt"),
   }));

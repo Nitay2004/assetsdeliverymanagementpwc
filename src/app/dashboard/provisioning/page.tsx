@@ -6,7 +6,16 @@ import Link from "next/link";
 import { ProvisioningTable } from "@/components/provisioning/provisioning-table";
 import { ProvisioningPagination } from "@/components/provisioning/provisioning-pagination";
 import { ProvisioningExportButton } from "@/components/provisioning/provisioning-export-button";
+import { QcWorkTable } from "@/components/provisioning/qc-work-table";
+import { ProvisioningTabs } from "@/components/provisioning/provisioning-tabs";
+import type { QcItem } from "@/components/qc/qc-panel";
 import type { Prisma } from "@prisma/client";
+
+function safeISO(date: Date | null | undefined): string | null {
+  if (!date) return null;
+  const t = date.getTime();
+  return isNaN(t) ? null : date.toISOString();
+}
 
 export default async function ProvisioningPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
@@ -15,6 +24,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
   const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
   const selectedEngineer = typeof searchParams.engineer === "string" ? searchParams.engineer : "";
+  const activeTab = typeof searchParams.tab === "string" && searchParams.tab === "qc" ? "qc" : "provisioning";
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "PROVISIONING"));
 
@@ -68,6 +78,44 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const inProvisioningCount = orders.filter(o => o.status === "ALLOCATED" || o.status === "IN_PROVISIONING").length;
   const handedOverCount = orders.filter(o => o.status === "DOCKET_REQUESTED").length;
   const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
+
+  const qcPendingItems = await prisma.inventoryItem.findMany({
+    where: {
+      OR: [{ status: "QC_PENDING" }, { qcCompletedAt: { not: null } }],
+    },
+    orderBy: { qcRequestedAt: "desc" },
+  });
+
+  const serializedQc: QcItem[] = qcPendingItems.map(i => ({
+    id: i.id,
+    serialNumber: i.serialNumber,
+    model: i.model,
+    status: i.status,
+    employeeName: i.employeeName,
+    emailId: i.emailId,
+    mobileNumber: i.mobileNumber,
+    city: i.city,
+    state: i.state,
+    invoicingWarehouse: i.invoicingWarehouse,
+    qcLocation: i.qcLocation,
+    qcRequestedAt: safeISO(i.qcRequestedAt),
+    qcEngineer: i.qcEngineer,
+    qcAssignedAt: safeISO(i.qcAssignedAt),
+    qcCleanResult: i.qcCleanResult,
+    qcCleanRemarks: i.qcCleanRemarks,
+    qcCleanDate: safeISO(i.qcCleanDate),
+    qcCleanBy: i.qcCleanBy,
+    qcPurgeResult: i.qcPurgeResult,
+    qcPurgeRemarks: i.qcPurgeRemarks,
+    qcPurgeDate: safeISO(i.qcPurgeDate),
+    qcPurgeBy: i.qcPurgeBy,
+    qcFinalResult: i.qcFinalResult,
+    qcCompletedAt: safeISO(i.qcCompletedAt),
+  }));
+
+  const myQcItems = user
+    ? serializedQc.filter(i => i.qcEngineer === user.name)
+    : [];
 
   // Group data by engineer for sections
   const sections: { label: string; orders: typeof orders }[] = [];
@@ -124,85 +172,93 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-yellow-100">
-            <Clock className="size-5 text-yellow-600" />
-          </div>
-          <div>
-            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">In Provisioning</p>
-            <p className="text-2xl font-bold text-primary mt-1">{inProvisioningCount}</p>
-          </div>
-        </div>
-        <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-green-100">
-            <CheckCircle className="size-5 text-green-600" />
-          </div>
-          <div>
-            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Handed Over</p>
-            <p className="text-2xl font-bold text-primary mt-1">{handedOverCount}</p>
-          </div>
-        </div>
-        <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-purple-100">
-            <Wrench className="size-5 text-purple-600" />
-          </div>
-          <div>
-            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Total Assets</p>
-            <p className="text-2xl font-bold text-primary mt-1">{totalAssets}</p>
-          </div>
-        </div>
-      </div>
+      <ProvisioningTabs qcCount={myQcItems.filter(i => !i.qcCompletedAt).length} />
 
-      {sections.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href={engineerUrl("")}
-            className={`${btnBase} ${!selectedEngineer ? btnActive : btnInactive}`}
-          >
-            All ({sections.length})
-          </Link>
-          {sections.map(s => (
-            <Link
-              key={s.label}
-              href={engineerUrl(s.label)}
-              className={`${btnBase} ${selectedEngineer === s.label ? btnActive : btnInactive}`}
-            >
-              <User className="inline size-3.5 mr-1" />
-              {s.label}
-              <span className="ml-1.5 text-xs opacity-70">({s.orders.reduce((sum, o) => sum + o.assets.length, 0)})</span>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {visibleSections.length === 0 ? (
-        <div className="p-8 rounded-xl glass text-center text-muted-foreground">
-          {selectedEngineer
-            ? `No orders found for "${selectedEngineer}".`
-            : "No orders ready for provisioning. Allocate inventory in the Warehouse module first."}
-        </div>
+      {activeTab === "qc" ? (
+        <QcWorkTable items={myQcItems} />
       ) : (
-        visibleSections.map((section) => (
-          <section key={section.label} className="space-y-3">
-            <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-              <User className={`size-5 ${section.label === "Unassigned" ? "text-muted-foreground" : "text-blue-600"}`} />
-              {section.label}
-              <span className="text-sm font-normal text-muted-foreground">
-                — {section.orders.length} order(s), {section.orders.reduce((s, o) => s + o.assets.length, 0)} asset(s)
-              </span>
-            </h2>
-            <ProvisioningTable
-              orders={section.orders}
-              canManage={canManage}
-              engineers={engineers}
-              selectedId={selectedId}
-            />
-          </section>
-        ))
-      )}
+        <>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
+              <div className="p-3 rounded-lg bg-yellow-100">
+                <Clock className="size-5 text-yellow-600" />
+              </div>
+              <div>
+                <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">In Provisioning</p>
+                <p className="text-2xl font-bold text-primary mt-1">{inProvisioningCount}</p>
+              </div>
+            </div>
+            <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
+              <div className="p-3 rounded-lg bg-green-100">
+                <CheckCircle className="size-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Handed Over</p>
+                <p className="text-2xl font-bold text-primary mt-1">{handedOverCount}</p>
+              </div>
+            </div>
+            <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
+              <div className="p-3 rounded-lg bg-purple-100">
+                <Wrench className="size-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Total Assets</p>
+                <p className="text-2xl font-bold text-primary mt-1">{totalAssets}</p>
+              </div>
+            </div>
+          </div>
 
-      <ProvisioningPagination totalCount={totalCount} currentPage={page} pageSize={limit} />
+          {sections.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={engineerUrl("")}
+                className={`${btnBase} ${!selectedEngineer ? btnActive : btnInactive}`}
+              >
+                All ({sections.length})
+              </Link>
+              {sections.map(s => (
+                <Link
+                  key={s.label}
+                  href={engineerUrl(s.label)}
+                  className={`${btnBase} ${selectedEngineer === s.label ? btnActive : btnInactive}`}
+                >
+                  <User className="inline size-3.5 mr-1" />
+                  {s.label}
+                  <span className="ml-1.5 text-xs opacity-70">({s.orders.reduce((sum, o) => sum + o.assets.length, 0)})</span>
+                </Link>
+              ))}
+            </div>
+          )}
+
+          {visibleSections.length === 0 ? (
+            <div className="p-8 rounded-xl glass text-center text-muted-foreground">
+              {selectedEngineer
+                ? `No orders found for "${selectedEngineer}".`
+                : "No orders ready for provisioning. Allocate inventory in the Warehouse module first."}
+            </div>
+          ) : (
+            visibleSections.map((section) => (
+              <section key={section.label} className="space-y-3">
+                <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                  <User className={`size-5 ${section.label === "Unassigned" ? "text-muted-foreground" : "text-blue-600"}`} />
+                  {section.label}
+                  <span className="text-sm font-normal text-muted-foreground">
+                    — {section.orders.length} order(s), {section.orders.reduce((s, o) => s + o.assets.length, 0)} asset(s)
+                  </span>
+                </h2>
+                <ProvisioningTable
+                  orders={section.orders}
+                  canManage={canManage}
+                  engineers={engineers}
+                  selectedId={selectedId}
+                />
+              </section>
+            ))
+          )}
+
+          <ProvisioningPagination totalCount={totalCount} currentPage={page} pageSize={limit} />
+        </>
+      )}
     </div>
   );
 }
