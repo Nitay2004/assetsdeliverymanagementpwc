@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { fields, toFieldName } from "@/lib/inventory-form-config";
-import { returnItemToStock, reassignItem, getAssignmentHistory, getInventoryItem, getDistinctFieldValues, addDropdownOption, deleteDropdownOption, seedDropdownOptions } from "@/app/actions/inventory";
+import { returnItemToStock, reassignItem, cancelItemAssignment, getAssignmentHistory, getInventoryItem, getDistinctFieldValues, addDropdownOption, deleteDropdownOption, seedDropdownOptions } from "@/app/actions/inventory";
 import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
 import { PincodeInput } from "@/components/shared/pincode-input";
 
@@ -304,6 +304,28 @@ export function InventoryDetailDrawer({
     }
   }
 
+  async function handleCancelAssignment() {
+    const ok = await showAlert({
+      title: "Cancel assignment?",
+      description: `Cancel ${displayItem.employeeName}'s assignment for ${displayItem.serialNumber}. The item will be marked AVAILABLE and the linked order will be cancelled. The assignment is saved to history as "Shipment Cancelled".`,
+      confirmLabel: "Cancel Assignment",
+      cancelLabel: "Back",
+    });
+    if (!ok) return;
+
+    try {
+      await cancelItemAssignment(displayItem.id);
+      const updated = await getInventoryItem(displayItem.id);
+      if (updated) setDisplayItem(updated as InventoryItem);
+      toast({ title: "Cancelled", description: "Assignment cancelled. Item is available again.", variant: "success" });
+      setRecords(null);
+      getAssignmentHistory(displayItem.id).then(setRecords);
+      router.refresh();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "error" });
+    }
+  }
+
   async function handleReassign(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -432,6 +454,16 @@ export function InventoryDetailDrawer({
                 >
                   <RotateCcw className="size-4" />
                   Return to Stock
+                </button>
+              )}
+
+              {displayItem.status === "ALLOCATED" && displayItem.employeeName && (
+                <button
+                  onClick={handleCancelAssignment}
+                  className="flex items-center gap-2 rounded-lg bg-red-100 text-red-800 px-3 py-2 text-sm font-medium hover:bg-red-200 transition-colors w-full"
+                >
+                  <X className="size-4" />
+                  Cancel Assignment
                 </button>
               )}
 

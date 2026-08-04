@@ -30,6 +30,7 @@ enum OrderStatus {
   DELIVERY_CONFIRMED
   INVOICED
   WARRANTY_UPDATED
+  CANCELLED
 }
 
 enum InventoryStatus {

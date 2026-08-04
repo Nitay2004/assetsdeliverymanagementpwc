@@ -314,6 +314,95 @@ export async function returnItemToStock(id: string) {
   revalidatePath("/dashboard");
 }
 
+export async function cancelItemAssignment(id: string) {
+  const user = await getSession();
+  requirePermission(user, "inventory", "canEdit");
+
+  const existing = await prisma.inventoryItem.findUnique({ where: { id } });
+  if (!existing) throw new Error("Item not found.");
+  if (existing.status !== "ALLOCATED") throw new Error("Only allocated items can be cancelled.");
+
+  await prisma.$transaction(async (tx) => {
+    if (existing.employeeName) {
+      await tx.assignmentRecord.create({
+        data: {
+          inventoryItemId: id,
+          employeeName: existing.employeeName,
+          emailId: existing.emailId,
+          mobileNumber: existing.mobileNumber,
+          alternatePhoneNumber: existing.alternatePhoneNumber,
+          shippingAddress: existing.shippingAddress,
+          landMark: existing.landMark,
+          city: existing.city,
+          state: existing.state,
+          pinCode: existing.pinCode,
+          purpose: existing.purpose,
+          requestDate: existing.requestDate,
+          userBaseLocation: existing.userBaseLocation,
+          imageType: existing.imageType,
+          count: existing.count,
+          pwcRemarks: existing.pwcRemarks,
+          trackingStatus: "Shipment Cancelled",
+          dcNumber: existing.dcNumber,
+          docketNumber: existing.docketNumber,
+          deliveryDate: existing.deliveryDate,
+          assignedAt: new Date(),
+        },
+      });
+    }
+
+    await tx.inventoryItem.update({
+      where: { id },
+      data: {
+        status: "AVAILABLE",
+        trackingStatus: "Shipment Cancelled",
+        trackingSubStatus: null,
+        employeeName: null,
+        emailId: null,
+        mobileNumber: null,
+        alternatePhoneNumber: null,
+        shippingAddress: null,
+        landMark: null,
+        city: null,
+        state: null,
+        pinCode: null,
+        purpose: null,
+        requestDate: null,
+        userBaseLocation: null,
+        imageType: null,
+        count: null,
+        pwcRemarks: null,
+        dcNumber: null,
+        docketNumber: null,
+        deliveryDate: null,
+      },
+    });
+
+    const asset = await tx.asset.findFirst({
+      where: {
+        inventoryItemId: id,
+        order: { status: { notIn: ["DELIVERED", "DELIVERY_CONFIRMED", "INVOICED", "WARRANTY_UPDATED", "CANCELLED"] } },
+      },
+      select: { orderId: true },
+    });
+    if (asset) {
+      await tx.order.update({
+        where: { id: asset.orderId },
+        data: { status: "CANCELLED" },
+      });
+      await tx.asset.updateMany({
+        where: { inventoryItemId: id, orderId: asset.orderId },
+        data: { status: "cancelled" },
+      });
+    }
+  });
+
+  revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard/provisioning");
+  revalidatePath("/dashboard");
+}
+
 export async function getDistinctFieldValues() {
   const options = await prisma.dropdownOption.findMany({
     orderBy: { value: "asc" },
@@ -643,7 +732,7 @@ export async function sendToWarehouse(inventoryItemIds: string[]) {
   const alreadyInOrder = await prisma.asset.findFirst({
     where: {
       inventoryItemId: { in: items.map(i => i.id) },
-      order: { status: { notIn: ["DELIVERED", "DELIVERY_CONFIRMED", "WARRANTY_UPDATED"] } },
+      order: { status: { notIn: ["DELIVERED", "DELIVERY_CONFIRMED", "WARRANTY_UPDATED", "CANCELLED"] } },
     },
     include: { order: { select: { id: true, status: true } } },
   });
