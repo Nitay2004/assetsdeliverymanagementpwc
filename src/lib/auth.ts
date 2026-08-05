@@ -29,7 +29,7 @@ export async function createSession(userId: string) {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    expires: expiresAt,
+    maxAge: ABSOLUTE_TIMEOUT_MS / 1000, // browser cookie self-cleans within the absolute limit
     path: "/",
   });
 }
@@ -68,32 +68,25 @@ export async function getSession() {
   const now = new Date();
 
   // Absolute timeout — session can live for at most 8 hours after creation,
-  // regardless of activity.
+  // regardless of activity. Stale cookies are harmless: they point to a
+  // deleted session, and createSession() overwrites them on next login.
   if (now.getTime() - session.createdAt.getTime() > ABSOLUTE_TIMEOUT_MS) {
     await prisma.session.delete({ where: { id: session.id } });
-    cookieStore.delete(SESSION_COOKIE_NAME);
     return null;
   }
 
   // Idle timeout — if the session expired due to inactivity, destroy it.
   if (session.expiresAt < now) {
     await prisma.session.delete({ where: { id: session.id } });
-    cookieStore.delete(SESSION_COOKIE_NAME);
     return null;
   }
 
-  // Slide the idle window forward on every activity.
+  // Slide the idle window forward on every activity (DB only — cookies can't
+  // be modified during a Server Component render).
   const newExpiry = new Date(now.getTime() + IDLE_TIMEOUT_MS);
   await prisma.session.update({
     where: { id: session.id },
     data: { expiresAt: newExpiry },
-  });
-  cookieStore.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    expires: newExpiry,
-    path: "/",
   });
 
   return session.user;
