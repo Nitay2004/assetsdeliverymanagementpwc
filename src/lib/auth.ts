@@ -3,6 +3,8 @@ import { prisma } from "./prisma";
 import crypto from "crypto";
 
 const SESSION_COOKIE_NAME = "devit_session";
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes of inactivity
+const ABSOLUTE_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8 hours absolute maximum
 
 export async function createSession(userId: string) {
   // Generate a random token
@@ -10,8 +12,9 @@ export async function createSession(userId: string) {
   
   // Hash the token before storing it in the database for security
   const hash = crypto.createHash("sha256").update(token).digest("hex");
-  
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + IDLE_TIMEOUT_MS);
 
   await prisma.session.create({
     data: {
@@ -62,10 +65,36 @@ export async function getSession() {
     return null;
   }
 
-  if (session.expiresAt < new Date()) {
+  const now = new Date();
+
+  // Absolute timeout — session can live for at most 8 hours after creation,
+  // regardless of activity.
+  if (now.getTime() - session.createdAt.getTime() > ABSOLUTE_TIMEOUT_MS) {
     await prisma.session.delete({ where: { id: session.id } });
+    cookieStore.delete(SESSION_COOKIE_NAME);
     return null;
   }
+
+  // Idle timeout — if the session expired due to inactivity, destroy it.
+  if (session.expiresAt < now) {
+    await prisma.session.delete({ where: { id: session.id } });
+    cookieStore.delete(SESSION_COOKIE_NAME);
+    return null;
+  }
+
+  // Slide the idle window forward on every activity.
+  const newExpiry = new Date(now.getTime() + IDLE_TIMEOUT_MS);
+  await prisma.session.update({
+    where: { id: session.id },
+    data: { expiresAt: newExpiry },
+  });
+  cookieStore.set(SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    expires: newExpiry,
+    path: "/",
+  });
 
   return session.user;
 }
