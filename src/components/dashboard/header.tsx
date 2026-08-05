@@ -10,7 +10,7 @@ export async function Header() {
   const user = await getSession();
 
   if (!user) {
-    redirect("/");
+    redirect("/api/auth/clear-session");
   }
 
   return (

@@ -6,7 +6,7 @@ import { ReversePickupDetail } from "@/components/reverse-pickup/reverse-pickup-
 export default async function ReversePickupDetailPage(props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
   const user = await getSession();
-  if (!user) redirect("/");
+  if (!user) redirect("/api/auth/clear-session");
 
   const request = await prisma.reversePickupRequest.findUnique({ where: { id } });
   if (!request) notFound();
