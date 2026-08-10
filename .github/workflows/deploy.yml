@@ -28,5 +28,6 @@ jobs:
       - name: Health check
         run: |
           sleep 12
-          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/ || echo 000)
+          port=$(grep -E '^APP_PORT=' /opt/asset-delivery-system/.env 2>/dev/null | cut -d= -f2 || echo 3000)
+          code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/" || echo 000)
           echo "App HTTP status: $code"
