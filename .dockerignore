@@ -10,3 +10,5 @@ scripts/supabase-old.env
 *.tmp.js
 .DS_Store
 __MACOSX
+*.tgz
+project.tgz
