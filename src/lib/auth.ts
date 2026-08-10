@@ -27,7 +27,7 @@ export async function createSession(userId: string) {
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: false,
     sameSite: "lax",
     maxAge: ABSOLUTE_TIMEOUT_MS / 1000, // browser cookie self-cleans within the absolute limit
     path: "/",
