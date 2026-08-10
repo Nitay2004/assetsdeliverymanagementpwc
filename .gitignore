@@ -49,3 +49,8 @@ prov-test.csv
 
 # one-off scripts with hardcoded DB credentials (do not commit)
 /scripts/*.js
+/scripts/supabase-old.env
+
+# deploy archives
+/project.tgz
+*.tgz

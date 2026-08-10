@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { getSupabaseStorage, POD_BUCKET } from "@/lib/supabase/storage";
+import { localFileUrl } from "@/lib/storage";
 import * as XLSX from "xlsx";
 
 function getVal(obj: Record<string, unknown>, field: string): unknown {
@@ -40,20 +40,13 @@ export async function GET() {
     orderBy: { updatedAt: "desc" },
   });
 
-  const supabase = getSupabaseStorage();
+  const rows = orders.flatMap((order) =>
+    order.dockets.map((docket) => {
+      const podLink = docket.podDocumentUrl
+        ? localFileUrl(docket.podDocumentUrl)
+        : "";
 
-  const rows = await Promise.all(
-    orders.flatMap((order) =>
-      order.dockets.map(async (docket) => {
-        let podLink = "";
-        if (docket.podDocumentUrl) {
-          const { data } = await supabase.storage
-            .from(POD_BUCKET)
-            .createSignedUrl(docket.podDocumentUrl, 604800);
-          if (data) podLink = data.signedUrl;
-        }
-
-        return {
+      return {
           "Client Name": order.clientName,
           "Delivery Location": order.deliveryLocation,
           "DC Number": order.dcNumber ?? "",
@@ -69,7 +62,6 @@ export async function GET() {
           "Created At": getVal(docket as unknown as Record<string, unknown>, "createdAt"),
         };
       })
-    )
   );
 
   const wb = XLSX.utils.book_new();

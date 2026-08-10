@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseStorage, POD_BUCKET } from "@/lib/supabase/storage";
 import { getSession } from "@/lib/auth";
+import { localFileUrl } from "@/lib/storage";
 
 export async function GET(req: NextRequest) {
   const user = await getSession();
@@ -13,15 +13,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing path" }, { status: 400 });
   }
 
-  const supabase = getSupabaseStorage();
-  const { data, error } = await supabase.storage
-    .from(POD_BUCKET)
-    .createSignedUrl(filePath, 3600);
-
-  if (error) {
-    console.error("Signed URL error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ url: data.signedUrl });
+  return NextResponse.json({ url: localFileUrl(filePath) });
 }

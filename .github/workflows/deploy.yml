@@ -1,0 +1,28 @@
+name: Deploy to STAG-APP1
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync code to deploy dir
+        run: |
+          tar --exclude=.git --exclude=node_modules --exclude=.next --exclude=.env --exclude=.env.* --exclude='*.tmp.js' --exclude='*.log' --exclude=project.tgz -cf - . | (cd /opt/asset-delivery-system && tar -xf -)
+
+      - name: Build & restart app
+        run: |
+          cd /opt/asset-delivery-system
+          docker compose up -d --build
+
+      - name: Health check
+        run: |
+          sleep 12
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/ || echo 000)
+          echo "App HTTP status: $code"
