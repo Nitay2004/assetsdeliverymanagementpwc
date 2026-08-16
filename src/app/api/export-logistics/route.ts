@@ -2,17 +2,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import * as XLSX from "xlsx";
+import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
 
-const STATUS_FILTER = [
-  "IN_PROVISIONING", "DOCKET_ASSIGNED", "DC_REQUESTED", "DC_GENERATED",
-  "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "PACKED_AND_LABELLED",
-  "DISPATCHED", "DELIVERED", "RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED",
-  "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT",
-  "RTO_DELIVERED_TO_WAREHOUSE",
-];
+const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
 
 const STATUS_MAP: Record<string, string> = {
+  ALLOCATED: "Allocated",
   IN_PROVISIONING: "In Provisioning",
+  DOCKET_REQUESTED: "Docket Requested",
   DOCKET_ASSIGNED: "Docket Assigned",
   DC_REQUESTED: "DC Requested",
   DC_GENERATED: "DC Generated",
@@ -29,6 +26,9 @@ const STATUS_MAP: Record<string, string> = {
   RTO_IN_TRANSIT: "RTO In Transit",
   RTO_DELIVERED_TO_WAREHOUSE: "RTO Delivered to Warehouse",
   DELIVERY_CONFIRMED: "Delivery Confirmed",
+  INVOICED: "Invoiced",
+  WARRANTY_UPDATED: "Warranty Updated",
+  CANCELLED: "Cancelled",
 };
 
 function getVal(obj: Record<string, unknown>, field: string): unknown {

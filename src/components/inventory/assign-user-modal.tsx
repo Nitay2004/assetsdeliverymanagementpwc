@@ -432,7 +432,7 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
               )}
 
               <div className="grid grid-cols-3 gap-2">
-                <input name="partner" placeholder="Partner" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                <input name="partner" placeholder="Partner" defaultValue="DEVIT" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
                 <input name="sr" placeholder="Sr #" type="number" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
                 <ManageableDropdown
                   name="entity"

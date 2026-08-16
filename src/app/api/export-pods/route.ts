@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { localFileUrl } from "@/lib/storage";
+import { podFileUrl } from "@/lib/storage";
 import * as XLSX from "xlsx";
 
 function getVal(obj: Record<string, unknown>, field: string): unknown {
@@ -40,28 +40,30 @@ export async function GET() {
     orderBy: { updatedAt: "desc" },
   });
 
-  const rows = orders.flatMap((order) =>
-    order.dockets.map((docket) => {
-      const podLink = docket.podDocumentUrl
-        ? localFileUrl(docket.podDocumentUrl)
-        : "";
+  const rows = await Promise.all(
+    orders.flatMap((order) =>
+      order.dockets.map(async (docket) => {
+        const podLink = docket.podDocumentUrl
+          ? await podFileUrl(docket.podDocumentUrl)
+          : "";
 
-      return {
-          "Client Name": order.clientName,
-          "Delivery Location": order.deliveryLocation,
-          "DC Number": order.dcNumber ?? "",
-          "Status": order.status,
-          "Docket Number": docket.docketNumber ?? "",
-          "E-Way Bill Number": docket.ewayBillNumber ?? "",
-          "POD File": docket.podDocumentUrl?.split("/").pop() ?? "",
-          "POD Download Link (click to download)": podLink,
-          "Serial Numbers": order.assets
-            .filter((a) => a.inventoryItem)
-            .map((a) => a.inventoryItem!.serialNumber)
-            .join(", "),
-          "Created At": getVal(docket as unknown as Record<string, unknown>, "createdAt"),
-        };
-      })
+        return {
+            "Client Name": order.clientName,
+            "Delivery Location": order.deliveryLocation,
+            "DC Number": order.dcNumber ?? "",
+            "Status": order.status,
+            "Docket Number": docket.docketNumber ?? "",
+            "E-Way Bill Number": docket.ewayBillNumber ?? "",
+            "POD File": docket.podDocumentUrl?.split("/").pop() ?? "",
+            "POD Download Link (click to download)": podLink,
+            "Serial Numbers": order.assets
+              .filter((a) => a.inventoryItem)
+              .map((a) => a.inventoryItem!.serialNumber)
+              .join(", "),
+            "Created At": getVal(docket as unknown as Record<string, unknown>, "createdAt"),
+          };
+        })
+    )
   );
 
   const wb = XLSX.utils.book_new();

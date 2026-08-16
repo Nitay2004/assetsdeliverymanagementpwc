@@ -9,9 +9,10 @@ import { PodExportButton } from "@/components/logistics/pod-export-button";
 import { getWarehouses } from "@/app/actions/dc";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
-import type { OrderStatus, Prisma } from "@prisma/client";
+import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
+import type { Prisma } from "@prisma/client";
 
-const STATUS_FILTER: OrderStatus[] = ["DOCKET_REQUESTED", "DOCKET_ASSIGNED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "PACKED_AND_LABELLED", "DISPATCHED", "DELIVERED", "RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"];
+const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
 
 export default async function LogisticsPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;

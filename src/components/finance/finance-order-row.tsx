@@ -5,9 +5,10 @@ import { createPortal } from "react-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { updateOrderFinance, deleteOrder, generateEwayBill } from "@/app/actions/finance";
+import { updateDcDocket } from "@/app/actions/dc";
 import { DcGenerateModal } from "@/components/finance/dc-generate-modal";
 import { useRouter } from "next/navigation";
-import { Download, FileText, ChevronDown, ChevronRight, Trash2, Save, X } from "lucide-react";
+import { Download, FileText, ChevronDown, ChevronRight, Trash2, Save, X, Pencil } from "lucide-react";
 
 interface DcItemData {
   id: string;
@@ -43,6 +44,7 @@ interface DcData {
 interface DocketData {
   id: string;
   docketNumber: string | null;
+  courierName: string | null;
   ewayBillNumber: string | null;
   ewayBillDocumentUrl: string | null;
 }
@@ -66,6 +68,7 @@ interface OrderData {
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  ALLOCATED:           { label: "Allocated",          color: "bg-blue-100 text-blue-700" },
   IN_PROVISIONING:     { label: "In Provisioning",    color: "bg-purple-100 text-purple-700" },
   DC_REQUESTED:        { label: "DC Requested",       color: "bg-indigo-100 text-indigo-700" },
   DC_GENERATED:        { label: "DC Generated",       color: "bg-indigo-100 text-indigo-700" },
@@ -83,6 +86,9 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   RTO_IN_TRANSIT:              { label: "RTO In Transit",              color: "bg-orange-100 text-orange-700" },
   RTO_DELIVERED_TO_WAREHOUSE:  { label: "RTO Delivered to Warehouse",  color: "bg-green-100 text-green-700" },
   DELIVERY_CONFIRMED:          { label: "Del. Confirmed",               color: "bg-teal-100 text-teal-700" },
+  INVOICED:                    { label: "Invoiced",                     color: "bg-teal-100 text-teal-700" },
+  WARRANTY_UPDATED:            { label: "Warranty Updated",             color: "bg-teal-100 text-teal-700" },
+  CANCELLED:                   { label: "Cancelled",                    color: "bg-gray-100 text-gray-600" },
 };
 
 const ALL_STATUSES = Object.keys(STATUS_LABELS);
@@ -98,6 +104,8 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
   const [editMode, setEditMode] = useState(false);
   const [ewayBillInput, setEwayBillInput] = useState("");
   const [ewayFile, setEwayFile] = useState<File | null>(null);
+  const [editDocketId, setEditDocketId] = useState<string | null>(null);
+  const [docketInput, setDocketInput] = useState("");
 
   const [formData, setFormData] = useState({
     clientName: order.clientName,
@@ -194,6 +202,26 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
   async function handleDownloadDc(dcId: string) {
     window.open(`/api/dc/${dcId}/pdf`, "_blank");
   }
+
+  async function handleSaveDocket() {
+    if (!editDocketId) return;
+    if (!docketInput.trim()) {
+      toast({ title: "Error", description: "Docket number is required.", variant: "error" });
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateDcDocket(editDocketId, docketInput.trim());
+      toast({ title: "Updated", description: "Docket number updated. It will reflect in the DC PDF.", variant: "success" });
+      setEditDocketId(null);
+      setDocketInput("");
+      router.refresh();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "error" });
+    } finally { setSaving(false); }
+  }
+
+  const latestDocket = order.dockets[0];
 
   const formatDate = (d: string) => {
     const dt = new Date(d);
@@ -358,6 +386,42 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
                             <Download className="size-3" /> Download PDF
                           </button>
                         </div>
+                        {latestDocket && (
+                          <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded bg-muted/40 border border-muted">
+                            <span className="text-xs text-muted-foreground">
+                              Docket No:{" "}
+                              <span className="font-mono font-semibold text-foreground">{latestDocket.docketNumber || "—"}</span>
+                              {latestDocket.courierName && (
+                                <span className="text-foreground"> • {latestDocket.courierName}</span>
+                              )}
+                            </span>
+                            {canManage && (
+                              editDocketId === latestDocket.id ? (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    value={docketInput}
+                                    onChange={e => setDocketInput(e.target.value)}
+                                    placeholder="Docket number"
+                                    className="rounded border px-2 py-1 text-xs font-mono bg-background w-40 focus:outline-none focus:border-primary"
+                                  />
+                                  <button onClick={handleSaveDocket} disabled={saving}
+                                    className="px-2 py-1 rounded text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                                    {saving ? "Saving..." : "Save"}
+                                  </button>
+                                  <button onClick={() => { setEditDocketId(null); setDocketInput(""); }}
+                                    className="p-1 rounded hover:bg-muted transition-colors" title="Cancel">
+                                    <X className="size-3.5 text-muted-foreground" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button onClick={() => { setEditDocketId(latestDocket.id); setDocketInput(latestDocket.docketNumber ?? ""); }}
+                                  className="p-1 rounded hover:bg-muted transition-colors flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" title="Edit docket number">
+                                  <Pencil className="size-3" /> Edit
+                                </button>
+                              )
+                            )}
+                          </div>
+                        )}
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="border-b text-muted-foreground">

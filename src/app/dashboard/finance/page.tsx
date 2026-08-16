@@ -8,9 +8,10 @@ import { ReversePickupFinanceSection } from "@/components/finance/reverse-pickup
 import { FinanceExportButton } from "@/components/finance/finance-export-button";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
-import type { OrderStatus, Prisma } from "@prisma/client";
+import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
+import type { Prisma } from "@prisma/client";
 
-const STATUS_FILTER: OrderStatus[] = ["IN_PROVISIONING", "DC_REQUESTED", "DC_GENERATED", "PACKED_AND_LABELLED", "DOCKET_ASSIGNED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "DISPATCHED", "DELIVERED", "RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "DELIVERY_CONFIRMED"];
+const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
 
 export default async function FinancePage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;

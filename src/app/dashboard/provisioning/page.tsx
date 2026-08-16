@@ -9,6 +9,7 @@ import { ProvisioningExportButton } from "@/components/provisioning/provisioning
 import { QcWorkTable } from "@/components/provisioning/qc-work-table";
 import { ProvisioningTabs } from "@/components/provisioning/provisioning-tabs";
 import type { QcItem } from "@/components/qc/qc-panel";
+import { ORDER_PIPELINE_STATUSES, ACTIVE_PROVISIONING_STATUSES, HANDED_OVER_STATUSES } from "@/lib/order-status";
 import type { Prisma } from "@prisma/client";
 
 function safeISO(date: Date | null | undefined): string | null {
@@ -33,9 +34,9 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
       where: { id: selectedId },
       select: { updatedAt: true, status: true },
     });
-    if (selOrder && !["ALLOCATED", "IN_PROVISIONING", "DOCKET_REQUESTED"].includes(selOrder.status)) {
+    if (selOrder && !ORDER_PIPELINE_STATUSES.includes(selOrder.status)) {
       const pos = await prisma.order.count({
-        where: { status: { in: ["ALLOCATED", "IN_PROVISIONING", "DOCKET_REQUESTED"] }, updatedAt: { gt: selOrder.updatedAt } },
+        where: { status: { in: ORDER_PIPELINE_STATUSES }, updatedAt: { gt: selOrder.updatedAt } },
       });
       const correctPage = Math.floor(pos / limit) + 1;
       if (correctPage !== page) {
@@ -44,7 +45,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     }
   }
 
-  const baseWhere: Prisma.OrderWhereInput = { status: { in: ["ALLOCATED", "IN_PROVISIONING", "DOCKET_REQUESTED"] } };
+  const baseWhere: Prisma.OrderWhereInput = { status: { in: ORDER_PIPELINE_STATUSES } };
   const where: Prisma.OrderWhereInput = search ? {
     ...baseWhere,
     OR: [
@@ -75,8 +76,8 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   ]);
 
   const engineers = [...new Set(orders.map(o => o.engineerName).filter(Boolean))] as string[];
-  const inProvisioningCount = orders.filter(o => o.status === "ALLOCATED" || o.status === "IN_PROVISIONING").length;
-  const handedOverCount = orders.filter(o => o.status === "DOCKET_REQUESTED").length;
+  const inProvisioningCount = orders.filter(o => ACTIVE_PROVISIONING_STATUSES.includes(o.status)).length;
+  const handedOverCount = orders.filter(o => !ACTIVE_PROVISIONING_STATUSES.includes(o.status)).length;
   const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
 
   const qcPendingItems = await prisma.inventoryItem.findMany({
@@ -117,16 +118,24 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     ? serializedQc.filter(i => i.qcEngineer === user.name)
     : [];
 
+  // Split orders into: active (needs provisioning work), handed over to logistics,
+  // and later stages (packing, dispatch, delivery, RTO, etc). All stay visible.
+  const activeOrders = orders.filter(o => ACTIVE_PROVISIONING_STATUSES.includes(o.status));
+  const handedOverOrders = orders.filter(o => HANDED_OVER_STATUSES.includes(o.status));
+  const laterOrders = orders.filter(o =>
+    !ACTIVE_PROVISIONING_STATUSES.includes(o.status) && !HANDED_OVER_STATUSES.includes(o.status)
+  );
+
   // Group data by engineer for sections
   const sections: { label: string; orders: typeof orders }[] = [];
 
-  const unassignedOrders = orders.filter(o => !o.engineerName);
+  const unassignedOrders = activeOrders.filter(o => !o.engineerName);
   if (unassignedOrders.length > 0) {
     sections.push({ label: "Unassigned", orders: unassignedOrders });
   }
 
   for (const eng of engineers) {
-    const engOrders = orders.filter(o => o.engineerName === eng);
+    const engOrders = activeOrders.filter(o => o.engineerName === eng);
     if (engOrders.length > 0) {
       sections.push({ label: eng, orders: engOrders });
     }
@@ -135,6 +144,14 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const visibleSections = selectedEngineer
     ? sections.filter(s => s.label === selectedEngineer)
     : sections;
+
+  const handedOverVisible = selectedEngineer
+    ? handedOverOrders.filter(o => o.engineerName === selectedEngineer)
+    : handedOverOrders;
+
+  const laterVisible = selectedEngineer
+    ? laterOrders.filter(o => o.engineerName === selectedEngineer)
+    : laterOrders;
 
   function engineerUrl(engineer: string) {
     const p = new URLSearchParams();
@@ -230,7 +247,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
             </div>
           )}
 
-          {visibleSections.length === 0 ? (
+          {visibleSections.length === 0 && handedOverVisible.length === 0 && laterVisible.length === 0 ? (
             <div className="p-8 rounded-xl glass text-center text-muted-foreground">
               {selectedEngineer
                 ? `No orders found for "${selectedEngineer}".`
@@ -254,6 +271,42 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
                 />
               </section>
             ))
+          )}
+
+          {handedOverVisible.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                <CheckCircle className="size-5 text-green-600" />
+                Handed Over to Logistics
+                <span className="text-sm font-normal text-muted-foreground">
+                  — {handedOverVisible.length} order(s), {handedOverVisible.reduce((s, o) => s + o.assets.length, 0)} asset(s)
+                </span>
+              </h2>
+              <ProvisioningTable
+                orders={handedOverVisible}
+                canManage={canManage}
+                engineers={engineers}
+                selectedId={selectedId}
+              />
+            </section>
+          )}
+
+          {laterVisible.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+                <Wrench className="size-5 text-purple-600" />
+                Further Stages
+                <span className="text-sm font-normal text-muted-foreground">
+                  — {laterVisible.length} order(s), {laterVisible.reduce((s, o) => s + o.assets.length, 0)} asset(s)
+                </span>
+              </h2>
+              <ProvisioningTable
+                orders={laterVisible}
+                canManage={canManage}
+                engineers={engineers}
+                selectedId={selectedId}
+              />
+            </section>
           )}
 
           <ProvisioningPagination totalCount={totalCount} currentPage={page} pageSize={limit} />

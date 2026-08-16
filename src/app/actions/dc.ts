@@ -339,6 +339,41 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
   return { ...dc, taxableValue: dc.taxableValue ? Number(dc.taxableValue) : null, igst: dc.igst ? Number(dc.igst) : null, totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null, items: dc.items.map(i => ({ ...i, rate: Number(i.rate), amount: Number(i.amount), taxableValue: i.taxableValue ? Number(i.taxableValue) : null, igstRate: i.igstRate ? Number(i.igstRate) : null, igstAmount: i.igstAmount ? Number(i.igstAmount) : null })) };
 }
 
+// ─── Docket Number on DC ───
+
+export async function updateDcDocket(docketId: string, docketNumber: string) {
+  const user = await getSession();
+  requirePermission(user, "finance", "canEdit");
+  const value = docketNumber.trim();
+  if (!value) throw new Error("Docket number is required.");
+
+  const docket = await prisma.docket.update({
+    where: { id: docketId },
+    data: { docketNumber: value },
+  });
+
+  if (docket.orderId) {
+    const linkedAssets = await prisma.asset.findMany({
+      where: { orderId: docket.orderId, inventoryItemId: { not: null } },
+      select: { inventoryItemId: true },
+    });
+    const linkedItemIds = linkedAssets.map(a => a.inventoryItemId).filter(Boolean) as string[];
+    if (linkedItemIds.length > 0) {
+      await prisma.inventoryItem.updateMany({
+        where: { id: { in: linkedItemIds } },
+        data: { docketNumber: value },
+      });
+    }
+  }
+
+  revalidatePath("/dashboard/finance");
+  revalidatePath("/dashboard/logistics");
+  revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
+
+  return { ok: true };
+}
+
 // ─── Dispatched Through Dropdown ───
 
 export async function getDispatchedThroughOptions() {

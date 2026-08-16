@@ -210,10 +210,10 @@ export async function handoverToLogistics(orderIds: string[]) {
   const user = await getSession();
   requirePermission(user, "provisioning", "canEdit");
 
-  // Advance order status to DOCKET_REQUESTED so it moves to logistics
+  // Advance order status to DC_REQUESTED so it moves to logistics (DC first, then docket)
   await prisma.order.updateMany({
     where: { id: { in: orderIds }, status: "IN_PROVISIONING" },
-    data: { status: "DOCKET_REQUESTED" },
+    data: { status: "DC_REQUESTED" },
   });
 
   // Update tracking status on inventory items to "Handed Over to Logistics"

@@ -12,6 +12,7 @@ interface AssetItem {
 interface DocketData {
   id: string;
   docketNumber: string | null;
+  courierName: string | null;
   ewayBillNumber: string | null;
   ewayBillDocumentUrl: string | null;
 }

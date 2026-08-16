@@ -564,6 +564,7 @@ model Docket {
   id                   String   @id @default(uuid()) @db.Uuid
   orderId              String   @map("order_id") @db.Uuid
   docketNumber         String?  @map("docket_number")
+  courierName          String?  @map("courier_name")
   ewayBillNumber       String?  @map("eway_bill_number")
   ewayBillDocumentUrl  String?  @map("eway_bill_document_url")
   podDocumentUrl       String?  @map("pod_document_url")

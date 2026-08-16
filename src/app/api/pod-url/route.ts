@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { localFileUrl } from "@/lib/storage";
+import { podFileUrl } from "@/lib/storage";
 
 export async function GET(req: NextRequest) {
   const user = await getSession();
@@ -13,5 +13,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing path" }, { status: 400 });
   }
 
-  return NextResponse.json({ url: localFileUrl(filePath) });
+  try {
+    return NextResponse.json({ url: await podFileUrl(filePath) });
+  } catch (err) {
+    console.error("pod-url error:", err);
+    return NextResponse.json({ error: "Failed to build URL" }, { status: 500 });
+  }
 }

@@ -65,6 +65,7 @@ export async function addDocket(formData: FormData) {
 
   const orderId = formData.get("orderId") as string;
   const docketNumber = formData.get("docketNumber") as string;
+  const courierName = (formData.get("courierName") as string) || null;
   const ewayBillNumber = formData.get("ewayBillNumber") as string;
   const podDocumentUrl = formData.get("podDocumentUrl") as string;
 
@@ -76,6 +77,7 @@ export async function addDocket(formData: FormData) {
     data: {
       orderId,
       docketNumber,
+      courierName,
       ewayBillNumber: ewayBillNumber || null,
       podDocumentUrl: podDocumentUrl || null,
     },
@@ -103,6 +105,7 @@ export async function updateDocket(id: string, formData: FormData) {
   requirePermission(user, "logistics", "canEdit");
 
   const docketNumber = formData.get("docketNumber") as string;
+  const courierName = (formData.get("courierName") as string) || null;
   const ewayBillNumber = formData.get("ewayBillNumber") as string;
   const podDocumentUrl = formData.get("podDocumentUrl") as string;
 
@@ -112,6 +115,7 @@ export async function updateDocket(id: string, formData: FormData) {
     where: { id },
     data: {
       docketNumber,
+      courierName,
       ewayBillNumber: ewayBillNumber || null,
       podDocumentUrl: podDocumentUrl || null,
     },
@@ -155,9 +159,10 @@ export async function advanceOrderStatus(orderId: string, status: string) {
   if (!order) throw new Error("Order not found.");
 
   const allowedNextStatuses: Record<string, string[]> = {
+    DC_REQUESTED: [],
+    DC_GENERATED: ["DOCKET_REQUESTED"],
     DOCKET_REQUESTED: ["DOCKET_ASSIGNED"],
-    DOCKET_ASSIGNED: ["DC_REQUESTED"],
-    DC_GENERATED: ["EWAY_BILL_REQUESTED"],
+    DOCKET_ASSIGNED: ["DC_REQUESTED", "EWAY_BILL_REQUESTED"],
     EWAY_BILL_GENERATED: ["PACKED_AND_LABELLED"],
     PACKED_AND_LABELLED: ["DISPATCHED"],
     DISPATCHED: ["DELIVERED", "RTO"],
@@ -185,4 +190,43 @@ export async function advanceOrderStatus(orderId: string, status: string) {
   revalidatePath("/dashboard/logistics");
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard");
+}
+
+// ─── Delivery Partner / Courier dropdown (category "courierName") ───
+
+export async function getLogisticsCourierOptions() {
+  const user = await getSession();
+  if (!user) throw new Error("Unauthorized");
+
+  const options = await prisma.dropdownOption.findMany({
+    where: { category: "courierName" },
+    orderBy: { value: "asc" },
+  });
+
+  return {
+    courierName: options.map(o => o.value),
+    allOptions: options.map(o => ({ id: o.id, category: o.category, value: o.value })),
+  };
+}
+
+export async function addLogisticsCourierOption(value: string) {
+  const user = await getSession();
+  requirePermission(user, "logistics", "canCreate");
+
+  await prisma.dropdownOption.upsert({
+    where: { category_value: { category: "courierName", value } },
+    update: {},
+    create: { category: "courierName", value },
+  });
+
+  revalidatePath("/dashboard/logistics");
+}
+
+export async function deleteLogisticsCourierOption(id: string) {
+  const user = await getSession();
+  requirePermission(user, "logistics", "canDelete");
+
+  await prisma.dropdownOption.delete({ where: { id } });
+
+  revalidatePath("/dashboard/logistics");
 }

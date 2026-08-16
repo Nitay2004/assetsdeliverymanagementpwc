@@ -12,11 +12,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const dc = await prisma.deliveryChallan.findUnique({
     where: { id },
-    include: { items: true, warehouse: true, order: true, reversePickupRequest: true },
+    include: {
+      items: true,
+      warehouse: true,
+      order: { include: { dockets: { orderBy: { createdAt: "desc" } } } },
+      reversePickupRequest: true,
+    },
   });
   if (!dc) return NextResponse.json({ error: "DC not found" }, { status: 404 });
 
   const clientName = dc.order?.clientName ?? dc.reversePickupRequest?.employeeName ?? "Reverse Pickup";
+
+  const latestDocket = dc.order?.dockets?.[0];
+  const docketNumber = latestDocket?.docketNumber ?? dc.reversePickupRequest?.docketNumber ?? null;
+  const courierName = latestDocket?.courierName ?? null;
 
   const pdfBuffer = await generateDcPdf(
     {
@@ -31,8 +40,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       otherReferences: dc.otherReferences,
       buyersOrderNo: dc.buyersOrderNo,
       buyersOrderDate: dc.buyersOrderDate?.toISOString() ?? null,
-      dispatchDocNo: dc.dispatchDocNo,
-      dispatchedThrough: dc.dispatchedThrough,
+      dispatchDocNo: docketNumber || dc.dispatchDocNo,
+      dispatchedThrough: courierName || dc.dispatchedThrough,
       destination: dc.destination,
       termsOfDelivery: dc.termsOfDelivery,
       amountInWords: dc.amountInWords,

@@ -3,12 +3,13 @@
 import { useState, Fragment, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronRight, Plus, Trash2, Download, FileText, Edit3, RotateCcw, X } from "lucide-react";
-import { addDocket, updateDocket, updateDocketPod, deleteDocket, advanceOrderStatus, markAsRto } from "@/app/actions/logistics";
+import { addDocket, updateDocket, updateDocketPod, deleteDocket, advanceOrderStatus, markAsRto, getLogisticsCourierOptions, addLogisticsCourierOption, deleteLogisticsCourierOption } from "@/app/actions/logistics";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { useRouter } from "next/navigation";
 import { ScrollToItem } from "@/components/shared/scroll-to-item";
 import { DataTableFilter, filterRows, UrlDataTableFilter } from "@/components/shared/data-table-filter";
+import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
 
 interface RtoRecordData {
   id: string;
@@ -22,11 +23,13 @@ interface DocketForm {
   id?: string;
   orderId: string;
   docketNumber: string;
+  courierName: string;
 }
 
 interface DocketData {
   id: string;
   docketNumber: string | null;
+  courierName: string | null;
   ewayBillNumber: string | null;
   ewayBillDocumentUrl: string | null;
   podDocumentUrl: string | null;
@@ -63,6 +66,7 @@ interface OrderData {
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  ALLOCATED:           { label: "Allocated",           color: "bg-blue-100 text-blue-700" },
   IN_PROVISIONING:     { label: "In Provisioning",    color: "bg-purple-100 text-purple-700" },
   DOCKET_REQUESTED:    { label: "Docket Requested",   color: "bg-amber-100 text-amber-700" },
   DOCKET_ASSIGNED:     { label: "Docket Assigned",     color: "bg-blue-100 text-blue-700" },
@@ -80,14 +84,18 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   RTO_EWAY_BILL_GENERATED:     { label: "RTO E-Way Bill Generated",    color: "bg-red-200 text-red-800" },
   RTO_IN_TRANSIT:              { label: "RTO In Transit",              color: "bg-orange-100 text-orange-700" },
   RTO_DELIVERED_TO_WAREHOUSE:  { label: "RTO Delivered to Warehouse",  color: "bg-green-100 text-green-700" },
+  DELIVERY_CONFIRMED:          { label: "Del. Confirmed",               color: "bg-teal-100 text-teal-700" },
+  INVOICED:                    { label: "Invoiced",                     color: "bg-teal-100 text-teal-700" },
+  WARRANTY_UPDATED:            { label: "Warranty Updated",             color: "bg-teal-100 text-teal-700" },
+  CANCELLED:                   { label: "Cancelled",                    color: "bg-gray-100 text-gray-600" },
 };
 
 const STATUS_FLOW: Record<string, { next: string; label: string } | null> = {
   IN_PROVISIONING:             null,
   DOCKET_REQUESTED:            { next: "DOCKET_ASSIGNED",               label: "Assign Docket" },
-  DOCKET_ASSIGNED:             { next: "DC_REQUESTED",                  label: "Request DC" },
+  DOCKET_ASSIGNED:             null, // dynamic: Request DC (no DC yet) or Request E-Way Bill (has DC)
   DC_REQUESTED:                null,
-  DC_GENERATED:                { next: "EWAY_BILL_REQUESTED",           label: "Request E-Way Bill" },
+  DC_GENERATED:                { next: "DOCKET_REQUESTED",               label: "Request Docket" },
   EWAY_BILL_REQUESTED:         null,
   EWAY_BILL_GENERATED:         { next: "PACKED_AND_LABELLED",           label: "Pack & Label" },
   PACKED_AND_LABELLED:         { next: "DISPATCHED",                    label: "Dispatch" },
@@ -101,6 +109,15 @@ const STATUS_FLOW: Record<string, { next: string; label: string } | null> = {
   RTO_IN_TRANSIT:              { next: "RTO_DELIVERED_TO_WAREHOUSE",    label: "Delivered to Warehouse" },
   RTO_DELIVERED_TO_WAREHOUSE:  null,
 };
+
+function getFlowEntry(order: OrderData) {
+  if (order.status === "DOCKET_ASSIGNED") {
+    return order.dcNumber
+      ? { next: "EWAY_BILL_REQUESTED", label: "Request E-Way Bill" }
+      : { next: "DC_REQUESTED", label: "Request DC" };
+  }
+  return STATUS_FLOW[order.status] ?? null;
+}
 
 interface Props {
   orders: OrderData[];
@@ -121,6 +138,29 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
   const [rtoForm, setRtoForm] = useState({ warehouseId: "", receivedBy: "", rtoDocketNumber: "" });
   const [podInput, setPodInput] = useState<{ docketId: string } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [courierOptions, setCourierOptions] = useState<string[]>([]);
+  const [courierAllOptions, setCourierAllOptions] = useState<{ id: string; category: string; value: string }[]>([]);
+
+  useEffect(() => {
+    getLogisticsCourierOptions().then(v => {
+      setCourierOptions(v.courierName);
+      setCourierAllOptions(v.allOptions);
+    }).catch(() => {});
+  }, []);
+
+  async function handleAddCourierOption(category: string, value: string) {
+    await addLogisticsCourierOption(value);
+    const v = await getLogisticsCourierOptions();
+    setCourierOptions(v.courierName);
+    setCourierAllOptions(v.allOptions);
+  }
+
+  async function handleDeleteCourierOption(id: string) {
+    await deleteLogisticsCourierOption(id);
+    const v = await getLogisticsCourierOptions();
+    setCourierOptions(v.courierName);
+    setCourierAllOptions(v.allOptions);
+  }
 
   function toggleRow(id: string) {
     setExpandedId(prev => prev === id ? null : id);
@@ -129,9 +169,9 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
   }
 
   async function handleAdvance(orderId: string, targetStatus: string) {
-    const info = Object.values(STATUS_FLOW).find(s => s?.next === targetStatus);
+    const label = STATUS_LABELS[targetStatus]?.label ?? targetStatus;
     const ok = await showAlert({
-      title: `${info?.label ?? targetStatus}?`,
+      title: `${label}?`,
       description: "Move this order to the next logistics stage.",
       confirmLabel: "Yes, proceed",
       cancelLabel: "Cancel",
@@ -182,6 +222,7 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
       const fd = new FormData();
       fd.set("orderId", docketForm.orderId);
       fd.set("docketNumber", docketForm.docketNumber.trim());
+      fd.set("courierName", docketForm.courierName);
       await addDocket(fd);
       toast({ title: "Added", description: "Docket added.", variant: "success" });
       setDocketForm(null);
@@ -201,6 +242,7 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
     try {
       const fd = new FormData();
       fd.set("docketNumber", docketForm.docketNumber.trim());
+      fd.set("courierName", docketForm.courierName);
       await updateDocket(docketForm.id, fd);
       toast({ title: "Updated", description: "Docket updated.", variant: "success" });
       setDocketForm(null);
@@ -315,7 +357,7 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
             <ScrollToItem selectedId={selectedId} prefix="logistics" />
             {filteredOrders.map((order) => {
               const isExpanded = expandedId === order.id;
-              const flowEntry = STATUS_FLOW[order.status];
+              const flowEntry = getFlowEntry(order);
               const dc = getDcForOrder(order);
               const isFormOpen = docketForm?.orderId === order.id;
               const colSpan = canManage ? 10 : 9;
@@ -368,7 +410,7 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
                         <div className="flex flex-wrap gap-1">
                           {order.dockets.map(d => (
                             <span key={d.id} className="px-2 py-0.5 rounded bg-gray-50 text-gray-700 text-xs font-mono">
-                              {d.docketNumber}
+                              {d.docketNumber}{d.courierName ? ` · ${d.courierName}` : ""}
                             </span>
                           ))}
                         </div>
@@ -496,6 +538,22 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
                                         className="rounded border px-2.5 py-1.5 text-sm bg-background w-40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                         placeholder="Required" />
                                     </div>
+                                    <div>
+                                      <label className="text-xs text-muted-foreground block mb-1">Delivery Partner</label>
+                                      <div className="w-48">
+                                        <ManageableDropdown
+                                          name="courierName"
+                                          placeholder="Select delivery partner"
+                                          value={docketForm?.courierName ?? ""}
+                                          onChange={val => setDocketForm(prev => prev ? { ...prev, courierName: val } : null)}
+                                          options={courierOptions}
+                                          allOptions={courierAllOptions}
+                                          category="courierName"
+                                          onAdd={handleAddCourierOption}
+                                          onDelete={handleDeleteCourierOption}
+                                        />
+                                      </div>
+                                    </div>
                                     <button type="submit" disabled={saving}
                                       className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                                     >{saving ? "Saving..." : "Save"}</button>
@@ -506,14 +564,19 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
                                 ) : (
                                   <div key={d.id} className="p-2.5 rounded-lg bg-background border">
                                     <div className="flex items-center justify-between gap-4">
-                                      <div className="text-sm">
+                                      <div className="text-sm flex items-center gap-2 flex-wrap">
                                         <span className="font-mono font-medium">{d.docketNumber}</span>
+                                        {d.courierName && (
+                                          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium">
+                                            {d.courierName}
+                                          </span>
+                                        )}
                                       </div>
                                       {canManage && (
                                         <div className="flex items-center gap-1">
                                           <button onClick={() => {
                                             setEditingDocketId(d.id);
-                                            setDocketForm({ id: d.id, orderId: order.id, docketNumber: d.docketNumber ?? "" });
+                                            setDocketForm({ id: d.id, orderId: order.id, docketNumber: d.docketNumber ?? "", courierName: d.courierName ?? "" });
                                           }}
                                             className="p-1 rounded hover:bg-muted transition-colors" title="Edit docket"
                                           >
@@ -575,6 +638,23 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
                                   className="rounded border px-2.5 py-1.5 text-sm bg-background w-40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                                   placeholder="Required" />
                               </div>
+                              <div>
+                                <label className="text-xs text-muted-foreground block mb-1">Delivery Partner</label>
+                                <div className="w-48">
+                                  <ManageableDropdown
+                                    name="courierName"
+                                    placeholder="Select delivery partner"
+                                    value={docketForm!.courierName}
+                                    onChange={val => setDocketForm({ ...docketForm!, courierName: val })}
+                                    options={courierOptions}
+                                    allOptions={courierAllOptions}
+                                    category="courierName"
+                                    onAdd={handleAddCourierOption}
+                                    onDelete={handleDeleteCourierOption}
+                                    required
+                                  />
+                                </div>
+                              </div>
                               <button type="submit" disabled={saving}
                                 className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                               >{saving ? "Saving..." : "Save"}</button>
@@ -583,13 +663,12 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
                               >Cancel</button>
                             </form>
                           ) : (
-                            <button onClick={() => setDocketForm({ orderId: order.id, docketNumber: "" })}
+                            <button onClick={() => setDocketForm({ orderId: order.id, docketNumber: "", courierName: "" })}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border hover:bg-muted transition-colors"
                             >
                               <Plus className="size-4" /> Add Docket
                             </button>
-                          )
-                        )}
+                          ))}
                       </td>
                     </tr>
                   )}

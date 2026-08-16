@@ -319,7 +319,7 @@ export function ProvisioningTable({ orders, canManage, engineers, selectedId }: 
                               Handed over to Logistics
                             </button>
                           )}
-                          {asset.status === "os_installed" && (inv?.trackingStatus === "Handed Over to Logistics" || order.status === "DOCKET_REQUESTED") && (
+                          {asset.status === "os_installed" && (inv?.trackingStatus === "Handed Over to Logistics" || order.status === "DOCKET_REQUESTED" || order.status === "DOCKET_ASSIGNED" || order.status === "DC_REQUESTED") && (
                             <span className="text-xs text-green-600 font-semibold">Handed Over</span>
                           )}
                           <button onClick={() => openEdit(order)}
