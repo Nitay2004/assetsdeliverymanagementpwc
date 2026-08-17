@@ -3,16 +3,16 @@ services:
     build:
       context: .
       args:
-        DATABASE_URL: ${DATABASE_URL}
-        DIRECT_URL: ${DIRECT_URL}
+        DATABASE_URL: postgresql://assetdelivery:assetdelivery@10.199.206.99:5433/assetdelivery
+        DIRECT_URL: postgresql://assetdelivery:assetdelivery@10.199.206.99:5433/assetdelivery
     container_name: asset-delivery
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-3000}:3000"
-    env_file:
-      - .env
+      - "8001:3000"
     environment:
       - PORT=3000
+      - DATABASE_URL=postgresql://assetdelivery:assetdelivery@10.199.206.99:5433/assetdelivery
+      - DIRECT_URL=postgresql://assetdelivery:assetdelivery@10.199.206.99:5433/assetdelivery
     volumes:
       - uploads:/app/uploads
 
