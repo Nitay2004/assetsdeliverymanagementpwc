@@ -5,6 +5,11 @@ import { createSession } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 
+const loginAttempts = new Map<string, { count: number; resetTime: number }>();
+
+const LOGIN_WINDOW = 15 * 60 * 1000;
+const LOGIN_MAX = 5;
+
 export async function loginAction(formData: FormData) {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
@@ -13,25 +18,35 @@ export async function loginAction(formData: FormData) {
     return { error: "Email and password are required." };
   }
 
-  // Find user
+  const now = Date.now();
+  const entry = loginAttempts.get(email);
+  if (entry && now < entry.resetTime && entry.count >= LOGIN_MAX) {
+    const remaining = Math.ceil((entry.resetTime - now) / 1000 / 60);
+    return { error: `Too many login attempts. Try again in ${remaining} minutes.` };
+  }
+
   const user = await prisma.user.findUnique({
     where: { email },
   });
 
   if (!user) {
+    const e = loginAttempts.get(email);
+    if (e && now < e.resetTime) e.count++;
+    else loginAttempts.set(email, { count: 1, resetTime: now + LOGIN_WINDOW });
     return { error: "Invalid email or password." };
   }
 
-  // Verify password
   const isValidPassword = await bcrypt.compare(password, user.passwordHash);
 
   if (!isValidPassword) {
+    const e = loginAttempts.get(email);
+    if (e && now < e.resetTime) e.count++;
+    else loginAttempts.set(email, { count: 1, resetTime: now + LOGIN_WINDOW });
     return { error: "Invalid email or password." };
   }
 
-  // Create session and set cookie
-  await createSession(user.id);
+  loginAttempts.delete(email);
 
-  // Redirect to dashboard on success
+  await createSession(user.id);
   redirect("/dashboard");
 }
