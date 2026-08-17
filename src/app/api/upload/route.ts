@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { saveFile, POD_BUCKET } from "@/lib/storage";
+import { getSession } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getSession();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     if (!file) {
