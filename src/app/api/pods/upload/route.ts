@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { saveFile, podFileUrl, POD_BUCKET } from "@/lib/storage";
+import { getSession } from "@/lib/auth";
 
 const ALLOWED_EXT = ["pdf", "jpg", "jpeg", "png"];
 
@@ -11,14 +12,16 @@ const trackingStatusMap: Record<string, string> = {
 
 function authorized(req: NextRequest): boolean {
   const key = process.env.POD_API_KEY;
-  if (!key) return true;
+  if (!key) return false;
   return req.headers.get("x-api-key") === key;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    if (!authorized(req)) {
-      return NextResponse.json({ error: "Invalid or missing x-api-key header" }, { status: 401 });
+    const sessionUser = await getSession();
+    const apiKeyAuth = authorized(req);
+    if (!sessionUser && !apiKeyAuth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const formData = await req.formData();
