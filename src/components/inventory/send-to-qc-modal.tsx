@@ -9,6 +9,7 @@ import { getDistinctFieldValues, addDropdownOption, deleteDropdownOption, seedDr
 import { ManageableDropdown, useDropdownData } from "@/components/inventory/manageable-dropdown";
 import { PincodeInput } from "@/components/shared/pincode-input";
 import { useRouter } from "next/navigation";
+import { calculateCutoff } from "@/lib/cutoff-utils";
 
 interface Props {
   open: boolean;
@@ -164,13 +165,25 @@ export function SendToQcModal({ open, onClose, item }: Props) {
             <div className="pt-2 border-t mt-2">
               <p className="text-xs font-semibold text-muted-foreground mb-2">Timeline &amp; SLA</p>
               <div className="grid grid-cols-2 gap-2 mb-2">
-                <input name="emailReceivedHour" placeholder="Email Received Hour" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-                <input name="cutOffStatus" placeholder="Cut Off Status" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                <input name="emailReceivedHour" placeholder="Email Received Hour" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" onChange={(e) => {
+                  const result = calculateCutoff(e.target.value);
+                  const form = e.currentTarget.closest("form");
+                  if (!form) return;
+                  const cutoffField = form.querySelector<HTMLInputElement>('input[name="cutOffStatus"]');
+                  const slaField = form.querySelector<HTMLInputElement>('input[name="slaStartDate"]');
+                  if (result) {
+                    if (cutoffField) cutoffField.value = result.cutOffStatus;
+                    if (slaField) slaField.value = result.slaStartDate;
+                  } else {
+                    if (cutoffField) cutoffField.value = "";
+                  }
+                }} />
+                <input name="cutOffStatus" placeholder="Cut Off Status" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
               </div>
               <div className="grid grid-cols-2 gap-2 mb-2">
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">SLA Start Date <span className="text-red-500">*</span></label>
-                  <input name="slaStartDate" type="date" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                  <input name="slaStartDate" type="date" required readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">Actual Delivery Date</label>
