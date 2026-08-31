@@ -2,7 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { Users, Laptop, MapPin } from "lucide-react";
 import { AssignedAssetsTable } from "@/components/assigned-assets/assigned-assets-table";
 import { AssignedAssetsExportButton } from "@/components/assigned-assets/assigned-assets-export-button";
+import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
 import type { Prisma } from "@prisma/client";
+
+const ASSIGNED_FILTER_KEYS = ["serialNumber", "model", "employeeName", "emailId", "purpose", "trackingStatus", "location"];
 
 function safeISO(date: Date | null | undefined): string | null {
   if (!date) return null;
@@ -45,6 +48,21 @@ export default async function AssignedAssetsPage(props: {
       }
     : baseWhere;
 
+  const columnFilters = parseColumnFilters(searchParams, ASSIGNED_FILTER_KEYS);
+  if (columnFilters.serialNumber) where.serialNumber = { in: columnFilters.serialNumber };
+  if (columnFilters.model) where.model = { in: columnFilters.model };
+  if (columnFilters.employeeName) where.employeeName = { in: columnFilters.employeeName };
+  if (columnFilters.emailId) where.emailId = { in: columnFilters.emailId };
+  if (columnFilters.purpose) where.purpose = { in: columnFilters.purpose };
+  if (columnFilters.trackingStatus) where.trackingStatus = { in: columnFilters.trackingStatus };
+
+  if (columnFilters.location) {
+    where.OR = [
+      { city: { in: columnFilters.location } },
+      { state: { in: columnFilters.location } },
+    ];
+  }
+
   const [items, totalCount, uniqueEmployees, modelBreakdown] =
     await Promise.all([
       prisma.inventoryItem.findMany({
@@ -73,6 +91,24 @@ export default async function AssignedAssetsPage(props: {
         take: 5,
       }),
     ]);
+
+  const distinctSource = await prisma.inventoryItem.findMany({
+    where,
+    select: {
+      serialNumber: true, model: true, employeeName: true, emailId: true, purpose: true,
+      trackingStatus: true, city: true, state: true,
+      assignmentRecords: { orderBy: { assignedAt: "desc" }, take: 1, select: { employeeName: true, emailId: true, purpose: true } },
+    },
+  });
+  const columnFilterValues = computeDistinctValues(distinctSource, {
+    serialNumber: r => r.serialNumber,
+    model: r => r.model,
+    employeeName: r => r.assignmentRecords[0]?.employeeName ?? r.employeeName,
+    emailId: r => r.assignmentRecords[0]?.emailId ?? r.emailId,
+    purpose: r => r.assignmentRecords[0]?.purpose ?? r.purpose,
+    trackingStatus: r => r.trackingStatus,
+    location: r => [r.city, r.state].filter(Boolean).join(", "),
+  });
 
   const uniqueEmployeeCount = uniqueEmployees.filter(
     (e) => e.employeeName !== null
@@ -133,6 +169,7 @@ export default async function AssignedAssetsPage(props: {
           totalCount={totalCount}
           currentPage={page}
           pageSize={pageSize}
+          columnFilterValues={columnFilterValues}
           items={items.map((i) => {
             const latest = i.assignmentRecords[0];
             return {

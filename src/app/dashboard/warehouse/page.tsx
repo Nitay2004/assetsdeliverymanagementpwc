@@ -7,7 +7,10 @@ import { AllocatedAssetsTable } from "@/components/warehouse/allocated-assets-ta
 import { QcPendingTable } from "@/components/warehouse/qc-pending-table";
 import { WarehouseExportButton } from "@/components/warehouse/warehouse-export-button";
 import { WarehouseTabs } from "@/components/warehouse/warehouse-tabs";
-import type { Prisma } from "@prisma/client";
+import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
+import type { Prisma, OrderStatus } from "@prisma/client";
+
+const ALLOCATED_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity", "serialNumbers", "docketNumber", "dcNumber", "ewayBill", "status"];
 
 function safeISO(date: Date | null | undefined): string | null {
   if (!date) return null;
@@ -34,6 +37,18 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
       { dockets: { some: { ewayBillNumber: { contains: search, mode: "insensitive" as const } } } },
     ],
   } : {}) };
+
+  const columnFilters = parseColumnFilters(searchParams, ALLOCATED_FILTER_KEYS);
+  if (columnFilters.serialNumbers) allocatedWhere.assets = { some: { inventoryItem: { serialNumber: { in: columnFilters.serialNumbers } } } };
+  const docketFilters: Prisma.DocketWhereInput[] = [];
+  if (columnFilters.docketNumber) docketFilters.push({ docketNumber: { in: columnFilters.docketNumber } });
+  if (columnFilters.ewayBill) docketFilters.push({ ewayBillNumber: { in: columnFilters.ewayBill } });
+  if (docketFilters.length) allocatedWhere.dockets = { some: { AND: docketFilters } };
+  if (columnFilters.clientName) allocatedWhere.clientName = { in: columnFilters.clientName };
+  if (columnFilters.deliveryLocation) allocatedWhere.deliveryLocation = { in: columnFilters.deliveryLocation };
+  if (columnFilters.dcNumber) allocatedWhere.dcNumber = { in: columnFilters.dcNumber };
+  if (columnFilters.status) allocatedWhere.status = { in: columnFilters.status as OrderStatus[] };
+  if (columnFilters.totalQuantity) allocatedWhere.totalQuantity = { in: columnFilters.totalQuantity.map(Number) };
 
   const [pendingOrders, totalAllocated, allocatedOrders, availableInventory, qcPendingItems] = await Promise.all([
     prisma.order.findMany({
@@ -98,6 +113,29 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     qcFinalResult: i.qcFinalResult,
     qcCompletedAt: safeISO(i.qcCompletedAt),
   }));
+
+  const allocatedColumnSource = await prisma.order.findMany({
+    where: allocatedWhere,
+    select: {
+      clientName: true,
+      deliveryLocation: true,
+      totalQuantity: true,
+      dcNumber: true,
+      status: true,
+      assets: { select: { inventoryItem: { select: { serialNumber: true } } } },
+      dockets: { select: { docketNumber: true, ewayBillNumber: true }, take: 1 },
+    },
+  });
+  const allocatedColumnFilterValues = computeDistinctValues(allocatedColumnSource, {
+    clientName: r => r.clientName,
+    deliveryLocation: r => r.deliveryLocation,
+    totalQuantity: r => r.totalQuantity,
+    serialNumbers: r => r.assets.filter(a => a.inventoryItem).map(a => a.inventoryItem?.serialNumber).join(", "),
+    docketNumber: r => r.dockets[0]?.docketNumber,
+    dcNumber: r => r.dcNumber,
+    ewayBill: r => r.dockets[0]?.ewayBillNumber,
+    status: r => r.status,
+  });
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -205,6 +243,7 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
               totalCount={totalAllocated}
               currentPage={page}
               pageSize={limit}
+              columnFilterValues={allocatedColumnFilterValues}
             />
           </div>
         </>

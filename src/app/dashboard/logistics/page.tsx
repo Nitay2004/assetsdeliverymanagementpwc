@@ -9,10 +9,12 @@ import { PodExportButton } from "@/components/logistics/pod-export-button";
 import { getWarehouses } from "@/app/actions/dc";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
+import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, OrderStatus } from "@prisma/client";
 
 const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
+const LOGISTICS_FILTER_KEYS = ["clientName", "dcNumber", "deliveryLocation", "totalQuantity", "serialNumber", "dockets", "ewayBill", "status"];
 
 export default async function LogisticsPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
@@ -43,6 +45,20 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
     ],
   } : baseWhere;
 
+  const columnFilters = parseColumnFilters(searchParams, LOGISTICS_FILTER_KEYS);
+  const assetFilters: Prisma.AssetWhereInput[] = [];
+  if (columnFilters.serialNumber) assetFilters.push({ inventoryItem: { serialNumber: { in: columnFilters.serialNumber } } });
+  const docketFilters: Prisma.DocketWhereInput[] = [];
+  if (columnFilters.dockets) docketFilters.push({ docketNumber: { in: columnFilters.dockets } });
+  if (columnFilters.ewayBill) docketFilters.push({ ewayBillNumber: { in: columnFilters.ewayBill } });
+  if (assetFilters.length) where.assets = { some: { AND: assetFilters } };
+  if (docketFilters.length) where.dockets = { some: { AND: docketFilters } };
+  if (columnFilters.clientName) where.clientName = { in: columnFilters.clientName };
+  if (columnFilters.deliveryLocation) where.deliveryLocation = { in: columnFilters.deliveryLocation };
+  if (columnFilters.dcNumber) where.dcNumber = { in: columnFilters.dcNumber };
+  if (columnFilters.status) where.status = { in: columnFilters.status as OrderStatus[] };
+  if (columnFilters.totalQuantity) where.totalQuantity = { in: columnFilters.totalQuantity.map(Number) };
+
   const totalCount = await prisma.order.count({ where });
   const rawOrders = await prisma.order.findMany({
     where,
@@ -69,6 +85,29 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
       totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null,
     })),
   }));
+
+  const distinctSourceOrders = await prisma.order.findMany({
+    where,
+    select: {
+      clientName: true,
+      dcNumber: true,
+      deliveryLocation: true,
+      totalQuantity: true,
+      status: true,
+      assets: { select: { inventoryItem: { select: { serialNumber: true } } } },
+      dockets: { select: { docketNumber: true, courierName: true, ewayBillNumber: true } },
+    },
+  });
+  const columnFilterValues = computeDistinctValues(distinctSourceOrders, {
+    clientName: r => r.clientName,
+    dcNumber: r => r.dcNumber,
+    deliveryLocation: r => r.deliveryLocation,
+    totalQuantity: r => r.totalQuantity,
+    serialNumber: r => r.assets.map(a => a.inventoryItem?.serialNumber).filter(Boolean).join(", "),
+    dockets: r => r.dockets.map(d => d.docketNumber ? `${d.docketNumber}${d.courierName ? ` · ${d.courierName}` : ""}` : "").filter(Boolean).join(", "),
+    ewayBill: r => r.dockets.map(d => d.ewayBillNumber).filter(Boolean).join(", "),
+    status: r => r.status,
+  });
 
   const needsDocket = rawOrders.filter(o => o.status === "DOCKET_REQUESTED").length;
   const awaitingFinance = rawOrders.filter(o => ["DOCKET_ASSIGNED", "DC_REQUESTED", "EWAY_BILL_REQUESTED", "RTO_DC_REQUESTED", "RTO_EWAY_BILL_REQUESTED"].includes(o.status)).length;
@@ -168,7 +207,7 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
         </div>
       </div>
 
-      <LogisticsTable orders={serialized} canManage={canManage} warehouses={warehouses} selectedId={selectedId} />
+      <LogisticsTable orders={serialized} canManage={canManage} warehouses={warehouses} selectedId={selectedId} columnFilterValues={columnFilterValues} />
 
       <PaginationBar basePath="/dashboard/logistics" currentPage={safePage} totalPages={totalPages} totalCount={totalCount} limit={limit} />
 

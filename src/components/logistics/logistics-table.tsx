@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { ScrollToItem } from "@/components/shared/scroll-to-item";
 import { DataTableFilter, filterRows, UrlDataTableFilter } from "@/components/shared/data-table-filter";
 import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
 
 interface RtoRecordData {
   id: string;
@@ -124,9 +125,21 @@ interface Props {
   canManage: boolean;
   warehouses: WarehouseData[];
   selectedId?: string;
+  columnFilterValues?: Record<string, ColumnFilterValue[]>;
 }
 
-export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Props) {
+const LOGISTICS_COLUMNS: ColumnFilterConfig<OrderData>[] = [
+  { key: "clientName", getValue: r => r.clientName },
+  { key: "dcNumber", getValue: r => r.dcNumber },
+  { key: "deliveryLocation", getValue: r => r.deliveryLocation },
+  { key: "totalQuantity", getValue: r => r.totalQuantity },
+  { key: "serialNumber", getValue: r => r.assets.map(a => a.inventoryItem?.serialNumber).filter(Boolean).join(", ") },
+  { key: "dockets", getValue: r => r.dockets.map(d => d.docketNumber ? `${d.docketNumber}${d.courierName ? ` · ${d.courierName}` : ""}` : "").filter(Boolean).join(", ") },
+  { key: "ewayBill", getValue: r => r.dockets.map(d => d.ewayBillNumber).filter(Boolean).join(", ") },
+  { key: "status", getValue: r => r.status },
+];
+
+export function LogisticsTable({ orders, canManage, warehouses, selectedId, columnFilterValues }: Props) {
   const { toast } = useToast();
   const { showAlert } = useAlert();
   const router = useRouter();
@@ -140,6 +153,8 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
   const [uploading, setUploading] = useState(false);
   const [courierOptions, setCourierOptions] = useState<string[]>([]);
   const [courierAllOptions, setCourierAllOptions] = useState<{ id: string; category: string; value: string }[]>([]);
+
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(LOGISTICS_COLUMNS, orders, { distinctValues: columnFilterValues });
 
   useEffect(() => {
     getLogisticsCourierOptions().then(v => {
@@ -330,7 +345,7 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
     );
   }
 
-  const filteredOrders = orders;
+  const filteredOrders = columnFiltered;
 
   return (<>
     <div className="rounded-xl glass shadow-sm overflow-hidden">
@@ -342,19 +357,67 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId }: Pr
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
             <tr>
               <th className="px-6 py-4 font-semibold w-10"></th>
-              <th className="px-6 py-4 font-semibold">Client</th>
-              <th className="px-6 py-4 font-semibold">DC No</th>
-              <th className="px-6 py-4 font-semibold">Location</th>
-              <th className="px-6 py-4 font-semibold text-center">Units</th>
-              <th className="px-6 py-4 font-semibold">Serial No.</th>
-              <th className="px-6 py-4 font-semibold">Dockets</th>
-              <th className="px-6 py-4 font-semibold">E-Way Bill</th>
-              <th className="px-6 py-4 font-semibold">Status</th>
+              <ColumnFilterHeader
+                label="Client"
+                values={distinctValues.clientName ?? []}
+                selected={Array.from(filters["clientName"] ?? [])}
+                onApply={(v) => applyColumn("clientName", v)}
+              />
+              <ColumnFilterHeader
+                label="DC No"
+                values={distinctValues.dcNumber ?? []}
+                selected={Array.from(filters["dcNumber"] ?? [])}
+                onApply={(v) => applyColumn("dcNumber", v)}
+              />
+              <ColumnFilterHeader
+                label="Location"
+                values={distinctValues.deliveryLocation ?? []}
+                selected={Array.from(filters["deliveryLocation"] ?? [])}
+                onApply={(v) => applyColumn("deliveryLocation", v)}
+              />
+              <ColumnFilterHeader
+                label="Units"
+                className="text-center"
+                values={distinctValues.totalQuantity ?? []}
+                selected={Array.from(filters["totalQuantity"] ?? [])}
+                onApply={(v) => applyColumn("totalQuantity", v)}
+              />
+              <ColumnFilterHeader
+                label="Serial No."
+                values={distinctValues.serialNumber ?? []}
+                selected={Array.from(filters["serialNumber"] ?? [])}
+                onApply={(v) => applyColumn("serialNumber", v)}
+              />
+              <ColumnFilterHeader
+                label="Dockets"
+                values={distinctValues.dockets ?? []}
+                selected={Array.from(filters["dockets"] ?? [])}
+                onApply={(v) => applyColumn("dockets", v)}
+              />
+              <ColumnFilterHeader
+                label="E-Way Bill"
+                values={distinctValues.ewayBill ?? []}
+                selected={Array.from(filters["ewayBill"] ?? [])}
+                onApply={(v) => applyColumn("ewayBill", v)}
+              />
+              <ColumnFilterHeader
+                label="Status"
+                values={distinctValues.status ?? []}
+                selected={Array.from(filters["status"] ?? [])}
+                onApply={(v) => applyColumn("status", v)}
+              />
               {canManage && <th className="px-6 py-4 font-semibold">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y">
             <ScrollToItem selectedId={selectedId} prefix="logistics" />
+            {filteredOrders.length === 0 && (
+              <tr>
+                <td colSpan={canManage ? 10 : 9} className="px-6 py-8 text-center text-muted-foreground">
+                  No orders match the selected filters.
+                </td>
+              </tr>
+            )}
             {filteredOrders.map((order) => {
               const isExpanded = expandedId === order.id;
               const flowEntry = getFlowEntry(order);

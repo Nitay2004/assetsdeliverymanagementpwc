@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { addVendor, updateVendor, deleteVendor } from "@/app/actions/vendor-master";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig } from "@/components/shared/column-filter";
 
 interface Vendor {
   id: string;
@@ -19,6 +20,15 @@ interface Vendor {
   isActive: boolean;
 }
 
+const VENDOR_COLUMNS: ColumnFilterConfig<Vendor>[] = [
+  { key: "grnNumber", getValue: r => r.grnNumber },
+  { key: "name", getValue: r => r.name },
+  { key: "contactPerson", getValue: r => r.contactPerson },
+  { key: "phone", getValue: r => r.phone },
+  { key: "email", getValue: r => r.email },
+  { key: "gstNumber", getValue: r => r.gstNumber },
+];
+
 export function VendorTable({ vendors, canManage }: { vendors: Vendor[]; canManage: boolean }) {
   const { toast } = useToast();
   const { showAlert } = useAlert();
@@ -27,6 +37,9 @@ export function VendorTable({ vendors, canManage }: { vendors: Vendor[]; canMana
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [newGrn, setNewGrn] = useState<string | null>(null);
+
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(VENDOR_COLUMNS, vendors);
+  const visibleVendors = columnFiltered;
 
   const emptyForm = { name: "", email: "", phone: "", address: "", contactPerson: "", gstNumber: "" };
   const [form, setForm] = useState(emptyForm);
@@ -125,24 +138,54 @@ export function VendorTable({ vendors, canManage }: { vendors: Vendor[]; canMana
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
               <tr>
-                <th className="px-6 py-4 font-semibold">GRN No</th>
-                <th className="px-6 py-4 font-semibold">Vendor Name</th>
-                <th className="px-6 py-4 font-semibold">Contact Person</th>
-                <th className="px-6 py-4 font-semibold">Phone</th>
-                <th className="px-6 py-4 font-semibold">Email</th>
-                <th className="px-6 py-4 font-semibold">GST No</th>
+                <ColumnFilterHeader
+                  label="GRN No"
+                  values={distinctValues.grnNumber ?? []}
+                  selected={Array.from(filters["grnNumber"] ?? [])}
+                  onApply={(v) => applyColumn("grnNumber", v)}
+                />
+                <ColumnFilterHeader
+                  label="Vendor Name"
+                  values={distinctValues.name ?? []}
+                  selected={Array.from(filters["name"] ?? [])}
+                  onApply={(v) => applyColumn("name", v)}
+                />
+                <ColumnFilterHeader
+                  label="Contact Person"
+                  values={distinctValues.contactPerson ?? []}
+                  selected={Array.from(filters["contactPerson"] ?? [])}
+                  onApply={(v) => applyColumn("contactPerson", v)}
+                />
+                <ColumnFilterHeader
+                  label="Phone"
+                  values={distinctValues.phone ?? []}
+                  selected={Array.from(filters["phone"] ?? [])}
+                  onApply={(v) => applyColumn("phone", v)}
+                />
+                <ColumnFilterHeader
+                  label="Email"
+                  values={distinctValues.email ?? []}
+                  selected={Array.from(filters["email"] ?? [])}
+                  onApply={(v) => applyColumn("email", v)}
+                />
+                <ColumnFilterHeader
+                  label="GST No"
+                  values={distinctValues.gstNumber ?? []}
+                  selected={Array.from(filters["gstNumber"] ?? [])}
+                  onApply={(v) => applyColumn("gstNumber", v)}
+                />
                 {canManage && <th className="px-6 py-4 font-semibold">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y">
-              {vendors.length === 0 ? (
+              {visibleVendors.length === 0 ? (
                 <tr>
                   <td colSpan={canManage ? 7 : 6} className="px-6 py-8 text-center text-muted-foreground text-sm">
-                    No vendors yet. Click "Add Vendor" to create one.
+                    {vendors.length === 0 ? 'No vendors yet. Click "Add Vendor" to create one.' : "No vendors match the selected filters."}
                   </td>
                 </tr>
               ) : (
-                vendors.map(v => (
+                visibleVendors.map(v => (
                   <tr key={v.id} className="hover:bg-muted/10 transition-colors">
                     <td className="px-6 py-3 font-mono text-xs font-medium">{v.grnNumber}</td>
                     <td className="px-6 py-3 font-medium">{v.name}</td>

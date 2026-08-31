@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { OrderActions } from "@/components/orders/order-actions";
 import { UrlDataTableFilter } from "@/components/shared/data-table-filter";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
 
 interface AssetInventoryItem {
   id: string;
@@ -41,20 +42,36 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   DELIVERED:        { label: "Delivered",        color: "bg-green-100 text-green-700" },
 };
 
+const ALLOCATED_ASSETS_COLUMNS: ColumnFilterConfig<Order>[] = [
+  { key: "clientName", getValue: r => r.clientName },
+  { key: "deliveryLocation", getValue: r => r.deliveryLocation },
+  { key: "totalQuantity", getValue: r => r.totalQuantity },
+  { key: "serialNumbers", getValue: r => r.assets.filter(a => a.inventoryItem).map(a => a.inventoryItem?.serialNumber).join(", ") },
+  { key: "docketNumber", getValue: r => r.dockets?.[0]?.docketNumber },
+  { key: "dcNumber", getValue: r => r.dcNumber },
+  { key: "ewayBill", getValue: r => r.dockets?.[0]?.ewayBillNumber },
+  { key: "status", getValue: r => r.status },
+];
+
 export function AllocatedAssetsTable({
   orders,
   canManage,
   totalCount,
   currentPage,
   pageSize,
+  columnFilterValues,
 }: {
   orders: Order[];
   canManage: boolean;
   totalCount: number;
   currentPage: number;
   pageSize: number;
+  columnFilterValues?: Record<string, ColumnFilterValue[]>;
 }) {
   const router = useRouter();
+
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(ALLOCATED_ASSETS_COLUMNS, orders, { distinctValues: columnFilterValues });
+  const filteredOrders = columnFiltered;
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(currentPage, totalPages);
@@ -62,8 +79,6 @@ export function AllocatedAssetsTable({
   function goToPage(page: number) {
     router.push(`/dashboard/warehouse?page=${page}&limit=${pageSize}`);
   }
-
-  const filteredOrders = orders;
 
   return (
     <div className="rounded-xl glass shadow-sm overflow-hidden">
@@ -74,14 +89,54 @@ export function AllocatedAssetsTable({
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
             <tr>
-              <th className="px-6 py-4 font-semibold">Client</th>
-              <th className="px-6 py-4 font-semibold">Location</th>
-              <th className="px-6 py-4 font-semibold">Units</th>
-              <th className="px-6 py-4 font-semibold">Serial Numbers Assigned</th>
-              <th className="px-6 py-4 font-semibold">Docket No</th>
-              <th className="px-6 py-4 font-semibold">DC No</th>
-              <th className="px-6 py-4 font-semibold">E-Way Bill</th>
-              <th className="px-6 py-4 font-semibold">Status</th>
+              <ColumnFilterHeader
+                label="Client"
+                values={distinctValues.clientName ?? []}
+                selected={Array.from(filters["clientName"] ?? [])}
+                onApply={(v) => applyColumn("clientName", v)}
+              />
+              <ColumnFilterHeader
+                label="Location"
+                values={distinctValues.deliveryLocation ?? []}
+                selected={Array.from(filters["deliveryLocation"] ?? [])}
+                onApply={(v) => applyColumn("deliveryLocation", v)}
+              />
+              <ColumnFilterHeader
+                label="Units"
+                values={distinctValues.totalQuantity ?? []}
+                selected={Array.from(filters["totalQuantity"] ?? [])}
+                onApply={(v) => applyColumn("totalQuantity", v)}
+              />
+              <ColumnFilterHeader
+                label="Serial Numbers Assigned"
+                values={distinctValues.serialNumbers ?? []}
+                selected={Array.from(filters["serialNumbers"] ?? [])}
+                onApply={(v) => applyColumn("serialNumbers", v)}
+              />
+              <ColumnFilterHeader
+                label="Docket No"
+                values={distinctValues.docketNumber ?? []}
+                selected={Array.from(filters["docketNumber"] ?? [])}
+                onApply={(v) => applyColumn("docketNumber", v)}
+              />
+              <ColumnFilterHeader
+                label="DC No"
+                values={distinctValues.dcNumber ?? []}
+                selected={Array.from(filters["dcNumber"] ?? [])}
+                onApply={(v) => applyColumn("dcNumber", v)}
+              />
+              <ColumnFilterHeader
+                label="E-Way Bill"
+                values={distinctValues.ewayBill ?? []}
+                selected={Array.from(filters["ewayBill"] ?? [])}
+                onApply={(v) => applyColumn("ewayBill", v)}
+              />
+              <ColumnFilterHeader
+                label="Status"
+                values={distinctValues.status ?? []}
+                selected={Array.from(filters["status"] ?? [])}
+                onApply={(v) => applyColumn("status", v)}
+              />
               {canManage && <th className="px-6 py-4 font-semibold">Actions</th>}
             </tr>
           </thead>

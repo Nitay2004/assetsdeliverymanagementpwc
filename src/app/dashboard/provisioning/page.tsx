@@ -9,8 +9,12 @@ import { ProvisioningExportButton } from "@/components/provisioning/provisioning
 import { QcWorkTable } from "@/components/provisioning/qc-work-table";
 import { ProvisioningTabs } from "@/components/provisioning/provisioning-tabs";
 import type { QcItem } from "@/components/qc/qc-panel";
+import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES, ACTIVE_PROVISIONING_STATUSES, HANDED_OVER_STATUSES } from "@/lib/order-status";
 import type { Prisma } from "@prisma/client";
+
+const PROVISIONING_FILTER_KEYS = ["serialNumber", "model", "imageType", "stickerColour", "clientName", "engineerName", "warehouseLocation", "provisioningLocation", "assetStatus"];
+const QC_FILTER_KEYS = ["serialNumber", "model", "employeeName", "invoicingWarehouse", "qcCleanResult", "qcPurgeResult"];
 
 function safeISO(date: Date | null | undefined): string | null {
   if (!date) return null;
@@ -59,6 +63,19 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     ],
   } : baseWhere;
 
+  const columnFilters = parseColumnFilters(searchParams, PROVISIONING_FILTER_KEYS);
+  const assetFilters: Prisma.AssetWhereInput[] = [];
+  if (columnFilters.serialNumber) assetFilters.push({ inventoryItem: { serialNumber: { in: columnFilters.serialNumber } } });
+  if (columnFilters.model) assetFilters.push({ inventoryItem: { model: { in: columnFilters.model } } });
+  if (columnFilters.imageType) assetFilters.push({ inventoryItem: { imageType: { in: columnFilters.imageType } } });
+  if (columnFilters.stickerColour) assetFilters.push({ inventoryItem: { stickerColour: { in: columnFilters.stickerColour } } });
+  if (columnFilters.assetStatus) assetFilters.push({ status: { in: columnFilters.assetStatus } });
+  if (assetFilters.length) where.assets = { some: { AND: assetFilters } };
+  if (columnFilters.clientName) where.clientName = { in: columnFilters.clientName };
+  if (columnFilters.engineerName) where.engineerName = { in: columnFilters.engineerName };
+  if (columnFilters.warehouseLocation) where.warehouseLocation = { in: columnFilters.warehouseLocation };
+  if (columnFilters.provisioningLocation) where.provisioningLocation = { in: columnFilters.provisioningLocation };
+
   const [totalCount, orders] = await Promise.all([
     prisma.order.count({ where }),
     prisma.order.findMany({
@@ -75,15 +92,56 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     }),
   ]);
 
+  const distinctSourceOrders = await prisma.order.findMany({
+    where,
+    select: {
+      clientName: true,
+      engineerName: true,
+      warehouseLocation: true,
+      provisioningLocation: true,
+      assets: {
+        select: {
+          status: true,
+          inventoryItem: { select: { serialNumber: true, model: true, imageType: true, stickerColour: true } },
+        },
+      },
+    },
+  });
+  const distinctAssetRows = distinctSourceOrders.flatMap(o =>
+    o.assets.map(a => ({ order: o, asset: a }))
+  );
+  const columnFilterValues = computeDistinctValues(distinctAssetRows, {
+    serialNumber: r => r.asset.inventoryItem?.serialNumber,
+    model: r => r.asset.inventoryItem?.model,
+    imageType: r => r.asset.inventoryItem?.imageType,
+    stickerColour: r => r.asset.inventoryItem?.stickerColour,
+    clientName: r => r.order.clientName,
+    engineerName: r => r.order.engineerName,
+    warehouseLocation: r => r.order.warehouseLocation,
+    provisioningLocation: r => r.order.provisioningLocation,
+    assetStatus: r => r.asset.status,
+  });
+
   const engineers = [...new Set(orders.map(o => o.engineerName).filter(Boolean))] as string[];
   const inProvisioningCount = orders.filter(o => ACTIVE_PROVISIONING_STATUSES.includes(o.status)).length;
   const handedOverCount = orders.filter(o => !ACTIVE_PROVISIONING_STATUSES.includes(o.status)).length;
   const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
 
-  const qcPendingItems = await prisma.inventoryItem.findMany({
-    where: {
+  const qcFilters = parseColumnFilters(searchParams, QC_FILTER_KEYS);
+  const qcWhere: Prisma.InventoryItemWhereInput = {
+    AND: {
       OR: [{ status: "QC_PENDING" }, { qcCompletedAt: { not: null } }],
+      ...(qcFilters.serialNumber ? { serialNumber: { in: qcFilters.serialNumber } } : {}),
+      ...(qcFilters.model ? { model: { in: qcFilters.model } } : {}),
+      ...(qcFilters.employeeName ? { employeeName: { in: qcFilters.employeeName } } : {}),
+      ...(qcFilters.invoicingWarehouse ? { invoicingWarehouse: { in: qcFilters.invoicingWarehouse } } : {}),
+      ...(qcFilters.qcCleanResult ? { qcCleanResult: { in: qcFilters.qcCleanResult } } : {}),
+      ...(qcFilters.qcPurgeResult ? { qcPurgeResult: { in: qcFilters.qcPurgeResult } } : {}),
     },
+  };
+
+  const qcPendingItems = await prisma.inventoryItem.findMany({
+    where: qcWhere,
     orderBy: { qcRequestedAt: "desc" },
   });
 
@@ -117,6 +175,15 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const myQcItems = user
     ? serializedQc.filter(i => i.qcEngineer === user.name)
     : [];
+
+  const qcColumnFilterValues = computeDistinctValues(serializedQc, {
+    serialNumber: r => r.serialNumber,
+    model: r => r.model,
+    employeeName: r => r.employeeName,
+    invoicingWarehouse: r => r.invoicingWarehouse,
+    qcCleanResult: r => r.qcCleanResult,
+    qcPurgeResult: r => r.qcPurgeResult,
+  });
 
   // Split orders into: active (needs provisioning work), handed over to logistics,
   // and later stages (packing, dispatch, delivery, RTO, etc). All stay visible.
@@ -192,7 +259,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
       <ProvisioningTabs qcCount={myQcItems.filter(i => !i.qcCompletedAt).length} />
 
       {activeTab === "qc" ? (
-        <QcWorkTable items={myQcItems} />
+        <QcWorkTable items={myQcItems} columnFilterValues={qcColumnFilterValues} />
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
@@ -268,6 +335,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
                   canManage={canManage}
                   engineers={engineers}
                   selectedId={selectedId}
+                  columnFilterValues={columnFilterValues}
                 />
               </section>
             ))
@@ -287,6 +355,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
                 canManage={canManage}
                 engineers={engineers}
                 selectedId={selectedId}
+                columnFilterValues={columnFilterValues}
               />
             </section>
           )}
@@ -305,6 +374,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
                 canManage={canManage}
                 engineers={engineers}
                 selectedId={selectedId}
+                columnFilterValues={columnFilterValues}
               />
             </section>
           )}

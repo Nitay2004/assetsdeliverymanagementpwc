@@ -4,6 +4,10 @@ import { Plus, ArrowLeftRight, Truck, ClipboardCheck, Warehouse, ShieldCheck, Fi
 import Link from "next/link";
 import { ReversePickupTable } from "@/components/reverse-pickup/reverse-pickup-table";
 import { ReversePickupExportButton } from "@/components/reverse-pickup/reverse-pickup-export-button";
+import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
+import type { Prisma } from "@prisma/client";
+
+const REVERSE_PICKUP_FILTER_KEYS = ["requestNumber", "employeeName", "serialNumber", "model", "type", "status", "dcNo", "docketNumber", "eWayBillNo", "blancoCertificate", "partnerCourier", "createdAt"];
 
 const STATUS_STYLES: Record<string, { label: string; color: string }> = {
   REQUESTED:              { label: "Requested",              color: "bg-yellow-100 text-yellow-700" },
@@ -123,7 +127,29 @@ export default async function ReversePickupPage({
       }
     : {};
 
-  const where = { ...searchFilter };
+  const where = { ...searchFilter } as Prisma.ReversePickupRequestWhereInput;
+
+  const columnFilters = parseColumnFilters(params as Record<string, string | string[] | undefined>, REVERSE_PICKUP_FILTER_KEYS);
+  const filterableFields: Record<string, string> = {
+    requestNumber: "requestNumber", employeeName: "employeeName", serialNumber: "serialNumber",
+    model: "model", type: "type", status: "status", dcNo: "dcNo", docketNumber: "docketNumber",
+    eWayBillNo: "eWayBillNo",
+  };
+  if (columnFilters.partnerCourier) where.partnerName = { in: columnFilters.partnerCourier };
+  if (columnFilters.blancoCertificate) where.blancoCertificateUrl = { not: null };
+  if (columnFilters.createdAt) {
+    const parts = columnFilters.createdAt[0].split("/").map(Number);
+    if (parts.length === 3 && parts.every(p => !isNaN(p))) {
+      const from = new Date(parts[2], parts[1] - 1, parts[0]);
+      if (!isNaN(from.getTime())) {
+        const to = new Date(parts[2], parts[1] - 1, parts[0] + 1);
+        where.createdAt = { gte: from, lt: to };
+      }
+    }
+  }
+  for (const [key, field] of Object.entries(filterableFields)) {
+    if (columnFilters[key]) (where as Record<string, unknown>)[field] = { in: columnFilters[key] };
+  }
 
   const [requests, totalCount] = await Promise.all([
     prisma.reversePickupRequest.findMany({
@@ -153,6 +179,43 @@ export default async function ReversePickupPage({
   const completedCount = allRequests.filter(r =>
     ["BLANCO_CERTIFIED", "COMPLETED"].includes(r.status)
   ).length;
+
+  const distinctSource = await prisma.reversePickupRequest.findMany({
+    where,
+    select: {
+      requestNumber: true, employeeName: true, serialNumber: true, model: true, type: true,
+      status: true, dcNo: true, docketNumber: true, eWayBillNo: true,
+      blancoCertificateUrl: true, partnerName: true, courierName: true, createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const columnFilterValues = computeDistinctValues(distinctSource, {
+    requestNumber: r => r.requestNumber,
+    employeeName: r => r.employeeName,
+    serialNumber: r => r.serialNumber,
+    model: r => r.model,
+    type: r => r.type,
+    status: r => r.status,
+    dcNo: r => r.dcNo,
+    docketNumber: r => r.docketNumber,
+    eWayBillNo: r => r.eWayBillNo,
+    blancoCertificate: r => (r.blancoCertificateUrl ? "Has Certificate" : ""),
+    partnerCourier: r => r.courierName || r.partnerName,
+    createdAt: r => new Date(r.createdAt).toLocaleDateString("en-GB"),
+  });
+
+  const serializedRequests = requests.map(r => ({
+    ...r,
+    dcId: r.deliveryChallans[0]?.id ?? null,
+    deliveryChallans: undefined,
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+    pickupDate: r.pickupDate?.toISOString() ?? null,
+    inspectionDate: r.inspectionDate?.toISOString() ?? null,
+    receivedDate: r.receivedDate?.toISOString() ?? null,
+    qcDate: r.qcDate?.toISOString() ?? null,
+    blancoCertificateDate: r.blancoCertificateDate?.toISOString() ?? null,
+  }));
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -226,24 +289,14 @@ export default async function ReversePickupPage({
       </div>
 
       <ReversePickupTable
-        requests={requests.map(r => ({
-          ...r,
-          dcId: r.deliveryChallans[0]?.id ?? null,
-          deliveryChallans: undefined,
-          createdAt: r.createdAt.toISOString(),
-          updatedAt: r.updatedAt.toISOString(),
-          pickupDate: r.pickupDate?.toISOString() ?? null,
-          inspectionDate: r.inspectionDate?.toISOString() ?? null,
-          receivedDate: r.receivedDate?.toISOString() ?? null,
-          qcDate: r.qcDate?.toISOString() ?? null,
-          blancoCertificateDate: r.blancoCertificateDate?.toISOString() ?? null,
-        }))}
+        requests={serializedRequests}
         canManage={canManage}
         statusStyles={STATUS_STYLES}
         currentPage={page}
         totalPages={totalPages}
         totalCount={totalCount}
         limit={limit}
+        columnFilterValues={columnFilterValues}
       />
     </div>
   );

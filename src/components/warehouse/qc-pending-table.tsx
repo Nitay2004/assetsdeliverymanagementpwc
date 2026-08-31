@@ -4,8 +4,18 @@ import { useState } from "react";
 import { ClipboardCheck, ArrowRight, CheckCheck } from "lucide-react";
 import { AssignQcEngineerModal } from "@/components/warehouse/assign-qc-engineer-modal";
 import { QcPanel, QcResultBadge, type QcItem } from "@/components/qc/qc-panel";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig } from "@/components/shared/column-filter";
 
 export { type QcItem } from "@/components/qc/qc-panel";
+
+const QC_PENDING_COLUMNS: ColumnFilterConfig<QcItem>[] = [
+  { key: "serialNumber", getValue: r => r.serialNumber },
+  { key: "model", getValue: r => r.model },
+  { key: "employeeName", getValue: r => r.employeeName },
+  { key: "qcEngineer", getValue: r => r.qcEngineer },
+  { key: "qcCleanResult", getValue: r => r.qcCleanResult },
+  { key: "qcPurgeResult", getValue: r => r.qcPurgeResult },
+];
 
 export function QcPendingTable({
   items,
@@ -19,6 +29,9 @@ export function QcPendingTable({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [assignId, setAssignId] = useState<string | null>(null);
   const active = items.find(i => i.id === activeId) ?? null;
+
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(QC_PENDING_COLUMNS, items);
+  const displayItems = columnFiltered;
 
   if (items.length === 0) return null;
 
@@ -39,17 +52,54 @@ export function QcPendingTable({
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
             <tr>
-              <th className="px-4 py-3 font-semibold">Serial Number</th>
-              <th className="px-4 py-3 font-semibold">Model</th>
-              <th className="px-4 py-3 font-semibold">Employee Name</th>
-              <th className="px-4 py-3 font-semibold">QC Engineer</th>
-              <th className="px-4 py-3 font-semibold">Clean QC</th>
-              <th className="px-4 py-3 font-semibold">Purge QC</th>
+              <ColumnFilterHeader
+                label="Serial Number"
+                values={distinctValues.serialNumber ?? []}
+                selected={Array.from(filters["serialNumber"] ?? [])}
+                onApply={(v) => applyColumn("serialNumber", v)}
+              />
+              <ColumnFilterHeader
+                label="Model"
+                values={distinctValues.model ?? []}
+                selected={Array.from(filters["model"] ?? [])}
+                onApply={(v) => applyColumn("model", v)}
+              />
+              <ColumnFilterHeader
+                label="Employee Name"
+                values={distinctValues.employeeName ?? []}
+                selected={Array.from(filters["employeeName"] ?? [])}
+                onApply={(v) => applyColumn("employeeName", v)}
+              />
+              <ColumnFilterHeader
+                label="QC Engineer"
+                values={distinctValues.qcEngineer ?? []}
+                selected={Array.from(filters["qcEngineer"] ?? [])}
+                onApply={(v) => applyColumn("qcEngineer", v)}
+              />
+              <ColumnFilterHeader
+                label="Clean QC"
+                values={distinctValues.qcCleanResult ?? []}
+                selected={Array.from(filters["qcCleanResult"] ?? [])}
+                onApply={(v) => applyColumn("qcCleanResult", v)}
+              />
+              <ColumnFilterHeader
+                label="Purge QC"
+                values={distinctValues.qcPurgeResult ?? []}
+                selected={Array.from(filters["qcPurgeResult"] ?? [])}
+                onApply={(v) => applyColumn("qcPurgeResult", v)}
+              />
               {canManage && <th className="px-4 py-3 font-semibold text-right">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y">
-            {items.map(item => {
+            {displayItems.length === 0 && (
+              <tr>
+                <td colSpan={canManage ? 7 : 6} className="px-4 py-8 text-center text-muted-foreground">
+                  No assets match the selected filters.
+                </td>
+              </tr>
+            )}
+            {displayItems.map(item => {
               const handedOver = !!item.qcCompletedAt;
               return (
                 <tr

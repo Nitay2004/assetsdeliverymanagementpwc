@@ -8,10 +8,12 @@ import { ReversePickupFinanceSection } from "@/components/finance/reverse-pickup
 import { FinanceExportButton } from "@/components/finance/finance-export-button";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
+import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, OrderStatus } from "@prisma/client";
 
 const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
+const FINANCE_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity", "serialNumber", "dcNumber", "ewayBill", "status"];
 
 export default async function FinancePage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
@@ -42,6 +44,17 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
       { dockets: { some: { ewayBillNumber: { contains: search, mode: "insensitive" as const } } } },
     ],
   } : baseWhere;
+
+  const columnFilters = parseColumnFilters(searchParams, FINANCE_FILTER_KEYS);
+  if (columnFilters.serialNumber) where.assets = { some: { inventoryItem: { serialNumber: { in: columnFilters.serialNumber } } } };
+  const ewayFilters: Prisma.DocketWhereInput[] = [];
+  if (columnFilters.ewayBill) ewayFilters.push({ ewayBillNumber: { in: columnFilters.ewayBill } });
+  if (ewayFilters.length && !where.dockets) where.dockets = { some: { AND: ewayFilters } };
+  if (columnFilters.clientName) where.clientName = { in: columnFilters.clientName };
+  if (columnFilters.deliveryLocation) where.deliveryLocation = { in: columnFilters.deliveryLocation };
+  if (columnFilters.dcNumber) where.dcNumber = { in: columnFilters.dcNumber };
+  if (columnFilters.status) where.status = { in: columnFilters.status as OrderStatus[] };
+  if (columnFilters.totalQuantity) where.totalQuantity = { in: columnFilters.totalQuantity.map(Number) };
 
   const totalCount = await prisma.order.count({ where });
   const rawOrders = await prisma.order.findMany({
@@ -79,6 +92,28 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
       })),
     })),
   }));
+
+  const distinctSourceOrders = await prisma.order.findMany({
+    where,
+    select: {
+      clientName: true,
+      deliveryLocation: true,
+      totalQuantity: true,
+      dcNumber: true,
+      status: true,
+      assets: { select: { inventoryItem: { select: { serialNumber: true } } } },
+      dockets: { select: { ewayBillNumber: true } },
+    },
+  });
+  const columnFilterValues = computeDistinctValues(distinctSourceOrders, {
+    clientName: r => r.clientName,
+    deliveryLocation: r => r.deliveryLocation,
+    totalQuantity: r => r.totalQuantity,
+    serialNumber: r => r.assets.map(a => a.inventoryItem?.serialNumber).filter(Boolean).join(", "),
+    dcNumber: r => r.dcNumber,
+    ewayBill: r => r.dockets.map(d => d.ewayBillNumber).filter(Boolean).join(", "),
+    status: r => r.status,
+  });
 
   const pendingDC = rawOrders.filter(o => o.status === "IN_PROVISIONING" || o.status === "DC_REQUESTED" || o.status === "RTO_DC_REQUESTED").length;
 
@@ -141,7 +176,7 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
         </div>
       ) : (
         <>
-          <FinanceOrderTable orders={orders} canManage={canManage} selectedId={selectedId} />
+          <FinanceOrderTable orders={orders} canManage={canManage} selectedId={selectedId} columnFilterValues={columnFilterValues} />
           <PaginationBar basePath="/dashboard/finance" currentPage={safePage} totalPages={totalPages} totalCount={totalCount} limit={limit} />
         </>
       )}

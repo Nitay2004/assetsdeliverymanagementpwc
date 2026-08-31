@@ -9,6 +9,16 @@ import { useAlert } from "@/hooks/use-alert";
 import { InventoryDetailDrawer } from "./inventory-detail-drawer";
 import { SendToQcModal } from "./send-to-qc-modal";
 import { DataTableFilter, filterRows, UrlDataTableFilter } from "@/components/shared/data-table-filter";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
+
+const INVENTORY_COLUMNS: ColumnFilterConfig<InventoryItem>[] = [
+  { key: "serialNumber", getValue: r => r.serialNumber },
+  { key: "model", getValue: r => r.model },
+  { key: "status", getValue: r => r.status },
+  { key: "invoicingWarehouse", getValue: r => r.invoicingWarehouse },
+  { key: "employeeName", getValue: r => r.employeeName },
+  { key: "trackingStatus", getValue: r => r.trackingStatus },
+];
 
 interface LatestAssignment {
   employeeName: string | null;
@@ -100,9 +110,11 @@ function statusColor(value: string): string {
   return "bg-slate-100 text-slate-700";
 }
 
-export function InventoryTable({ items, isAdmin, selectedId, totalCount, currentPage, pageSize }: { items: InventoryItem[]; isAdmin?: boolean; selectedId?: string; totalCount: number; currentPage: number; pageSize: number }) {
+export function InventoryTable({ items, isAdmin, selectedId, totalCount, currentPage, pageSize, columnFilterValues }: { items: InventoryItem[]; isAdmin?: boolean; selectedId?: string; totalCount: number; currentPage: number; pageSize: number; columnFilterValues?: Record<string, ColumnFilterValue[]> }) {
   const router = useRouter();
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(INVENTORY_COLUMNS, items, { distinctValues: columnFilterValues });
   
   // Selection state for bulk operations
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -212,7 +224,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
     items.filter(i => i.status === "AVAILABLE" || i.status === "ALLOCATED").length > 0 &&
     items.filter(i => i.status === "AVAILABLE" || i.status === "ALLOCATED").every(i => selectedIds.has(i.id));
 
-  const filteredItems = items;
+  const filteredItems = columnFiltered;
 
   return (
     <div className="relative">
@@ -249,12 +261,42 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                   title="Select all available on this page"
                 />
               </th>
-              <th className="px-4 py-4 font-semibold">Serial Number</th>
-              <th className="px-4 py-4 font-semibold">Model</th>
-              <th className="px-4 py-4 font-semibold">Status</th>
-              <th className="px-4 py-4 font-semibold">Warehouse Location</th>
-              <th className="px-4 py-4 font-semibold">Employee Name</th>
-              <th className="px-4 py-4 font-semibold">Tracking Status</th>
+              <ColumnFilterHeader
+                label="Serial Number"
+                values={distinctValues.serialNumber ?? []}
+                selected={Array.from(filters["serialNumber"] ?? [])}
+                onApply={(v) => applyColumn("serialNumber", v)}
+              />
+              <ColumnFilterHeader
+                label="Model"
+                values={distinctValues.model ?? []}
+                selected={Array.from(filters["model"] ?? [])}
+                onApply={(v) => applyColumn("model", v)}
+              />
+              <ColumnFilterHeader
+                label="Status"
+                values={distinctValues.status ?? []}
+                selected={Array.from(filters["status"] ?? [])}
+                onApply={(v) => applyColumn("status", v)}
+              />
+              <ColumnFilterHeader
+                label="Warehouse Location"
+                values={distinctValues.invoicingWarehouse ?? []}
+                selected={Array.from(filters["invoicingWarehouse"] ?? [])}
+                onApply={(v) => applyColumn("invoicingWarehouse", v)}
+              />
+              <ColumnFilterHeader
+                label="Employee Name"
+                values={distinctValues.employeeName ?? []}
+                selected={Array.from(filters["employeeName"] ?? [])}
+                onApply={(v) => applyColumn("employeeName", v)}
+              />
+              <ColumnFilterHeader
+                label="Tracking Status"
+                values={distinctValues.trackingStatus ?? []}
+                selected={Array.from(filters["trackingStatus"] ?? [])}
+                onApply={(v) => applyColumn("trackingStatus", v)}
+              />
               <th className="px-4 py-4 font-semibold text-right">Actions</th>
             </tr>
           </thead>

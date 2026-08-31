@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { addProduct, updateProduct, deleteProduct } from "@/app/actions/product-master";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig } from "@/components/shared/column-filter";
 
 interface Product {
   id: string;
@@ -18,6 +19,16 @@ interface Product {
   warranty: string | null;
 }
 
+const PRODUCT_COLUMNS: ColumnFilterConfig<Product>[] = [
+  { key: "make", getValue: r => r.make },
+  { key: "model", getValue: r => r.model },
+  { key: "partNo", getValue: r => r.partNo },
+  { key: "description", getValue: r => r.description },
+  { key: "hsnCode", getValue: r => r.hsnCode },
+  { key: "gstRate", getValue: r => (r.gstRate != null ? `${r.gstRate}%` : null) },
+  { key: "warranty", getValue: r => r.warranty },
+];
+
 export function ProductTable({ products, canManage }: { products: Product[]; canManage: boolean }) {
   const { toast } = useToast();
   const { showAlert } = useAlert();
@@ -25,6 +36,9 @@ export function ProductTable({ products, canManage }: { products: Product[]; can
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(PRODUCT_COLUMNS, products);
+  const visibleProducts = columnFiltered;
 
   const emptyForm = { make: "", model: "", partNo: "", description: "", hsnCode: "", gstRate: "", warranty: "" };
   const [form, setForm] = useState(emptyForm);
@@ -121,25 +135,61 @@ export function ProductTable({ products, canManage }: { products: Product[]; can
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
               <tr>
-                <th className="px-6 py-4 font-semibold">Make</th>
-                <th className="px-6 py-4 font-semibold">Model</th>
-                <th className="px-6 py-4 font-semibold">Part No</th>
-                <th className="px-6 py-4 font-semibold">Description</th>
-                <th className="px-6 py-4 font-semibold">HSN Code</th>
-                <th className="px-6 py-4 font-semibold text-right">GST Rate</th>
-                <th className="px-6 py-4 font-semibold">Warranty</th>
+                <ColumnFilterHeader
+                  label="Make"
+                  values={distinctValues.make ?? []}
+                  selected={Array.from(filters["make"] ?? [])}
+                  onApply={(v) => applyColumn("make", v)}
+                />
+                <ColumnFilterHeader
+                  label="Model"
+                  values={distinctValues.model ?? []}
+                  selected={Array.from(filters["model"] ?? [])}
+                  onApply={(v) => applyColumn("model", v)}
+                />
+                <ColumnFilterHeader
+                  label="Part No"
+                  values={distinctValues.partNo ?? []}
+                  selected={Array.from(filters["partNo"] ?? [])}
+                  onApply={(v) => applyColumn("partNo", v)}
+                />
+                <ColumnFilterHeader
+                  label="Description"
+                  values={distinctValues.description ?? []}
+                  selected={Array.from(filters["description"] ?? [])}
+                  onApply={(v) => applyColumn("description", v)}
+                />
+                <ColumnFilterHeader
+                  label="HSN Code"
+                  values={distinctValues.hsnCode ?? []}
+                  selected={Array.from(filters["hsnCode"] ?? [])}
+                  onApply={(v) => applyColumn("hsnCode", v)}
+                />
+                <ColumnFilterHeader
+                  label="GST Rate"
+                  className="text-right"
+                  values={distinctValues.gstRate ?? []}
+                  selected={Array.from(filters["gstRate"] ?? [])}
+                  onApply={(v) => applyColumn("gstRate", v)}
+                />
+                <ColumnFilterHeader
+                  label="Warranty"
+                  values={distinctValues.warranty ?? []}
+                  selected={Array.from(filters["warranty"] ?? [])}
+                  onApply={(v) => applyColumn("warranty", v)}
+                />
                 {canManage && <th className="px-6 py-4 font-semibold">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y">
-              {products.length === 0 ? (
+              {visibleProducts.length === 0 ? (
                 <tr>
                   <td colSpan={canManage ? 8 : 7} className="px-6 py-8 text-center text-muted-foreground text-sm">
-                    No products yet. Click "Add Product" to create one.
+                    {products.length === 0 ? 'No products yet. Click "Add Product" to create one.' : "No products match the selected filters."}
                   </td>
                 </tr>
               ) : (
-                products.map(p => (
+                visibleProducts.map(p => (
                   <tr key={p.id} className="hover:bg-muted/10 transition-colors">
                     <td className="px-6 py-3 font-medium">{p.make}</td>
                     <td className="px-6 py-3">{p.model}</td>

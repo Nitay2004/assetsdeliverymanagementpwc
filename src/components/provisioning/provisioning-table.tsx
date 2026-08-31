@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Edit3, Undo2, User, MapPin, Loader2, CheckSquare } from "lucide-react";
 import { updateAssetStatus, removeFromProvisioning, bulkMarkOsInstalled, handoverToLogistics, getProvisioningDropdowns, addProvisioningDropdownOption, deleteProvisioningDropdownOption } from "@/app/actions/provisioning";
 import { useToast } from "@/hooks/use-toast";
@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { ProvisioningEditModal } from "./provisioning-edit-modal";
 import { ScrollToItem } from "@/components/shared/scroll-to-item";
 import { DataTableFilter, filterRows, UrlDataTableFilter } from "@/components/shared/data-table-filter";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
 
 const ASSET_STATUS_STYLES: Record<string, string> = {
   pending:     "bg-yellow-100 text-yellow-700",
@@ -62,9 +63,24 @@ interface Props {
   canManage: boolean;
   engineers: string[];
   selectedId?: string;
+  columnFilterValues?: Record<string, ColumnFilterValue[]>;
 }
 
-export function ProvisioningTable({ orders, canManage, engineers, selectedId }: Props) {
+type ProvisioningRow = { order: Order; asset: Asset };
+
+const PROVISIONING_COLUMNS: ColumnFilterConfig<ProvisioningRow>[] = [
+  { key: "serialNumber", getValue: r => r.asset.inventoryItem?.serialNumber },
+  { key: "model", getValue: r => r.asset.inventoryItem?.model },
+  { key: "imageType", getValue: r => r.asset.inventoryItem?.imageType },
+  { key: "stickerColour", getValue: r => r.asset.inventoryItem?.stickerColour },
+  { key: "clientName", getValue: r => r.order.clientName },
+  { key: "engineerName", getValue: r => r.order.engineerName },
+  { key: "warehouseLocation", getValue: r => r.order.warehouseLocation },
+  { key: "provisioningLocation", getValue: r => r.order.provisioningLocation },
+  { key: "assetStatus", getValue: r => r.asset.status },
+];
+
+export function ProvisioningTable({ orders, canManage, engineers, selectedId, columnFilterValues }: Props) {
   const { toast } = useToast();
   const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -74,6 +90,10 @@ export function ProvisioningTable({ orders, canManage, engineers, selectedId }: 
   const rows = orders.flatMap(order =>
     order.assets.map(asset => ({ order, asset }))
   );
+
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(PROVISIONING_COLUMNS, rows, { distinctValues: columnFilterValues });
+
+  const visibleAssetIds = useMemo(() => new Set(columnFiltered.map(r => r.asset.id)), [columnFiltered]);
 
   const allRows = rows;
 
@@ -218,22 +238,74 @@ export function ProvisioningTable({ orders, canManage, engineers, selectedId }: 
                     />
                   </th>
                 )}
-                <th className="px-4 py-4 font-semibold">Serial No</th>
-                <th className="px-4 py-4 font-semibold">Model</th>
-                <th className="px-4 py-4 font-semibold">Image Type</th>
-                <th className="px-4 py-4 font-semibold">Sticker</th>
-                <th className="px-4 py-4 font-semibold">Client</th>
-                <th className="px-4 py-4 font-semibold">Engineer</th>
-                <th className="px-4 py-4 font-semibold">WH</th>
-                <th className="px-4 py-4 font-semibold">Prov Loc</th>
-                <th className="px-4 py-4 font-semibold">Asset Status</th>
+                <ColumnFilterHeader
+                  label="Serial No"
+                  values={distinctValues.serialNumber ?? []}
+                  selected={Array.from(filters["serialNumber"] ?? [])}
+                  onApply={(v) => applyColumn("serialNumber", v)}
+                />
+                <ColumnFilterHeader
+                  label="Model"
+                  values={distinctValues.model ?? []}
+                  selected={Array.from(filters["model"] ?? [])}
+                  onApply={(v) => applyColumn("model", v)}
+                />
+                <ColumnFilterHeader
+                  label="Image Type"
+                  values={distinctValues.imageType ?? []}
+                  selected={Array.from(filters["imageType"] ?? [])}
+                  onApply={(v) => applyColumn("imageType", v)}
+                />
+                <ColumnFilterHeader
+                  label="Sticker"
+                  values={distinctValues.stickerColour ?? []}
+                  selected={Array.from(filters["stickerColour"] ?? [])}
+                  onApply={(v) => applyColumn("stickerColour", v)}
+                />
+                <ColumnFilterHeader
+                  label="Client"
+                  values={distinctValues.clientName ?? []}
+                  selected={Array.from(filters["clientName"] ?? [])}
+                  onApply={(v) => applyColumn("clientName", v)}
+                />
+                <ColumnFilterHeader
+                  label="Engineer"
+                  values={distinctValues.engineerName ?? []}
+                  selected={Array.from(filters["engineerName"] ?? [])}
+                  onApply={(v) => applyColumn("engineerName", v)}
+                />
+                <ColumnFilterHeader
+                  label="WH"
+                  values={distinctValues.warehouseLocation ?? []}
+                  selected={Array.from(filters["warehouseLocation"] ?? [])}
+                  onApply={(v) => applyColumn("warehouseLocation", v)}
+                />
+                <ColumnFilterHeader
+                  label="Prov Loc"
+                  values={distinctValues.provisioningLocation ?? []}
+                  selected={Array.from(filters["provisioningLocation"] ?? [])}
+                  onApply={(v) => applyColumn("provisioningLocation", v)}
+                />
+                <ColumnFilterHeader
+                  label="Asset Status"
+                  values={distinctValues.assetStatus ?? []}
+                  selected={Array.from(filters["assetStatus"] ?? [])}
+                  onApply={(v) => applyColumn("assetStatus", v)}
+                />
                 {canManage && <th className="px-4 py-4 font-semibold">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y">
               <ScrollToItem selectedId={selectedId} prefix="prov" />
-              {orders.flatMap(order =>
-                order.assets.map((asset, idx) => {
+              {columnFiltered.length === 0 ? (
+                <tr>
+                  <td colSpan={canManage ? 11 : 10} className="px-6 py-8 text-center text-muted-foreground">
+                    No rows match the selected filters.
+                  </td>
+                </tr>
+              ) : (
+                orders.map(order =>
+                  order.assets.filter(asset => visibleAssetIds.has(asset.id)).map((asset, idx) => {
                 const inv = asset.inventoryItem;
                 const sColor = inv?.stickerColour
                   ? STICKER_COLORS[inv.stickerColour.toLowerCase()]
@@ -333,7 +405,9 @@ export function ProvisioningTable({ orders, canManage, engineers, selectedId }: 
                     )}
                   </tr>
                 );
-              }))}
+              })
+                )
+              )}
             </tbody>
           </table>
         </div>

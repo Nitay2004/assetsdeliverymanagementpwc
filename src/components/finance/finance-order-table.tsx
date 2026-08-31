@@ -3,6 +3,7 @@
 import { FinanceOrderRow } from "@/components/finance/finance-order-row";
 import { ScrollToItem } from "@/components/shared/scroll-to-item";
 import { UrlDataTableFilter } from "@/components/shared/data-table-filter";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
 
 interface AssetItem {
   id: string;
@@ -65,10 +66,22 @@ interface Props {
   orders: OrderData[];
   canManage: boolean;
   selectedId?: string;
+  columnFilterValues?: Record<string, ColumnFilterValue[]>;
 }
 
-export function FinanceOrderTable({ orders, canManage, selectedId }: Props) {
-  const filteredOrders = orders;
+const FINANCE_COLUMNS: ColumnFilterConfig<OrderData>[] = [
+  { key: "clientName", getValue: r => r.clientName },
+  { key: "deliveryLocation", getValue: r => r.deliveryLocation },
+  { key: "totalQuantity", getValue: r => r.totalQuantity },
+  { key: "serialNumber", getValue: r => r.assets.map(a => a.inventoryItem?.serialNumber).filter(Boolean).join(", ") },
+  { key: "dcNumber", getValue: r => r.dcNumber },
+  { key: "ewayBill", getValue: r => r.dockets.map(d => d.ewayBillNumber).filter(Boolean).join(", ") },
+  { key: "status", getValue: r => r.status },
+];
+
+export function FinanceOrderTable({ orders, canManage, selectedId, columnFilterValues }: Props) {
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(FINANCE_COLUMNS, orders, { distinctValues: columnFilterValues });
+  const filteredOrders = columnFiltered;
 
   return (
     <div className="rounded-xl glass shadow-sm overflow-hidden">
@@ -79,13 +92,48 @@ export function FinanceOrderTable({ orders, canManage, selectedId }: Props) {
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
             <tr>
-              <th className="px-6 py-4 font-semibold">Client</th>
-              <th className="px-6 py-4 font-semibold">Location</th>
-              <th className="px-6 py-4 font-semibold">Units</th>
-              <th className="px-6 py-4 font-semibold">Serial No.</th>
-              <th className="px-6 py-4 font-semibold">DC #</th>
-              <th className="px-6 py-4 font-semibold">E-Way Bill</th>
-              <th className="px-6 py-4 font-semibold">Status</th>
+              <ColumnFilterHeader
+                label="Client"
+                values={distinctValues.clientName ?? []}
+                selected={Array.from(filters["clientName"] ?? [])}
+                onApply={(v) => applyColumn("clientName", v)}
+              />
+              <ColumnFilterHeader
+                label="Location"
+                values={distinctValues.deliveryLocation ?? []}
+                selected={Array.from(filters["deliveryLocation"] ?? [])}
+                onApply={(v) => applyColumn("deliveryLocation", v)}
+              />
+              <ColumnFilterHeader
+                label="Units"
+                values={distinctValues.totalQuantity ?? []}
+                selected={Array.from(filters["totalQuantity"] ?? [])}
+                onApply={(v) => applyColumn("totalQuantity", v)}
+              />
+              <ColumnFilterHeader
+                label="Serial No."
+                values={distinctValues.serialNumber ?? []}
+                selected={Array.from(filters["serialNumber"] ?? [])}
+                onApply={(v) => applyColumn("serialNumber", v)}
+              />
+              <ColumnFilterHeader
+                label="DC #"
+                values={distinctValues.dcNumber ?? []}
+                selected={Array.from(filters["dcNumber"] ?? [])}
+                onApply={(v) => applyColumn("dcNumber", v)}
+              />
+              <ColumnFilterHeader
+                label="E-Way Bill"
+                values={distinctValues.ewayBill ?? []}
+                selected={Array.from(filters["ewayBill"] ?? [])}
+                onApply={(v) => applyColumn("ewayBill", v)}
+              />
+              <ColumnFilterHeader
+                label="Status"
+                values={distinctValues.status ?? []}
+                selected={Array.from(filters["status"] ?? [])}
+                onApply={(v) => applyColumn("status", v)}
+              />
               {canManage && <th className="px-6 py-4 font-semibold">Actions</th>}
             </tr>
           </thead>

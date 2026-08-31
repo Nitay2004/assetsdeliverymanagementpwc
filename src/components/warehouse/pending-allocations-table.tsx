@@ -6,6 +6,7 @@ import { AdvanceProvisioningModal } from "@/components/warehouse/advance-provisi
 import { BulkAdvanceModal } from "@/components/provisioning/bulk-advance-modal";
 import { AlertCircle, ChevronDown, ChevronRight, ArrowRight, CheckSquare } from "lucide-react";
 import { DataTableFilter, filterRows } from "@/components/shared/data-table-filter";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig } from "@/components/shared/column-filter";
 
 interface AvailableItem {
   id: string;
@@ -68,12 +69,35 @@ interface Props {
   canManage: boolean;
 }
 
+const PENDING_ALLOCATIONS_COLUMNS: ColumnFilterConfig<Order>[] = [
+  { key: "clientName", getValue: r => r.clientName },
+  { key: "deliveryLocation", getValue: r => r.deliveryLocation },
+  { key: "imageType", getValue: r => r.assets.find(a => a.inventoryItem)?.inventoryItem?.imageType },
+  { key: "stickerColour", getValue: r => r.assets.find(a => a.inventoryItem)?.inventoryItem?.stickerColour },
+  { key: "totalQuantity", getValue: r => r.totalQuantity },
+  { key: "serialNumber", getValue: r => r.assets.filter(a => a.inventoryItem).map(a => a.inventoryItem?.serialNumber).join(", ") },
+  { key: "intermediary", getValue: r => r.intermediary },
+  { key: "pending", getValue: r => r.assets.filter(a => a.inventoryItemId === null).length },
+  { key: "status", getValue: r => r.status },
+];
+
 export function PendingAllocationsTable({ orders, availableItems, canManage }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [advanceOrderId, setAdvanceOrderId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkAdvanceIds, setBulkAdvanceIds] = useState<string[] | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const searchFiltered = filterRows(orders, searchQuery, [
+    "clientName", "deliveryLocation", "intermediary", "status",
+  ]).filter(order => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return order.assets.some(a => a.inventoryItem?.serialNumber?.toLowerCase().includes(q));
+  });
+
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(PENDING_ALLOCATIONS_COLUMNS, searchFiltered);
+  const filteredOrders = columnFiltered;
 
   const toggleRow = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
@@ -108,14 +132,6 @@ export function PendingAllocationsTable({ orders, availableItems, canManage }: P
       </div>
     );
   }
-
-  const filteredOrders = filterRows(orders, searchQuery, [
-    "clientName", "deliveryLocation", "intermediary", "status",
-  ]).filter(order => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase().trim();
-    return order.assets.some(a => a.inventoryItem?.serialNumber?.toLowerCase().includes(q));
-  });
 
   return (
     <>
@@ -168,19 +184,71 @@ export function PendingAllocationsTable({ orders, availableItems, canManage }: P
                   </th>
                 )}
                 <th className="px-6 py-4 font-semibold w-10"></th>
-                <th className="px-6 py-4 font-semibold">Client</th>
-                <th className="px-6 py-4 font-semibold">Location</th>
-                <th className="px-6 py-4 font-semibold">Image Type</th>
-                <th className="px-6 py-4 font-semibold">Sticker</th>
-                <th className="px-6 py-4 font-semibold">Units</th>
-                <th className="px-6 py-4 font-semibold">Serial No.</th>
-                <th className="px-6 py-4 font-semibold">Intermediary</th>
-                <th className="px-6 py-4 font-semibold">Pending</th>
-                <th className="px-6 py-4 font-semibold">Status</th>
+                <ColumnFilterHeader
+                  label="Client"
+                  values={distinctValues.clientName ?? []}
+                  selected={Array.from(filters["clientName"] ?? [])}
+                  onApply={(v) => applyColumn("clientName", v)}
+                />
+                <ColumnFilterHeader
+                  label="Location"
+                  values={distinctValues.deliveryLocation ?? []}
+                  selected={Array.from(filters["deliveryLocation"] ?? [])}
+                  onApply={(v) => applyColumn("deliveryLocation", v)}
+                />
+                <ColumnFilterHeader
+                  label="Image Type"
+                  values={distinctValues.imageType ?? []}
+                  selected={Array.from(filters["imageType"] ?? [])}
+                  onApply={(v) => applyColumn("imageType", v)}
+                />
+                <ColumnFilterHeader
+                  label="Sticker"
+                  values={distinctValues.stickerColour ?? []}
+                  selected={Array.from(filters["stickerColour"] ?? [])}
+                  onApply={(v) => applyColumn("stickerColour", v)}
+                />
+                <ColumnFilterHeader
+                  label="Units"
+                  values={distinctValues.totalQuantity ?? []}
+                  selected={Array.from(filters["totalQuantity"] ?? [])}
+                  onApply={(v) => applyColumn("totalQuantity", v)}
+                />
+                <ColumnFilterHeader
+                  label="Serial No."
+                  values={distinctValues.serialNumber ?? []}
+                  selected={Array.from(filters["serialNumber"] ?? [])}
+                  onApply={(v) => applyColumn("serialNumber", v)}
+                />
+                <ColumnFilterHeader
+                  label="Intermediary"
+                  values={distinctValues.intermediary ?? []}
+                  selected={Array.from(filters["intermediary"] ?? [])}
+                  onApply={(v) => applyColumn("intermediary", v)}
+                />
+                <ColumnFilterHeader
+                  label="Pending"
+                  values={distinctValues.pending ?? []}
+                  selected={Array.from(filters["pending"] ?? [])}
+                  onApply={(v) => applyColumn("pending", v)}
+                />
+                <ColumnFilterHeader
+                  label="Status"
+                  values={distinctValues.status ?? []}
+                  selected={Array.from(filters["status"] ?? [])}
+                  onApply={(v) => applyColumn("status", v)}
+                />
                 {canManage && <th className="px-6 py-4 font-semibold">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y">
+              {filteredOrders.length === 0 && (
+                <tr>
+                  <td colSpan={canManage ? 12 : 10} className="px-6 py-8 text-center text-muted-foreground">
+                    No orders match the selected filters.
+                  </td>
+                </tr>
+              )}
               {filteredOrders.map((order) => {
                 const pendingAssetCount = order.assets.filter(
                   (a) => a.inventoryItemId === null

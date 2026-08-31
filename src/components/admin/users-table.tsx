@@ -30,6 +30,7 @@ import {
   type ModulePermission,
   type Permissions,
 } from "@/lib/permissions";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig } from "@/components/shared/column-filter";
 
 interface UserRow {
   id: string;
@@ -41,10 +42,20 @@ interface UserRow {
   createdAt: Date;
 }
 
+const USERS_COLUMNS: ColumnFilterConfig<UserRow>[] = [
+  { key: "name", getValue: r => r.name },
+  { key: "email", getValue: r => r.email },
+  { key: "role", getValue: r => r.role },
+  { key: "status", getValue: r => (r.isActive ? "Active" : "Inactive") },
+];
+
 export function UsersTable({ users }: { users: UserRow[] }) {
   const { toast } = useToast();
   const { showAlert } = useAlert();
   const router = useRouter();
+
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(USERS_COLUMNS, users);
+  const visibleUsers = columnFiltered;
 
   const [showCreate, setShowCreate] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
@@ -155,15 +166,46 @@ export function UsersTable({ users }: { users: UserRow[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Name</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Email</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Role</th>
-              <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Status</th>
+              <ColumnFilterHeader
+                label="Name"
+                className="text-left px-4 py-3 font-semibold text-muted-foreground"
+                values={distinctValues.name ?? []}
+                selected={Array.from(filters["name"] ?? [])}
+                onApply={(v) => applyColumn("name", v)}
+              />
+              <ColumnFilterHeader
+                label="Email"
+                className="text-left px-4 py-3 font-semibold text-muted-foreground"
+                values={distinctValues.email ?? []}
+                selected={Array.from(filters["email"] ?? [])}
+                onApply={(v) => applyColumn("email", v)}
+              />
+              <ColumnFilterHeader
+                label="Role"
+                className="text-left px-4 py-3 font-semibold text-muted-foreground"
+                values={distinctValues.role ?? []}
+                selected={Array.from(filters["role"] ?? [])}
+                onApply={(v) => applyColumn("role", v)}
+              />
+              <ColumnFilterHeader
+                label="Status"
+                className="text-left px-4 py-3 font-semibold text-muted-foreground"
+                values={distinctValues.status ?? []}
+                selected={Array.from(filters["status"] ?? [])}
+                onApply={(v) => applyColumn("status", v)}
+              />
               <th className="text-right px-4 py-3 font-semibold text-muted-foreground">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
+            {visibleUsers.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  {users.length === 0 ? "No users yet." : "No users match the selected filters."}
+                </td>
+              </tr>
+            )}
+            {visibleUsers.map((u) => (
               <tr key={u.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                 <td className="px-4 py-3 font-medium">{u.name || "—"}</td>
                 <td className="px-4 py-3 text-muted-foreground">{u.email}</td>

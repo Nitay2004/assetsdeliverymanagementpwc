@@ -9,6 +9,7 @@ import { useAlert } from "@/hooks/use-alert";
 import { deleteReversePickupRequest } from "@/app/actions/reverse-pickup";
 import { UrlDataTableFilter } from "@/components/shared/data-table-filter";
 import { PaginationBar } from "@/components/shared/pagination-bar";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
 
 interface RequestData {
   id: string;
@@ -46,13 +47,32 @@ interface Props {
   totalPages: number;
   totalCount: number;
   limit: number;
+  columnFilterValues?: Record<string, ColumnFilterValue[]>;
 }
 
-export function ReversePickupTable({ requests, canManage, statusStyles, currentPage, totalPages, totalCount, limit }: Props) {
+const REVERSE_PICKUP_COLUMNS: ColumnFilterConfig<RequestData>[] = [
+  { key: "requestNumber", getValue: r => r.requestNumber },
+  { key: "employeeName", getValue: r => r.employeeName },
+  { key: "serialNumber", getValue: r => r.serialNumber },
+  { key: "model", getValue: r => r.model },
+  { key: "type", getValue: r => r.type },
+  { key: "status", getValue: r => r.status },
+  { key: "dcNo", getValue: r => r.dcNo },
+  { key: "docketNumber", getValue: r => r.docketNumber },
+  { key: "eWayBillNo", getValue: r => r.eWayBillNo },
+  { key: "blancoCertificate", getValue: r => (r.blancoCertificateUrl ? "Has Certificate" : "") },
+  { key: "partnerCourier", getValue: r => r.courierName || r.partnerName },
+  { key: "createdAt", getValue: r => new Date(r.createdAt).toLocaleDateString("en-GB") },
+];
+
+export function ReversePickupTable({ requests, canManage, statusStyles, currentPage, totalPages, totalCount, limit, columnFilterValues }: Props) {
   const router = useRouter();
   const { toast } = useToast();
   const { showAlert } = useAlert();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(REVERSE_PICKUP_COLUMNS, requests, { distinctValues: columnFilterValues });
+  const displayRequests = columnFiltered;
 
   const handleDelete = async (id: string, requestNumber: string) => {
     const ok = await showAlert({
@@ -105,30 +125,90 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
             <tr>
-              <th className="px-6 py-4 font-semibold">Request #</th>
-              <th className="px-6 py-4 font-semibold">Employee</th>
-              <th className="px-6 py-4 font-semibold">Serial No.</th>
-              <th className="px-6 py-4 font-semibold">Model</th>
-              <th className="px-6 py-4 font-semibold">Type</th>
-              <th className="px-6 py-4 font-semibold">Status</th>
-              <th className="px-6 py-4 font-semibold">DC</th>
-              <th className="px-6 py-4 font-semibold">Docket</th>
-              <th className="px-6 py-4 font-semibold">E-Way Bill</th>
-              <th className="px-6 py-4 font-semibold">Blanco Cert</th>
-              <th className="px-6 py-4 font-semibold">Partner/Courier</th>
-              <th className="px-6 py-4 font-semibold">Created</th>
+              <ColumnFilterHeader
+                label="Request #"
+                values={distinctValues.requestNumber ?? []}
+                selected={Array.from(filters["requestNumber"] ?? [])}
+                onApply={(v) => applyColumn("requestNumber", v)}
+              />
+              <ColumnFilterHeader
+                label="Employee"
+                values={distinctValues.employeeName ?? []}
+                selected={Array.from(filters["employeeName"] ?? [])}
+                onApply={(v) => applyColumn("employeeName", v)}
+              />
+              <ColumnFilterHeader
+                label="Serial No."
+                values={distinctValues.serialNumber ?? []}
+                selected={Array.from(filters["serialNumber"] ?? [])}
+                onApply={(v) => applyColumn("serialNumber", v)}
+              />
+              <ColumnFilterHeader
+                label="Model"
+                values={distinctValues.model ?? []}
+                selected={Array.from(filters["model"] ?? [])}
+                onApply={(v) => applyColumn("model", v)}
+              />
+              <ColumnFilterHeader
+                label="Type"
+                values={distinctValues.type ?? []}
+                selected={Array.from(filters["type"] ?? [])}
+                onApply={(v) => applyColumn("type", v)}
+              />
+              <ColumnFilterHeader
+                label="Status"
+                values={distinctValues.status ?? []}
+                selected={Array.from(filters["status"] ?? [])}
+                onApply={(v) => applyColumn("status", v)}
+              />
+              <ColumnFilterHeader
+                label="DC"
+                values={distinctValues.dcNo ?? []}
+                selected={Array.from(filters["dcNo"] ?? [])}
+                onApply={(v) => applyColumn("dcNo", v)}
+              />
+              <ColumnFilterHeader
+                label="Docket"
+                values={distinctValues.docketNumber ?? []}
+                selected={Array.from(filters["docketNumber"] ?? [])}
+                onApply={(v) => applyColumn("docketNumber", v)}
+              />
+              <ColumnFilterHeader
+                label="E-Way Bill"
+                values={distinctValues.eWayBillNo ?? []}
+                selected={Array.from(filters["eWayBillNo"] ?? [])}
+                onApply={(v) => applyColumn("eWayBillNo", v)}
+              />
+              <ColumnFilterHeader
+                label="Blanco Cert"
+                values={distinctValues.blancoCertificate ?? []}
+                selected={Array.from(filters["blancoCertificate"] ?? [])}
+                onApply={(v) => applyColumn("blancoCertificate", v)}
+              />
+              <ColumnFilterHeader
+                label="Partner/Courier"
+                values={distinctValues.partnerCourier ?? []}
+                selected={Array.from(filters["partnerCourier"] ?? [])}
+                onApply={(v) => applyColumn("partnerCourier", v)}
+              />
+              <ColumnFilterHeader
+                label="Created"
+                values={distinctValues.createdAt ?? []}
+                selected={Array.from(filters["createdAt"] ?? [])}
+                onApply={(v) => applyColumn("createdAt", v)}
+              />
               {canManage && <th className="px-6 py-4 font-semibold">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y">
-            {requests.length === 0 ? (
+            {displayRequests.length === 0 ? (
               <tr>
                 <td colSpan={canManage ? 13 : 12} className="px-6 py-12 text-center text-muted-foreground">
-                  No reverse pickup requests found.
+                  {requests.length === 0 ? "No reverse pickup requests found." : "No rows match the selected filters."}
                 </td>
               </tr>
             ) : (
-              requests.map((req) => (
+              displayRequests.map((req) => (
                 <Fragment key={req.id}>
                   <tr
                     className="hover:bg-muted/10 transition-colors cursor-pointer"

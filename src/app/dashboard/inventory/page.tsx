@@ -3,7 +3,10 @@ import { getSession } from "@/lib/auth";
 import { Package, ShieldCheck, Laptop, Database, ClipboardCheck } from "lucide-react";
 import { InventoryTable } from "@/components/inventory/inventory-table";
 import { InventoryHeader } from "@/components/inventory/inventory-header";
-import type { Prisma } from "@prisma/client";
+import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
+import type { Prisma, InventoryStatus } from "@prisma/client";
+
+const INVENTORY_FILTER_KEYS = ["serialNumber", "model", "status", "invoicingWarehouse", "employeeName", "trackingStatus"];
 
 function safeISO(date: Date | null | undefined): string | null {
   if (!date) return null;
@@ -22,6 +25,7 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
   const pageSize = Math.max(1, Math.min(100, parseInt(searchParams.limit as string) || 25));
   const skip = (page - 1) * pageSize;
   const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
+  const columnFilters = parseColumnFilters(searchParams, INVENTORY_FILTER_KEYS);
 
   const baseWhere: Prisma.InventoryItemWhereInput = {};
   const where: Prisma.InventoryItemWhereInput = search ? {
@@ -34,6 +38,13 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
       { employeeName: { contains: search, mode: "insensitive" as const } },
     ],
   } : baseWhere;
+
+  if (columnFilters.serialNumber) where.serialNumber = { in: columnFilters.serialNumber };
+  if (columnFilters.model) where.model = { in: columnFilters.model };
+  if (columnFilters.status) where.status = { in: columnFilters.status as InventoryStatus[] };
+  if (columnFilters.invoicingWarehouse) where.invoicingWarehouse = { in: columnFilters.invoicingWarehouse };
+  if (columnFilters.employeeName) where.employeeName = { in: columnFilters.employeeName };
+  if (columnFilters.trackingStatus) where.trackingStatus = { in: columnFilters.trackingStatus };
 
   const [inventoryItems, totalCount, newCount, availableCount, allocatedCount, qcPendingCount] = await Promise.all([
     prisma.inventoryItem.findMany({
@@ -54,6 +65,19 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
     prisma.inventoryItem.count({ where: { status: "ALLOCATED" } }),
     prisma.inventoryItem.count({ where: { status: "QC_PENDING" } }),
   ]);
+
+  const distinctSource = await prisma.inventoryItem.findMany({
+    where,
+    select: { serialNumber: true, model: true, status: true, invoicingWarehouse: true, employeeName: true, trackingStatus: true },
+  });
+  const columnFilterValues = computeDistinctValues(distinctSource, {
+    serialNumber: r => r.serialNumber,
+    model: r => r.model,
+    status: r => r.status,
+    invoicingWarehouse: r => r.invoicingWarehouse,
+    employeeName: r => r.employeeName,
+    trackingStatus: r => r.trackingStatus,
+  });
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -110,6 +134,7 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
           totalCount={totalCount}
           currentPage={page}
           pageSize={pageSize}
+          columnFilterValues={columnFilterValues}
           items={inventoryItems.map(i => {
           const latest = i.assignmentRecords[0];
           return {

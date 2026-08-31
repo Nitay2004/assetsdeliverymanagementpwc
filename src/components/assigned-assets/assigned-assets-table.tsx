@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, ArrowLeftRight } from "lucide-react";
 import { getInventoryItem } from "@/app/actions/inventory";
 import { InventoryDetailDrawer } from "@/components/inventory/inventory-detail-drawer";
 import { UrlDataTableFilter } from "@/components/shared/data-table-filter";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
 
 interface LatestAssignment {
   employeeName: string | null;
@@ -85,6 +86,16 @@ interface AssignedItem {
   _latestAssignment: LatestAssignment | null;
 }
 
+const ASSIGNED_ASSETS_COLUMNS: ColumnFilterConfig<AssignedItem>[] = [
+  { key: "serialNumber", getValue: r => r.serialNumber },
+  { key: "model", getValue: r => r.model },
+  { key: "employeeName", getValue: r => r._latestAssignment?.employeeName ?? r.employeeName },
+  { key: "emailId", getValue: r => r._latestAssignment?.emailId ?? r.emailId },
+  { key: "purpose", getValue: r => r._latestAssignment?.purpose ?? r.purpose },
+  { key: "trackingStatus", getValue: r => r.trackingStatus },
+  { key: "location", getValue: r => [r.city, r.state].filter(Boolean).join(", ") },
+];
+
 function statusColor(value: string): string {
   const v = value.toLowerCase();
   if (v.includes("delivered") || v.includes("confirmed") || v.includes("received"))
@@ -110,15 +121,20 @@ export function AssignedAssetsTable({
   totalCount,
   currentPage,
   pageSize,
+  columnFilterValues,
 }: {
   items: AssignedItem[];
   selectedId?: string;
   totalCount: number;
   currentPage: number;
   pageSize: number;
+  columnFilterValues?: Record<string, ColumnFilterValue[]>;
 }) {
   const router = useRouter();
   const [selectedItem, setSelectedItem] = useState<AssignedItem | null>(null);
+
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(ASSIGNED_ASSETS_COLUMNS, items, { distinctValues: columnFilterValues });
+  const displayItems = columnFiltered;
 
   useEffect(() => {
     if (!selectedId) return;
@@ -153,28 +169,63 @@ export function AssignedAssetsTable({
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40 border-b">
             <tr>
-              <th className="px-4 py-4 font-semibold">Serial Number</th>
-              <th className="px-4 py-4 font-semibold">Model</th>
-              <th className="px-4 py-4 font-semibold">Employee Name</th>
-              <th className="px-4 py-4 font-semibold">Email</th>
-              <th className="px-4 py-4 font-semibold">Purpose</th>
-              <th className="px-4 py-4 font-semibold">Tracking Status</th>
-              <th className="px-4 py-4 font-semibold">Location</th>
+              <ColumnFilterHeader
+                label="Serial Number"
+                values={distinctValues.serialNumber ?? []}
+                selected={Array.from(filters["serialNumber"] ?? [])}
+                onApply={(v) => applyColumn("serialNumber", v)}
+              />
+              <ColumnFilterHeader
+                label="Model"
+                values={distinctValues.model ?? []}
+                selected={Array.from(filters["model"] ?? [])}
+                onApply={(v) => applyColumn("model", v)}
+              />
+              <ColumnFilterHeader
+                label="Employee Name"
+                values={distinctValues.employeeName ?? []}
+                selected={Array.from(filters["employeeName"] ?? [])}
+                onApply={(v) => applyColumn("employeeName", v)}
+              />
+              <ColumnFilterHeader
+                label="Email"
+                values={distinctValues.emailId ?? []}
+                selected={Array.from(filters["emailId"] ?? [])}
+                onApply={(v) => applyColumn("emailId", v)}
+              />
+              <ColumnFilterHeader
+                label="Purpose"
+                values={distinctValues.purpose ?? []}
+                selected={Array.from(filters["purpose"] ?? [])}
+                onApply={(v) => applyColumn("purpose", v)}
+              />
+              <ColumnFilterHeader
+                label="Tracking Status"
+                values={distinctValues.trackingStatus ?? []}
+                selected={Array.from(filters["trackingStatus"] ?? [])}
+                onApply={(v) => applyColumn("trackingStatus", v)}
+              />
+              <ColumnFilterHeader
+                label="Location"
+                values={distinctValues.location ?? []}
+                selected={Array.from(filters["location"] ?? [])}
+                onApply={(v) => applyColumn("location", v)}
+              />
               <th className="px-4 py-4 font-semibold text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {items.length === 0 ? (
+            {displayItems.length === 0 ? (
               <tr>
                 <td
                   colSpan={8}
                   className="px-6 py-8 text-center text-muted-foreground"
                 >
-                  No allocated assets found.
+                  {items.length === 0 ? "No allocated assets found." : "No assets match the selected filters."}
                 </td>
               </tr>
             ) : (
-              items.map((item) => {
+              displayItems.map((item) => {
                 const a = item._latestAssignment;
                 const empName = a?.employeeName ?? item.employeeName;
                 const empEmail = a?.emailId ?? item.emailId;
