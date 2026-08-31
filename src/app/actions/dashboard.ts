@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import type { OrderStatus, ReversePickupStatus, Prisma } from "@prisma/client";
+import type { OrderStatus, ReversePickupStatus, InventoryStatus, Prisma } from "@prisma/client";
 
 export interface TableOrderData {
   id: string;
@@ -168,6 +168,49 @@ export async function getInventoryBySlaStatus(
     employeeName: i.employeeName,
     status: i.status,
     slaStatus: i.slaStatus,
+  }));
+
+  return { items, total };
+}
+
+export interface TableInventoryStatusData {
+  id: string;
+  serialNumber: string;
+  model: string;
+  employeeName: string | null;
+  status: string;
+  invoicingWarehouse: string | null;
+  createdAt: string | null;
+}
+
+export async function getInventoryByStatus(
+  status: string,
+  page: number = 1,
+  limit: number = 50
+): Promise<{ items: TableInventoryStatusData[]; total: number }> {
+  const skip = (page - 1) * limit;
+  const statusFilter: InventoryStatus = status as InventoryStatus;
+
+  const [raw, total] = await Promise.all([
+    prisma.inventoryItem.findMany({
+      where: { status: { equals: statusFilter } },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.inventoryItem.count({
+      where: { status: { equals: statusFilter } },
+    }),
+  ]);
+
+  const items = raw.map(i => ({
+    id: i.id,
+    serialNumber: i.serialNumber,
+    model: i.model,
+    employeeName: i.employeeName,
+    status: i.status,
+    invoicingWarehouse: i.invoicingWarehouse,
+    createdAt: i.createdAt ? i.createdAt.toISOString() : null,
   }));
 
   return { items, total };

@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import type { OrderStatus } from "@prisma/client";
 import Link from "next/link";
-import { QuickStat } from "@/components/dashboard/quick-stat";
 import { OrderPipeline } from "@/components/dashboard/order-pipeline";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { TotalStockCard } from "@/components/dashboard/total-stock-card";
@@ -27,6 +26,7 @@ import { OrderStatCard } from "@/components/dashboard/order-stat-card";
 import { ReverseStatCard } from "@/components/dashboard/reverse-stat-card";
 import { CancelledReverseStatCard } from "@/components/dashboard/cancelled-reverse-stat-card";
 import { InventorySlaStatCard } from "@/components/dashboard/inventory-sla-stat-card";
+import { DashboardInventoryCards } from "@/components/dashboard/dashboard-inventory-cards";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   ORDER_PLACED: { label: "Order Placed", color: "#eab308" },
@@ -245,29 +245,12 @@ export default async function DashboardPage(props: {
         <h2 className="text-lg font-semibold text-foreground mb-4">Inventory</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <TotalStockCard totalInventory={totalInventory} stockByWarehouse={stockByWarehouse} unallocatedCount={unallocatedCount} href="/dashboard/inventory" />
-          <QuickStat
-            icon={<Laptop className="size-5 text-purple-600" />}
-            iconBg="bg-purple-50"
-            label="New Stock"
-            value={newStock}
-            subtitle="Brand new laptops"
-            href="/dashboard/inventory"
-          />
-          <QuickStat
-            icon={<Laptop className="size-5 text-blue-600" />}
-            iconBg="bg-blue-50"
-            label="Re-deployment Inventory"
-            value={availableStock}
-            subtitle={`of ${totalInventory} total`}
-            href="/dashboard/inventory"
-          />
-          <QuickStat
-            icon={<Layers className="size-5 text-indigo-600" />}
-            iconBg="bg-indigo-50"
-            label="Assets Allocated to Users"
-            value={allocatedStock}
-            subtitle={`${totalAssets} order assets`}
-            href="/dashboard/inventory"
+          <DashboardInventoryCards
+            newStock={newStock}
+            availableStock={availableStock}
+            totalInventory={totalInventory}
+            allocatedStock={allocatedStock}
+            totalAssets={totalAssets}
           />
         </div>
       </div>

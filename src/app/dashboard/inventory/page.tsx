@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { Package, ShieldCheck, Laptop, Database, ClipboardCheck } from "lucide-react";
 import { InventoryTable } from "@/components/inventory/inventory-table";
 import { InventoryHeader } from "@/components/inventory/inventory-header";
+import { InventoryStatCards } from "@/components/inventory/inventory-stat-cards";
 import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
 import type { Prisma, InventoryStatus } from "@prisma/client";
 
@@ -88,43 +88,13 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
         </p>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-5 mt-8">
-        <div className="p-6 rounded-xl glass shadow-sm flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm uppercase tracking-wider">
-            <Package className="size-4" />
-            Total Stock
-          </div>
-          <p className="text-3xl font-bold text-primary">{totalCount}</p>
-        </div>
-        <div className="p-6 rounded-xl glass shadow-sm flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm uppercase tracking-wider">
-            <Database className="size-4" />
-            New
-          </div>
-          <p className="text-3xl font-bold text-purple-600">{newCount}</p>
-        </div>
-        <div className="p-6 rounded-xl glass shadow-sm flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm uppercase tracking-wider">
-            <ShieldCheck className="size-4" />
-            Available
-          </div>
-          <p className="text-3xl font-bold text-primary">{availableCount}</p>
-        </div>
-        <div className="p-6 rounded-xl glass shadow-sm flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm uppercase tracking-wider">
-            <ClipboardCheck className="size-4" />
-            QC Pending
-          </div>
-          <p className="text-3xl font-bold text-amber-600">{qcPendingCount}</p>
-        </div>
-        <div className="p-6 rounded-xl glass shadow-sm flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm uppercase tracking-wider">
-            <Laptop className="size-4" />
-            Allocated
-          </div>
-          <p className="text-3xl font-bold text-primary">{allocatedCount}</p>
-        </div>
-      </div>
+      <InventoryStatCards
+        totalCount={totalCount}
+        newCount={newCount}
+        availableCount={availableCount}
+        qcPendingCount={qcPendingCount}
+        allocatedCount={allocatedCount}
+      />
 
       <div className="rounded-xl glass shadow-sm mt-6 overflow-hidden">
         <InventoryHeader isAdmin={isAdmin} />
