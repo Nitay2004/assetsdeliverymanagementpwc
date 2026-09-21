@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { InventoryTable } from "@/components/inventory/inventory-table";
 import { InventoryHeader } from "@/components/inventory/inventory-header";
 import { InventoryStatCards } from "@/components/inventory/inventory-stat-cards";
-import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
+import { parseColumnFilters } from "@/lib/column-filters";
 import type { Prisma, InventoryStatus } from "@prisma/client";
 
 const INVENTORY_FILTER_KEYS = ["serialNumber", "model", "status", "invoicingWarehouse", "employeeName", "trackingStatus"];
@@ -66,18 +66,23 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
     prisma.inventoryItem.count({ where: { status: "QC_PENDING" } }),
   ]);
 
-  const distinctSource = await prisma.inventoryItem.findMany({
-    where,
-    select: { serialNumber: true, model: true, status: true, invoicingWarehouse: true, employeeName: true, trackingStatus: true },
-  });
-  const columnFilterValues = computeDistinctValues(distinctSource, {
-    serialNumber: r => r.serialNumber,
-    model: r => r.model,
-    status: r => r.status,
-    invoicingWarehouse: r => r.invoicingWarehouse,
-    employeeName: r => r.employeeName,
-    trackingStatus: r => r.trackingStatus,
-  });
+  const colGroups = await Promise.all([
+    prisma.inventoryItem.groupBy({ by: ["serialNumber"], where, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["model"], where, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["status"], where, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["invoicingWarehouse"], where, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["employeeName"], where, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["trackingStatus"], where, _count: { _all: true } }),
+  ]);
+  const sortByValue = (a: { value: string }, b: { value: string }) => a.value.localeCompare(b.value);
+  const columnFilterValues = {
+    serialNumber: colGroups[0].map((r) => ({ value: r.serialNumber, count: r._count._all })).sort(sortByValue),
+    model: colGroups[1].map((r) => ({ value: r.model, count: r._count._all })).sort(sortByValue),
+    status: colGroups[2].map((r) => ({ value: r.status, count: r._count._all })).sort(sortByValue),
+    invoicingWarehouse: colGroups[3].map((r) => ({ value: r.invoicingWarehouse?.trim() ? r.invoicingWarehouse : "(Blank)", count: r._count._all })).sort(sortByValue),
+    employeeName: colGroups[4].map((r) => ({ value: r.employeeName?.trim() ? r.employeeName : "(Blank)", count: r._count._all })).sort(sortByValue),
+    trackingStatus: colGroups[5].map((r) => ({ value: r.trackingStatus?.trim() ? r.trackingStatus : "(Blank)", count: r._count._all })).sort(sortByValue),
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">

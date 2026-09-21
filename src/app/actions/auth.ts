@@ -21,8 +21,7 @@ export async function loginAction(formData: FormData) {
   const now = Date.now();
   const entry = loginAttempts.get(email);
   if (entry && now < entry.resetTime && entry.count >= LOGIN_MAX) {
-    const remaining = Math.ceil((entry.resetTime - now) / 1000 / 60);
-    return { error: `Too many login attempts. Try again in ${remaining} minutes.` };
+    return { error: "Too many login attempts. Please try again later." };
   }
 
   const user = await prisma.user.findUnique({

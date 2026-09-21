@@ -276,10 +276,12 @@ model InventoryItem {
   createdAt                 DateTime        @default(now()) @map("created_at")
   updatedAt                 DateTime        @updatedAt @map("updated_at")
 
-  assets                    Asset[]
+  assets                   Asset[]
   assignmentRecords         AssignmentRecord[]
   reversePickupRequests     ReversePickupRequest[]
 
+  @@index([status])
+  @@index([invoicingWarehouse])
   @@map("inventory_items")
 }
 

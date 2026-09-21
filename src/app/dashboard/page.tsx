@@ -16,7 +16,7 @@ import {
   Warehouse,
   ClipboardCheck,
 } from "lucide-react";
-import type { OrderStatus } from "@prisma/client";
+import type { OrderStatus, InventoryStatus } from "@prisma/client";
 import Link from "next/link";
 import { OrderPipeline } from "@/components/dashboard/order-pipeline";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
@@ -77,14 +77,29 @@ export default async function DashboardPage(props: {
   const inventoryWhere = createdAt ? { createdAt } : undefined;
   const reverseWhere = createdAt ? { createdAt } : undefined;
 
-  // Fetch all data in parallel
-  const [orders, inventoryItems, recentOrders, recentInventory, reversePickups, deliveredInventoryCount, inTransitInventoryCount, rtoInventoryCount] = await Promise.all([
-    prisma.order.findMany({
+  // Fetch all data in parallel — aggregate counts in the DB, no unbounded row loads.
+  const [orderStatuses, inventoryStatuses, slaMetCount, totalAssets, warrantyPendingCount, stockByWarehouseRows, recentOrders, recentInventory, reversePickups, deliveredInventoryCount, inTransitInventoryCount, rtoInventoryCount] = await Promise.all([
+    prisma.order.groupBy({
+      by: ["status"],
       where: orderWhere,
-      include: { assets: true },
+      _count: { _all: true },
     }),
-    prisma.inventoryItem.findMany({
+    prisma.inventoryItem.groupBy({
+      by: ["status"],
       where: inventoryWhere,
+      _count: { _all: true },
+    }),
+    prisma.inventoryItem.count({
+      where: { ...(inventoryWhere ?? {}), slaStatus: { equals: "met", mode: "insensitive" } },
+    }),
+    prisma.asset.count({ where: { order: orderWhere } }),
+    prisma.inventoryItem.count({
+      where: { ...(inventoryWhere ?? {}), status: "ALLOCATED", warrantyPeriod: null },
+    }),
+    prisma.inventoryItem.groupBy({
+      by: ["invoicingWarehouse"],
+      where: inventoryWhere,
+      _count: { _all: true },
     }),
     prisma.order.findMany({
       where: orderWhere,
@@ -130,21 +145,24 @@ export default async function DashboardPage(props: {
     }),
   ]);
 
+  const orderCounts = new Map(orderStatuses.map(r => [r.status, r._count._all]));
+  const inventoryCounts = new Map(inventoryStatuses.map(r => [r.status, r._count._all]));
+  const totalOrders = orderStatuses.reduce((sum, r) => sum + r._count._all, 0);
+  const orderStatusCount = (s: OrderStatus) => orderCounts.get(s) ?? 0;
+  const inventoryStatusCount = (s: InventoryStatus) => inventoryCounts.get(s) ?? 0;
+
   // Compute stats
-  const inProvisioningCount = orders.filter(o => o.status === "IN_PROVISIONING").length;
-  const pendingAllocationCount = orders.filter(o => o.status === "ORDER_PLACED").length;
-  const inTransitCount = orders.filter(o => o.status === "DISPATCHED").length + inTransitInventoryCount;
-  const packedAndLabelledCount = orders.filter(o => o.status === "PACKED_AND_LABELLED").length + deliveredInventoryCount;
-  const deliveredCount = orders.filter(o => ["DELIVERED", "DELIVERY_CONFIRMED"].includes(o.status)).length + deliveredInventoryCount;
-  const rtoCount = orders.filter(o => ["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"].includes(o.status)).length + rtoInventoryCount;
+  const inProvisioningCount = orderStatusCount("IN_PROVISIONING");
+  const pendingAllocationCount = orderStatusCount("ORDER_PLACED");
+  const inTransitCount = orderStatusCount("DISPATCHED") + inTransitInventoryCount;
+  const packedAndLabelledCount = orderStatusCount("PACKED_AND_LABELLED") + deliveredInventoryCount;
+  const deliveredCount = orderStatusCount("DELIVERED") + orderStatusCount("DELIVERY_CONFIRMED") + deliveredInventoryCount;
+  const rtoCount = (["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"] as OrderStatus[]).reduce((sum, s) => sum + orderStatusCount(s), 0) + rtoInventoryCount;
 
-  const totalInventory = inventoryItems.length;
-  const newStock = inventoryItems.filter((i) => i.status === "NEW").length;
-  const availableStock = inventoryItems.filter((i) => i.status === "AVAILABLE").length;
-  const allocatedStock = inventoryItems.filter((i) => i.status === "ALLOCATED").length;
-  const slaMetCount = inventoryItems.filter((i) => i.slaStatus?.toLowerCase() === "met").length;
-
-  const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
+  const totalInventory = inventoryStatuses.reduce((sum, r) => sum + r._count._all, 0);
+  const newStock = inventoryStatusCount("NEW");
+  const availableStock = inventoryStatusCount("AVAILABLE");
+  const allocatedStock = inventoryStatusCount("ALLOCATED");
 
   // Reverse Shipment stats
   const reversePickupCount = reversePickups.length;
@@ -158,12 +176,12 @@ export default async function DashboardPage(props: {
   // Group inventory items by invoicing warehouse
   const warehouseMap = new Map<string, number>();
   let unallocatedCount = 0;
-  for (const item of inventoryItems) {
-    const wh = item.invoicingWarehouse?.trim();
+  for (const row of stockByWarehouseRows) {
+    const wh = (row.invoicingWarehouse ?? "").trim();
     if (wh) {
-      warehouseMap.set(wh, (warehouseMap.get(wh) || 0) + 1);
+      warehouseMap.set(wh, (warehouseMap.get(wh) || 0) + row._count._all);
     } else {
-      unallocatedCount++;
+      unallocatedCount += row._count._all;
     }
   }
 
@@ -171,10 +189,7 @@ export default async function DashboardPage(props: {
     .sort((a, b) => b[1] - a[1]);
 
   // Pipeline data
-  const statusCounts = orders.reduce<Record<string, number>>((acc, o) => {
-    acc[o.status] = (acc[o.status] || 0) + 1;
-    return acc;
-  }, {});
+  const statusCounts = Object.fromEntries(orderCounts);
 
   const pipelineData = Object.entries(STATUS_CONFIG)
     .filter(([key]) => statusCounts[key])
@@ -219,10 +234,10 @@ export default async function DashboardPage(props: {
     { label: "Inventory", href: "/dashboard/inventory", icon: <Package className="size-4" />, count: totalInventory, desc: "Total items" },
     { label: "Assigned Assets", href: "/dashboard/assigned-assets", icon: <Users className="size-4" />, count: allocatedStock, desc: "Allocated to users" },
     { label: "Warehouse", href: "/dashboard/warehouse", icon: <Layers className="size-4" />, count: pendingAllocationCount, desc: "Pending allocation" },
-    { label: "Provisioning", href: "/dashboard/provisioning", icon: <Laptop className="size-4" />, count: orders.filter((o) => ["ALLOCATED", "IN_PROVISIONING"].includes(o.status)).length, desc: "In progress" },
-    { label: "Finance", href: "/dashboard/finance", icon: <CheckCircle className="size-4" />, count: orders.filter((o) => ["IN_PROVISIONING", "DC_GENERATED", "INVOICED"].includes(o.status)).length, desc: "Pending finance" },
-    { label: "Logistics", href: "/dashboard/logistics", icon: <Truck className="size-4" />, count: orders.filter((o) => ["DC_GENERATED", "PACKED_AND_LABELLED", "DISPATCHED"].includes(o.status)).length, desc: "In logistics" },
-    { label: "Warranty", href: "/dashboard/warranty", icon: <ShieldCheck className="size-4" />, count: inventoryItems.filter((i) => !i.warrantyPeriod && i.status === "ALLOCATED").length, desc: "Needs warranty" },
+    { label: "Provisioning", href: "/dashboard/provisioning", icon: <Laptop className="size-4" />, count: orderStatusCount("ALLOCATED") + orderStatusCount("IN_PROVISIONING"), desc: "In progress" },
+    { label: "Finance", href: "/dashboard/finance", icon: <CheckCircle className="size-4" />, count: orderStatusCount("IN_PROVISIONING") + orderStatusCount("DC_GENERATED") + orderStatusCount("INVOICED"), desc: "Pending finance" },
+    { label: "Logistics", href: "/dashboard/logistics", icon: <Truck className="size-4" />, count: orderStatusCount("DC_GENERATED") + orderStatusCount("PACKED_AND_LABELLED") + orderStatusCount("DISPATCHED"), desc: "In logistics" },
+    { label: "Warranty", href: "/dashboard/warranty", icon: <ShieldCheck className="size-4" />, count: warrantyPendingCount, desc: "Needs warranty" },
   ];
 
   return (
@@ -442,7 +457,7 @@ export default async function DashboardPage(props: {
             {pipelineData.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">No orders to display.</p>
             ) : (
-              <OrderPipeline data={pipelineData} total={orders.length} />
+              <OrderPipeline data={pipelineData} total={totalOrders} />
             )}
           </div>
         </div>

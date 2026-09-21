@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
 
 function sanitize(input: string): string {
   return input
@@ -19,6 +20,9 @@ export interface SearchResult {
 }
 
 export async function globalSearch(raw: string): Promise<SearchResult[]> {
+  const user = await getSession();
+  if (!user) return [];
+
   const q = sanitize(raw);
   if (!q || q.length < 2) return [];
 

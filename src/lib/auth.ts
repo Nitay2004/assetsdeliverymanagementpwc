@@ -5,6 +5,14 @@ import crypto from "crypto";
 const SESSION_COOKIE_NAME = "devit_session";
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes of inactivity
 const ABSOLUTE_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8 hours absolute maximum
+// Only touch the DB to slide the expiry when the session is within this much
+// time of expiring, instead of writing on every request. The window guarantee
+// is preserved: any request made < 15 min after the last slide triggers a
+// renewal once remaining time drops below SLIDE_RENEW_MS.
+const SLIDE_RENEW_MS = 5 * 60 * 1000;
+// Set SESSION_COOKIE_SECURE=true when the app is served over HTTPS. Keep it off
+// for plain-HTTP office access so the cookie is still sent.
+const SECURE_COOKIE = process.env.SESSION_COOKIE_SECURE === "true";
 
 export async function createSession(userId: string) {
   // Generate a random token
@@ -27,7 +35,7 @@ export async function createSession(userId: string) {
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: false,
+    secure: SECURE_COOKIE,
     sameSite: "lax",
     maxAge: ABSOLUTE_TIMEOUT_MS / 1000, // browser cookie self-cleans within the absolute limit
     path: "/",
@@ -81,13 +89,19 @@ export async function getSession() {
     return null;
   }
 
-  // Slide the idle window forward on every activity (DB only — cookies can't
-  // be modified during a Server Component render).
-  const newExpiry = new Date(now.getTime() + IDLE_TIMEOUT_MS);
-  await prisma.session.update({
-    where: { id: session.id },
-    data: { expiresAt: newExpiry },
-  });
+  // Slide the idle window forward on activity (DB only — cookies can't be
+  // modified during a Server Component render). Skip the DB write until the
+  // session is close to expiring to cut per-request DB writes. Users who stay
+  // active are never logged out because any request within 15 min of the last
+  // slide renews the window once remaining time drops below SLIDE_RENEW_MS.
+  const remainingMs = session.expiresAt.getTime() - now.getTime();
+  if (remainingMs <= SLIDE_RENEW_MS) {
+    const nowExpires = new Date(now.getTime() + IDLE_TIMEOUT_MS);
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { expiresAt: nowExpires },
+    });
+  }
 
   return session.user;
 }
