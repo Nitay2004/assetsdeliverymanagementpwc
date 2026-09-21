@@ -18,6 +18,11 @@ jobs:
 
       - name: Sync code to deploy dir
         run: |
+          # tar only adds/overwrites; remove files deleted from the repo so they
+          # don't linger. middleware.ts was renamed to proxy.ts in Next 16 — a
+          # stale middleware.ts on the server breaks the build.
+          rm -rf /opt/asset-delivery-system/src/src
+          rm -f /opt/asset-delivery-system/src/middleware.ts
           tar --exclude=.git --exclude=node_modules --exclude=.next --exclude=.env --exclude=.env.* --exclude='*.tmp.js' --exclude='*.log' --exclude=project.tgz -cf - . | (cd /opt/asset-delivery-system && tar -xf -)
 
       - name: Build & restart app
