@@ -12,7 +12,7 @@ COPY . .
 ARG DATABASE_URL
 ARG DIRECT_URL
 ENV DATABASE_URL=$DATABASE_URL DIRECT_URL=$DIRECT_URL
-RUN npx prisma generate && npm run build
+RUN npx prisma generate && npx prisma migrate deploy && npm run build
 
 FROM node:22-alpine AS runner
 RUN apk add --no-cache openssl
