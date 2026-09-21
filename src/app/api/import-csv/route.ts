@@ -825,12 +825,19 @@ export async function POST(request: Request) {
     );
   }
 
+  if (file.size > 20 * 1024 * 1024) {
+    return NextResponse.json(
+      { success: false, error: "File exceeds the 20 MB limit." },
+      { status: 413 }
+    );
+  }
+
   let sheets: ParsedSheet[];
   try {
     sheets = await parseFile(file);
-  } catch (e: any) {
+  } catch {
     return NextResponse.json(
-      { success: false, error: e.message || "Failed to parse file." },
+      { success: false, error: "Failed to parse file." },
       { status: 400 }
     );
   }
@@ -1147,7 +1154,7 @@ async function handleUpdateMode(
       const result = await prisma.assignmentRecord.createMany({ data: batch as any[] });
       mapped += result.count;
     } catch (err: any) {
-      errors.push(`${prefix}Failed to save assignment history batch: ${err?.message ?? "Unknown error"}`);
+      errors.push(`${prefix}Failed to save assignment history batch`);
     }
   }
 
@@ -1161,7 +1168,7 @@ async function handleUpdateMode(
       );
       updated += batch.length;
     } catch (err: any) {
-      errors.push(`${prefix}Failed to update inventory batch: ${err?.message ?? "Unknown error"}`);
+      errors.push(`${prefix}Failed to update inventory batch`);
     }
   }
 
@@ -1221,7 +1228,7 @@ async function handleUploadMode(
       );
       updated += batch.length;
     } catch (err: any) {
-      errors.push(`${prefix}Failed to update existing inventory batch: ${err?.message ?? "Unknown error"}`);
+      errors.push(`${prefix}Failed to update existing inventory batch`);
     }
   }
 
@@ -1238,7 +1245,7 @@ async function handleUploadMode(
       const result = await prisma.assignmentRecord.createMany({ data: batch as any[] });
       mapped += result.count;
     } catch (err: any) {
-      errors.push(`${prefix}Failed to save assignment history batch: ${err?.message ?? "Unknown error"}`);
+      errors.push(`${prefix}Failed to save assignment history batch`);
     }
   }
 

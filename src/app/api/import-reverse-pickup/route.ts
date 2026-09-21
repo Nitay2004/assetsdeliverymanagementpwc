@@ -305,13 +305,20 @@ export async function POST(request: Request) {
     );
   }
 
+  if (file.size > 20 * 1024 * 1024) {
+    return NextResponse.json(
+      { success: false, error: "File exceeds the 20 MB limit." },
+      { status: 413 }
+    );
+  }
+
   let headers: string[];
   let records: string[][];
   try {
     ({ headers, records } = await parseFile(file));
-  } catch (e: any) {
+  } catch {
     return NextResponse.json(
-      { success: false, error: e.message || "Failed to parse file." },
+      { success: false, error: "Failed to parse file." },
       { status: 400 }
     );
   }
@@ -432,15 +439,14 @@ export async function POST(request: Request) {
     try {
       await prisma.reversePickupRequest.createMany({ data: batchData as any[] });
       imported += batchData.length;
-    } catch (err: any) {
+    } catch {
       // Batch failed — retry one by one
       for (const item of batch) {
         try {
           await prisma.reversePickupRequest.create({ data: item.data as any });
           imported++;
-        } catch (singleErr: any) {
-          const msg = singleErr?.cause?.message ?? singleErr?.message ?? "Unknown error";
-          errors.push(`Row ${item.rowNum}: Failed for "${item.data.serialNumber}" - ${msg}`);
+        } catch {
+          errors.push(`Row ${item.rowNum}: Failed for "${item.data.serialNumber}"`);
         }
       }
     }

@@ -35,6 +35,10 @@ export async function loginAction(formData: FormData) {
     return { error: "Invalid email or password." };
   }
 
+  if (user.isActive === false) {
+    return { error: "Your account is disabled. Please contact the administrator." };
+  }
+
   const isValidPassword = await bcrypt.compare(password, user.passwordHash);
 
   if (!isValidPassword) {

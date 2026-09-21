@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { getSession, requireAuth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -404,6 +404,7 @@ export async function cancelItemAssignment(id: string) {
 }
 
 export async function getDistinctFieldValues() {
+  await requireAuth();
   const options = await prisma.dropdownOption.findMany({
     orderBy: { value: "asc" },
   });
@@ -421,6 +422,7 @@ export async function getDistinctFieldValues() {
 }
 
 export async function checkSerialNumber(serialNumber: string) {
+  await requireAuth();
   if (!serialNumber.trim()) return { exists: false };
   const item = await prisma.inventoryItem.findUnique({
     where: { serialNumber: serialNumber.trim() },
@@ -434,40 +436,33 @@ export async function seedDropdownOptions() {
   requirePermission(user, "inventory", "canCreate");
 
   const [existingEntities, existingPurposes, existingImageTypes, existingAdaptors, existingHeadset, existingStickers, existingWarehouseLocs] = await Promise.all([
-    prisma.inventoryItem.findMany({
+    prisma.inventoryItem.groupBy({
+      by: ["entity"],
       where: { entity: { not: null } },
-      select: { entity: true },
-      distinct: ["entity"],
     }),
-    prisma.inventoryItem.findMany({
+    prisma.inventoryItem.groupBy({
+      by: ["purpose"],
       where: { purpose: { not: null } },
-      select: { purpose: true },
-      distinct: ["purpose"],
     }),
-    prisma.inventoryItem.findMany({
+    prisma.inventoryItem.groupBy({
+      by: ["imageType"],
       where: { imageType: { not: null } },
-      select: { imageType: true },
-      distinct: ["imageType"],
     }),
-    prisma.inventoryItem.findMany({
+    prisma.inventoryItem.groupBy({
+      by: ["adaptorAdded"],
       where: { adaptorAdded: { not: null } },
-      select: { adaptorAdded: true },
-      distinct: ["adaptorAdded"],
     }),
-    prisma.inventoryItem.findMany({
+    prisma.inventoryItem.groupBy({
+      by: ["accessoryHeadsetMouse"],
       where: { accessoryHeadsetMouse: { not: null } },
-      select: { accessoryHeadsetMouse: true },
-      distinct: ["accessoryHeadsetMouse"],
     }),
-    prisma.inventoryItem.findMany({
+    prisma.inventoryItem.groupBy({
+      by: ["stickerColour"],
       where: { stickerColour: { not: null } },
-      select: { stickerColour: true },
-      distinct: ["stickerColour"],
     }),
-    prisma.inventoryItem.findMany({
+    prisma.inventoryItem.groupBy({
+      by: ["invoicingWarehouse"],
       where: { invoicingWarehouse: { not: null } },
-      select: { invoicingWarehouse: true },
-      distinct: ["invoicingWarehouse"],
     }),
   ]);
 
@@ -516,6 +511,8 @@ export async function deleteDropdownOption(id: string) {
 }
 
 export async function getInventoryItem(id: string) {
+  const user = await requireAuth();
+  requirePermission(user, "inventory", "canView");
   const item = await prisma.inventoryItem.findUnique({ where: { id } });
   if (!item) return null;
   return item;
@@ -705,6 +702,8 @@ function safeToDateISO(val: Date | null | undefined): string | null {
 }
 
 export async function getAssignmentHistory(itemId: string) {
+  const user = await requireAuth();
+  requirePermission(user, "inventory", "canView");
   const records = await prisma.assignmentRecord.findMany({
     where: { inventoryItemId: itemId },
     orderBy: { assignedAt: "desc" },

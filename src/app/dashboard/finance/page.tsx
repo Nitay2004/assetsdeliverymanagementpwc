@@ -8,7 +8,7 @@ import { ReversePickupFinanceSection } from "@/components/finance/reverse-pickup
 import { FinanceExportButton } from "@/components/finance/finance-export-button";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
-import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
+import { parseColumnFilters } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
 import type { Prisma, OrderStatus } from "@prisma/client";
 
@@ -93,27 +93,46 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
     })),
   }));
 
-  const distinctSourceOrders = await prisma.order.findMany({
-    where,
-    select: {
-      clientName: true,
-      deliveryLocation: true,
-      totalQuantity: true,
-      dcNumber: true,
-      status: true,
-      assets: { select: { inventoryItem: { select: { serialNumber: true } } } },
-      dockets: { select: { ewayBillNumber: true } },
-    },
-  });
-  const columnFilterValues = computeDistinctValues(distinctSourceOrders, {
-    clientName: r => r.clientName,
-    deliveryLocation: r => r.deliveryLocation,
-    totalQuantity: r => r.totalQuantity,
-    serialNumber: r => r.assets.map(a => a.inventoryItem?.serialNumber).filter(Boolean).join(", "),
-    dcNumber: r => r.dcNumber,
-    ewayBill: r => r.dockets.map(d => d.ewayBillNumber).filter(Boolean).join(", "),
-    status: r => r.status,
-  });
+  const [clientNameGroups, deliveryLocationGroups, totalQuantityGroups, dcNumberGroups, statusGroups, serialNumberGroups, ewayBillGroups] = await Promise.all([
+    prisma.order.groupBy({ by: ["clientName"], where, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["deliveryLocation"], where, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["totalQuantity"], where, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["dcNumber"], where, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["status"], where, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({
+      by: ["serialNumber"],
+      where: { assets: { some: { order: where } } },
+      _count: { _all: true },
+    }),
+    prisma.docket.groupBy({
+      by: ["ewayBillNumber"],
+      where: { order: where },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const columnFilterValues: Record<string, { value: string; count: number }[]> = {};
+  columnFilterValues.clientName = clientNameGroups
+    .map(r => ({ value: r.clientName ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.deliveryLocation = deliveryLocationGroups
+    .map(r => ({ value: r.deliveryLocation ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.totalQuantity = totalQuantityGroups
+    .map(r => ({ value: r.totalQuantity == null || String(r.totalQuantity).trim() === "" ? "(Blank)" : String(r.totalQuantity), count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.dcNumber = dcNumberGroups
+    .map(r => ({ value: r.dcNumber ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.status = statusGroups
+    .map(r => ({ value: r.status ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.serialNumber = serialNumberGroups
+    .map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.ewayBill = ewayBillGroups
+    .map(r => ({ value: r.ewayBillNumber ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
 
   const pendingDC = rawOrders.filter(o => o.status === "IN_PROVISIONING" || o.status === "DC_REQUESTED" || o.status === "RTO_DC_REQUESTED").length;
 

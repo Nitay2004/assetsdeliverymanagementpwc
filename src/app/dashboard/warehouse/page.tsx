@@ -7,7 +7,7 @@ import { AllocatedAssetsTable } from "@/components/warehouse/allocated-assets-ta
 import { QcPendingTable } from "@/components/warehouse/qc-pending-table";
 import { WarehouseExportButton } from "@/components/warehouse/warehouse-export-button";
 import { WarehouseTabs } from "@/components/warehouse/warehouse-tabs";
-import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
+import { parseColumnFilters } from "@/lib/column-filters";
 import type { Prisma, OrderStatus } from "@prisma/client";
 
 const ALLOCATED_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity", "serialNumbers", "docketNumber", "dcNumber", "ewayBill", "status"];
@@ -114,28 +114,54 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     qcCompletedAt: safeISO(i.qcCompletedAt),
   }));
 
-  const allocatedColumnSource = await prisma.order.findMany({
-    where: allocatedWhere,
-    select: {
-      clientName: true,
-      deliveryLocation: true,
-      totalQuantity: true,
-      dcNumber: true,
-      status: true,
-      assets: { select: { inventoryItem: { select: { serialNumber: true } } } },
-      dockets: { select: { docketNumber: true, ewayBillNumber: true }, take: 1 },
-    },
-  });
-  const allocatedColumnFilterValues = computeDistinctValues(allocatedColumnSource, {
-    clientName: r => r.clientName,
-    deliveryLocation: r => r.deliveryLocation,
-    totalQuantity: r => r.totalQuantity,
-    serialNumbers: r => r.assets.filter(a => a.inventoryItem).map(a => a.inventoryItem?.serialNumber).join(", "),
-    docketNumber: r => r.dockets[0]?.docketNumber,
-    dcNumber: r => r.dcNumber,
-    ewayBill: r => r.dockets[0]?.ewayBillNumber,
-    status: r => r.status,
-  });
+  const [clientNameGroups, deliveryLocationGroups, totalQuantityGroups, dcNumberGroups, statusGroups, allocatedSerialGroups, allocatedDocketGroups, allocatedEwayGroups] = await Promise.all([
+    prisma.order.groupBy({ by: ["clientName"], where: allocatedWhere, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["deliveryLocation"], where: allocatedWhere, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["totalQuantity"], where: allocatedWhere, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["dcNumber"], where: allocatedWhere, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["status"], where: allocatedWhere, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({
+      by: ["serialNumber"],
+      where: { assets: { some: { order: allocatedWhere } } },
+      _count: { _all: true },
+    }),
+    prisma.docket.groupBy({
+      by: ["docketNumber"],
+      where: { order: allocatedWhere },
+      _count: { _all: true },
+    }),
+    prisma.docket.groupBy({
+      by: ["ewayBillNumber"],
+      where: { order: allocatedWhere },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const allocatedColumnFilterValues: Record<string, { value: string; count: number }[]> = {};
+  allocatedColumnFilterValues.clientName = clientNameGroups
+    .map(r => ({ value: r.clientName ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  allocatedColumnFilterValues.deliveryLocation = deliveryLocationGroups
+    .map(r => ({ value: r.deliveryLocation ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  allocatedColumnFilterValues.totalQuantity = totalQuantityGroups
+    .map(r => ({ value: r.totalQuantity == null || String(r.totalQuantity).trim() === "" ? "(Blank)" : String(r.totalQuantity), count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  allocatedColumnFilterValues.dcNumber = dcNumberGroups
+    .map(r => ({ value: r.dcNumber ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  allocatedColumnFilterValues.status = statusGroups
+    .map(r => ({ value: r.status ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  allocatedColumnFilterValues.serialNumbers = allocatedSerialGroups
+    .map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  allocatedColumnFilterValues.docketNumber = allocatedDocketGroups
+    .map(r => ({ value: r.docketNumber ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  allocatedColumnFilterValues.ewayBill = allocatedEwayGroups
+    .map(r => ({ value: r.ewayBillNumber ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">

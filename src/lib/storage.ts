@@ -32,11 +32,27 @@ function supabase(): SupabaseClient {
   return _client;
 }
 
+function assertSafePodPath(subPath: string): string {
+  const normalized = subPath.replace(/\\/g, "/");
+  const segments = normalized.split("/");
+  if (segments.some(seg => seg === ".." || seg === ".")) {
+    throw new Error("Invalid path");
+  }
+  if (normalized.startsWith("/") || normalized.includes(":")) {
+    throw new Error("Invalid path");
+  }
+  if (!normalized.startsWith(`${POD_BUCKET}/`)) {
+    throw new Error("Path must be scoped to the pod bucket");
+  }
+  return normalized;
+}
+
 export async function saveFile(
   subPath: string,
   buffer: Buffer
 ): Promise<string> {
   const normalized = subPath.replace(/\\/g, "/");
+  assertSafePodPath(normalized);
   if (isSupabaseEnabled()) {
     const ext = normalized.split(".").pop()?.toLowerCase() ?? "";
     const { error } = await supabase().storage.from(STORAGE_BUCKET).upload(normalized, buffer, {
@@ -53,15 +69,16 @@ export async function saveFile(
 }
 
 export function resolveFilePath(subPath: string): string {
-  const resolved = path.resolve(UPLOAD_DIR, subPath);
-  if (!resolved.startsWith(path.resolve(UPLOAD_DIR))) {
+  const normalized = assertSafePodPath(subPath);
+  const resolved = path.resolve(UPLOAD_DIR, normalized);
+  if (!resolved.startsWith(path.resolve(UPLOAD_DIR) + path.sep)) {
     throw new Error("Invalid path");
   }
   return resolved;
 }
 
 export async function readFileBytes(subPath: string): Promise<Buffer> {
-  const normalized = subPath.replace(/\\/g, "/");
+  const normalized = assertSafePodPath(subPath);
   if (isSupabaseEnabled()) {
     const { data, error } = await supabase()
       .storage.from(STORAGE_BUCKET)
@@ -74,7 +91,7 @@ export async function readFileBytes(subPath: string): Promise<Buffer> {
 }
 
 export async function podFileUrl(subPath: string): Promise<string> {
-  const normalized = subPath.replace(/\\/g, "/");
+  const normalized = assertSafePodPath(subPath);
   if (isSupabaseEnabled()) {
     const { data, error } = await supabase()
       .storage.from(STORAGE_BUCKET)

@@ -6,6 +6,8 @@ import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 
 export async function getProducts() {
+  const user = await getSession();
+  requirePermission(user, "product-master", "canView");
   const products = await prisma.productMaster.findMany({ orderBy: { updatedAt: "desc" } });
   return products.map(p => ({
     ...p,
@@ -14,6 +16,8 @@ export async function getProducts() {
 }
 
 export async function getAllPartNumbers() {
+  const user = await getSession();
+  requirePermission(user, "product-master", "canView");
   const products = await prisma.productMaster.findMany({
     where: { partNo: { not: null } },
     select: { partNo: true, make: true, model: true },
@@ -62,6 +66,8 @@ export async function updateProduct(id: string, formData: FormData) {
 }
 
 export async function getProductByPartNo(partNo: string) {
+  const user = await getSession();
+  requirePermission(user, "product-master", "canView");
   const product = await prisma.productMaster.findFirst({
     where: { partNo },
     select: {
@@ -83,6 +89,8 @@ export async function getProductByPartNo(partNo: string) {
 }
 
 export async function getProductsForDropdown() {
+  const user = await getSession();
+  requirePermission(user, "product-master", "canView");
   return prisma.productMaster.findMany({
     select: { id: true, make: true, model: true, partNo: true },
     orderBy: [{ make: "asc" }, { model: "asc" }],

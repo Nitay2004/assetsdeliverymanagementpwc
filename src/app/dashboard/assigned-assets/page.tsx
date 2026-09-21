@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Users, Laptop, MapPin } from "lucide-react";
 import { AssignedAssetsTable } from "@/components/assigned-assets/assigned-assets-table";
 import { AssignedAssetsExportButton } from "@/components/assigned-assets/assigned-assets-export-button";
-import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
+import { parseColumnFilters } from "@/lib/column-filters";
 import type { Prisma } from "@prisma/client";
 
 const ASSIGNED_FILTER_KEYS = ["serialNumber", "model", "employeeName", "emailId", "purpose", "trackingStatus", "location"];
@@ -92,23 +92,86 @@ export default async function AssignedAssetsPage(props: {
       }),
     ]);
 
-  const distinctSource = await prisma.inventoryItem.findMany({
-    where,
-    select: {
-      serialNumber: true, model: true, employeeName: true, emailId: true, purpose: true,
-      trackingStatus: true, city: true, state: true,
-      assignmentRecords: { orderBy: { assignedAt: "desc" }, take: 1, select: { employeeName: true, emailId: true, purpose: true } },
-    },
-  });
-  const columnFilterValues = computeDistinctValues(distinctSource, {
-    serialNumber: r => r.serialNumber,
-    model: r => r.model,
-    employeeName: r => r.assignmentRecords[0]?.employeeName ?? r.employeeName,
-    emailId: r => r.assignmentRecords[0]?.emailId ?? r.emailId,
-    purpose: r => r.assignmentRecords[0]?.purpose ?? r.purpose,
-    trackingStatus: r => r.trackingStatus,
-    location: r => [r.city, r.state].filter(Boolean).join(", "),
-  });
+  const [serialNumberGroups, modelGroups, trackingStatusGroups, locationGroups, assignmentEmployeeGroups, assignmentEmailGroups, assignmentPurposeGroups, fallbackEmployeeGroups, fallbackEmailGroups, fallbackPurposeGroups] = await Promise.all([
+    prisma.inventoryItem.groupBy({ by: ["serialNumber"], where, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["model"], where, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["trackingStatus"], where, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({
+      by: ["city", "state"],
+      where,
+      _count: { _all: true },
+    }),
+    prisma.assignmentRecord.groupBy({
+      by: ["employeeName"],
+      where: { inventoryItem: where },
+      _count: { _all: true },
+    }),
+    prisma.assignmentRecord.groupBy({
+      by: ["emailId"],
+      where: { inventoryItem: where },
+      _count: { _all: true },
+    }),
+    prisma.assignmentRecord.groupBy({
+      by: ["purpose"],
+      where: { inventoryItem: where },
+      _count: { _all: true },
+    }),
+    prisma.inventoryItem.groupBy({
+      by: ["employeeName"],
+      where: { ...where, assignmentRecords: { none: {} } },
+      _count: { _all: true },
+    }),
+    prisma.inventoryItem.groupBy({
+      by: ["emailId"],
+      where: { ...where, assignmentRecords: { none: {} } },
+      _count: { _all: true },
+    }),
+    prisma.inventoryItem.groupBy({
+      by: ["purpose"],
+      where: { ...where, assignmentRecords: { none: {} } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const columnFilterValues: Record<string, { value: string; count: number }[]> = {};
+  columnFilterValues.serialNumber = serialNumberGroups
+    .map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.model = modelGroups
+    .map(r => ({ value: r.model ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.trackingStatus = trackingStatusGroups
+    .map(r => ({ value: r.trackingStatus ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+
+  const locationMap = new Map<string, number>();
+  for (const r of locationGroups) {
+    const token = [r.city, r.state].filter(t => t !== null && String(t).trim() !== "").join(", ");
+    locationMap.set(token || "(Blank)", (locationMap.get(token || "(Blank)") ?? 0) + r._count._all);
+  }
+  columnFilterValues.location = [...locationMap.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+
+  const mergeRelationChips = <T extends { _count: { _all: number }; [k: string]: unknown }>(
+    primary: T[],
+    fallback: T[],
+    key: string
+  ) => {
+    const counts = new Map<string, number>();
+    for (const g of [...primary, ...fallback]) {
+      const raw = g[key];
+      const token = raw == null || String(raw).trim() === "" ? "(Blank)" : String(raw);
+      counts.set(token, (counts.get(token) ?? 0) + g._count._all);
+    }
+    return [...counts.entries()]
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  };
+
+  columnFilterValues.employeeName = mergeRelationChips(assignmentEmployeeGroups, fallbackEmployeeGroups, "employeeName");
+  columnFilterValues.emailId = mergeRelationChips(assignmentEmailGroups, fallbackEmailGroups, "emailId");
+  columnFilterValues.purpose = mergeRelationChips(assignmentPurposeGroups, fallbackPurposeGroups, "purpose");
 
   const uniqueEmployeeCount = uniqueEmployees.filter(
     (e) => e.employeeName !== null

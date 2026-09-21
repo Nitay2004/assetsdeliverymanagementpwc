@@ -92,35 +92,66 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     }),
   ]);
 
-  const distinctSourceOrders = await prisma.order.findMany({
-    where,
-    select: {
-      clientName: true,
-      engineerName: true,
-      warehouseLocation: true,
-      provisioningLocation: true,
-      assets: {
-        select: {
-          status: true,
-          inventoryItem: { select: { serialNumber: true, model: true, imageType: true, stickerColour: true } },
-        },
-      },
-    },
-  });
-  const distinctAssetRows = distinctSourceOrders.flatMap(o =>
-    o.assets.map(a => ({ order: o, asset: a }))
-  );
-  const columnFilterValues = computeDistinctValues(distinctAssetRows, {
-    serialNumber: r => r.asset.inventoryItem?.serialNumber,
-    model: r => r.asset.inventoryItem?.model,
-    imageType: r => r.asset.inventoryItem?.imageType,
-    stickerColour: r => r.asset.inventoryItem?.stickerColour,
-    clientName: r => r.order.clientName,
-    engineerName: r => r.order.engineerName,
-    warehouseLocation: r => r.order.warehouseLocation,
-    provisioningLocation: r => r.order.provisioningLocation,
-    assetStatus: r => r.asset.status,
-  });
+  const [serialNumberGroups, modelGroups, imageTypeGroups, stickerColourGroups, assetStatusGroups, clientNameGroups, engineerNameGroups, warehouseLocationGroups, provisioningLocationGroups] = await Promise.all([
+    prisma.inventoryItem.groupBy({
+      by: ["serialNumber"],
+      where: { assets: { some: { order: where } } },
+      _count: { _all: true },
+    }),
+    prisma.inventoryItem.groupBy({
+      by: ["model"],
+      where: { assets: { some: { order: where } } },
+      _count: { _all: true },
+    }),
+    prisma.inventoryItem.groupBy({
+      by: ["imageType"],
+      where: { assets: { some: { order: where } } },
+      _count: { _all: true },
+    }),
+    prisma.inventoryItem.groupBy({
+      by: ["stickerColour"],
+      where: { assets: { some: { order: where } } },
+      _count: { _all: true },
+    }),
+    prisma.asset.groupBy({
+      by: ["status"],
+      where: { order: where },
+      _count: { _all: true },
+    }),
+    prisma.order.groupBy({ by: ["clientName"], where, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["engineerName"], where, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["warehouseLocation"], where, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["provisioningLocation"], where, _count: { _all: true } }),
+  ]);
+
+  const columnFilterValues: Record<string, { value: string; count: number }[]> = {};
+  columnFilterValues.serialNumber = serialNumberGroups
+    .map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.model = modelGroups
+    .map(r => ({ value: r.model ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.imageType = imageTypeGroups
+    .map(r => ({ value: r.imageType ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.stickerColour = stickerColourGroups
+    .map(r => ({ value: r.stickerColour ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.assetStatus = assetStatusGroups
+    .map(r => ({ value: r.status ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.clientName = clientNameGroups
+    .map(r => ({ value: r.clientName ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.engineerName = engineerNameGroups
+    .map(r => ({ value: r.engineerName ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.warehouseLocation = warehouseLocationGroups
+    .map(r => ({ value: r.warehouseLocation ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.provisioningLocation = provisioningLocationGroups
+    .map(r => ({ value: r.provisioningLocation ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
 
   const engineers = [...new Set(orders.map(o => o.engineerName).filter(Boolean))] as string[];
   const inProvisioningCount = orders.filter(o => ACTIVE_PROVISIONING_STATUSES.includes(o.status)).length;

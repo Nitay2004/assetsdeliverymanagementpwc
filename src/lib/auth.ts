@@ -105,3 +105,11 @@ export async function getSession() {
 
   return session.user;
 }
+
+// Guard for server actions: returns the logged-in user or throws so the action
+// is refused (Server Actions are public POST endpoints and must self-authorize).
+export async function requireAuth(): Promise<NonNullable<Awaited<ReturnType<typeof getSession>>>> {
+  const user = await getSession();
+  if (!user) throw new Error("Unauthorized");
+  return user;
+}

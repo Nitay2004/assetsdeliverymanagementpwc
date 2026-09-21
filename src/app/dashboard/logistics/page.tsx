@@ -9,7 +9,7 @@ import { PodExportButton } from "@/components/logistics/pod-export-button";
 import { getWarehouses } from "@/app/actions/dc";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
-import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
+import { parseColumnFilters } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
 import type { Prisma, OrderStatus } from "@prisma/client";
 
@@ -86,28 +86,63 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
     })),
   }));
 
-  const distinctSourceOrders = await prisma.order.findMany({
-    where,
-    select: {
-      clientName: true,
-      dcNumber: true,
-      deliveryLocation: true,
-      totalQuantity: true,
-      status: true,
-      assets: { select: { inventoryItem: { select: { serialNumber: true } } } },
-      dockets: { select: { docketNumber: true, courierName: true, ewayBillNumber: true } },
-    },
-  });
-  const columnFilterValues = computeDistinctValues(distinctSourceOrders, {
-    clientName: r => r.clientName,
-    dcNumber: r => r.dcNumber,
-    deliveryLocation: r => r.deliveryLocation,
-    totalQuantity: r => r.totalQuantity,
-    serialNumber: r => r.assets.map(a => a.inventoryItem?.serialNumber).filter(Boolean).join(", "),
-    dockets: r => r.dockets.map(d => d.docketNumber ? `${d.docketNumber}${d.courierName ? ` · ${d.courierName}` : ""}` : "").filter(Boolean).join(", "),
-    ewayBill: r => r.dockets.map(d => d.ewayBillNumber).filter(Boolean).join(", "),
-    status: r => r.status,
-  });
+  const [clientNameGroups, dcNumberGroups, deliveryLocationGroups, totalQuantityGroups, statusGroups, serialNumberGroups, docketGroups, ewayBillGroups] = await Promise.all([
+    prisma.order.groupBy({ by: ["clientName"], where, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["dcNumber"], where, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["deliveryLocation"], where, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["totalQuantity"], where, _count: { _all: true } }),
+    prisma.order.groupBy({ by: ["status"], where, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({
+      by: ["serialNumber"],
+      where: { assets: { some: { order: where } } },
+      _count: { _all: true },
+    }),
+    prisma.docket.groupBy({
+      by: ["docketNumber", "courierName"],
+      where: { order: where },
+      _count: { _all: true },
+    }),
+    prisma.docket.groupBy({
+      by: ["ewayBillNumber"],
+      where: { order: where },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const columnFilterValues: Record<string, { value: string; count: number }[]> = {};
+  columnFilterValues.clientName = clientNameGroups
+    .map(r => ({ value: r.clientName ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.dcNumber = dcNumberGroups
+    .map(r => ({ value: r.dcNumber ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.deliveryLocation = deliveryLocationGroups
+    .map(r => ({ value: r.deliveryLocation ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.totalQuantity = totalQuantityGroups
+    .map(r => ({ value: r.totalQuantity == null || String(r.totalQuantity).trim() === "" ? "(Blank)" : String(r.totalQuantity), count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.status = statusGroups
+    .map(r => ({ value: r.status ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  columnFilterValues.serialNumber = serialNumberGroups
+    .map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+
+  const docketMap = new Map<string, number>();
+  for (const r of docketGroups) {
+    const token = r.docketNumber
+      ? `${r.docketNumber}${r.courierName ? ` · ${r.courierName}` : ""}`
+      : "(Blank)";
+    docketMap.set(token, (docketMap.get(token) ?? 0) + r._count._all);
+  }
+  columnFilterValues.dockets = [...docketMap.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+
+  columnFilterValues.ewayBill = ewayBillGroups
+    .map(r => ({ value: r.ewayBillNumber ?? "(Blank)", count: r._count._all }))
+    .sort((a, b) => a.value.localeCompare(b.value));
 
   const needsDocket = rawOrders.filter(o => o.status === "DOCKET_REQUESTED").length;
   const awaitingFinance = rawOrders.filter(o => ["DOCKET_ASSIGNED", "DC_REQUESTED", "EWAY_BILL_REQUESTED", "RTO_DC_REQUESTED", "RTO_EWAY_BILL_REQUESTED"].includes(o.status)).length;

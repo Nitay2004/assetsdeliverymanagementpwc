@@ -4,7 +4,7 @@ import { Plus, ArrowLeftRight, Truck, ClipboardCheck, Warehouse, ShieldCheck, Fi
 import Link from "next/link";
 import { ReversePickupTable } from "@/components/reverse-pickup/reverse-pickup-table";
 import { ReversePickupExportButton } from "@/components/reverse-pickup/reverse-pickup-export-button";
-import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
+import { parseColumnFilters } from "@/lib/column-filters";
 import type { Prisma } from "@prisma/client";
 
 const REVERSE_PICKUP_FILTER_KEYS = ["requestNumber", "employeeName", "serialNumber", "model", "type", "status", "dcNo", "docketNumber", "eWayBillNo", "blancoCertificate", "partnerCourier", "createdAt"];
@@ -166,43 +166,81 @@ export default async function ReversePickupPage({
 
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
-  const allRequests = await prisma.reversePickupRequest.findMany({
-    select: { status: true },
+  const scalarFields = ["requestNumber", "employeeName", "serialNumber", "model", "type", "status", "dcNo", "docketNumber", "eWayBillNo"] as const;
+
+  const [statusGroups, scalarGroups, blancoGroups, partnerGroups, createdGroups] = await Promise.all([
+    prisma.reversePickupRequest.groupBy({ by: ["status"], _count: { _all: true } }),
+    Promise.all(
+      scalarFields.map(field =>
+        prisma.reversePickupRequest
+          .groupBy({ by: [field], where, _count: { _all: true } })
+          .then(rows => rows.map(r => ({
+            value: (r as Record<string, unknown>)[field] as string | null,
+            count: r._count._all,
+          })))
+      )
+    ),
+    prisma.reversePickupRequest.groupBy({
+      by: ["blancoCertificateUrl"],
+      where,
+      _count: { _all: true },
+    }),
+    prisma.reversePickupRequest.groupBy({
+      by: ["courierName", "partnerName"],
+      where,
+      _count: { _all: true },
+    }),
+    prisma.reversePickupRequest.groupBy({
+      by: ["createdAt"],
+      where,
+      _count: { _all: true },
+    }),
+  ]);
+
+  const statusCounts = new Map(statusGroups.map(r => [r.status, r._count._all]));
+  const statusCount = (...statuses: string[]) =>
+    statuses.reduce((sum, s) => sum + (statusCounts.get(s as never) ?? 0), 0);
+  const pendingCount = statusCount("REQUESTED", "PARTNER_ASSIGNED", "INSPECTED", "PICKED_UP");
+  const atWarehouse = statusCount("RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "COMPLETED");
+  const completedCount = statusCount("BLANCO_CERTIFIED", "COMPLETED");
+
+  const columnFilterValues: Record<string, { value: string; count: number }[]> = {};
+  scalarGroups.forEach((rows, i) => {
+    const field = scalarFields[i];
+    columnFilterValues[field] = rows
+      .map(r => ({
+        value: r.value ?? "(Blank)",
+        count: r.count,
+      }))
+      .sort((a, b) => a.value.localeCompare(b.value));
   });
 
-  const pendingCount = allRequests.filter(r =>
-    ["REQUESTED", "PARTNER_ASSIGNED", "INSPECTED", "PICKED_UP"].includes(r.status)
-  ).length;
-  const atWarehouse = allRequests.filter(r =>
-    ["RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "COMPLETED"].includes(r.status)
-  ).length;
-  const completedCount = allRequests.filter(r =>
-    ["BLANCO_CERTIFIED", "COMPLETED"].includes(r.status)
-  ).length;
+  const blancoMap = new Map<string, number>();
+  for (const row of blancoGroups) {
+    const token = row.blancoCertificateUrl ? "Has Certificate" : "(Blank)";
+    blancoMap.set(token, (blancoMap.get(token) ?? 0) + row._count._all);
+  }
+  columnFilterValues.blancoCertificate = [...blancoMap.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value));
 
-  const distinctSource = await prisma.reversePickupRequest.findMany({
-    where,
-    select: {
-      requestNumber: true, employeeName: true, serialNumber: true, model: true, type: true,
-      status: true, dcNo: true, docketNumber: true, eWayBillNo: true,
-      blancoCertificateUrl: true, partnerName: true, courierName: true, createdAt: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  const columnFilterValues = computeDistinctValues(distinctSource, {
-    requestNumber: r => r.requestNumber,
-    employeeName: r => r.employeeName,
-    serialNumber: r => r.serialNumber,
-    model: r => r.model,
-    type: r => r.type,
-    status: r => r.status,
-    dcNo: r => r.dcNo,
-    docketNumber: r => r.docketNumber,
-    eWayBillNo: r => r.eWayBillNo,
-    blancoCertificate: r => (r.blancoCertificateUrl ? "Has Certificate" : ""),
-    partnerCourier: r => r.courierName || r.partnerName,
-    createdAt: r => new Date(r.createdAt).toLocaleDateString("en-GB"),
-  });
+  const partnerMap = new Map<string, number>();
+  for (const row of partnerGroups) {
+    const token = row.courierName ?? row.partnerName ?? "(Blank)";
+    partnerMap.set(token, (partnerMap.get(token) ?? 0) + row._count._all);
+  }
+  columnFilterValues.partnerCourier = [...partnerMap.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+
+  const dayMap = new Map<string, number>();
+  for (const row of createdGroups) {
+    const day = new Date(row.createdAt).toLocaleDateString("en-GB");
+    dayMap.set(day, (dayMap.get(day) ?? 0) + row._count._all);
+  }
+  columnFilterValues.createdAt = [...dayMap.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.value.localeCompare(a.value));
 
   const serializedRequests = requests.map(r => ({
     ...r,
@@ -283,7 +321,7 @@ export default async function ReversePickupPage({
           </div>
           <div>
             <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Total Requests</p>
-            <p className="text-2xl font-bold text-primary mt-1">{allRequests.length}</p>
+            <p className="text-2xl font-bold text-primary mt-1">{totalCount}</p>
           </div>
         </div>
       </div>

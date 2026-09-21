@@ -78,7 +78,7 @@ export default async function DashboardPage(props: {
   const reverseWhere = createdAt ? { createdAt } : undefined;
 
   // Fetch all data in parallel — aggregate counts in the DB, no unbounded row loads.
-  const [orderStatuses, inventoryStatuses, slaMetCount, totalAssets, warrantyPendingCount, stockByWarehouseRows, recentOrders, recentInventory, reversePickups, deliveredInventoryCount, inTransitInventoryCount, rtoInventoryCount] = await Promise.all([
+  const [orderStatuses, inventoryStatuses, slaMetCount, totalAssets, warrantyPendingCount, stockByWarehouseRows, recentOrders, recentInventory, reversePickupStatuses, reverseSlaMetCount, reverseRemarkCancelCount, deliveredInventoryCount, inTransitInventoryCount, rtoInventoryCount] = await Promise.all([
     prisma.order.groupBy({
       by: ["status"],
       where: orderWhere,
@@ -111,8 +111,20 @@ export default async function DashboardPage(props: {
       orderBy: { updatedAt: "desc" },
       take: 5,
     }),
-    prisma.reversePickupRequest.findMany({
+    prisma.reversePickupRequest.groupBy({
+      by: ["status"],
       where: reverseWhere,
+      _count: { _all: true },
+    }),
+    prisma.reversePickupRequest.count({
+      where: { ...(reverseWhere ?? {}), sla: { equals: "met", mode: "insensitive" } },
+    }),
+    prisma.reversePickupRequest.count({
+      where: {
+        ...(reverseWhere ?? {}),
+        status: { not: "PICKUP_CANCELLED" },
+        remark: { contains: "cancel", mode: "insensitive" },
+      },
     }),
     prisma.inventoryItem.count({
       where: {
@@ -165,13 +177,19 @@ export default async function DashboardPage(props: {
   const allocatedStock = inventoryStatusCount("ALLOCATED");
 
   // Reverse Shipment stats
-  const reversePickupCount = reversePickups.length;
-  const reversePickupsDone = reversePickups.filter((r) => ["PICKED_UP", "COMPLETED"].includes(r.status)).length;
-  const reversePickupsCancelled = reversePickups.filter((r) => r.status === "PICKUP_CANCELLED" || r.remark?.toLowerCase().includes("cancel")).length;
-  const reverseInTransit = reversePickups.filter((r) => ["IN_TRANSIT", "DOCKET_REQUESTED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "INSPECTED", "PICKED_UP"].includes(r.status)).length;
-  const reverseReceivedInWh = reversePickups.filter((r) => ["RECEIVED_AT_WAREHOUSE", "COMPLETED"].includes(r.status)).length;
-  const reverseAlignQc = reversePickups.filter((r) => ["QC_CLEANED", "QC_COMPLETED", "BLANCO_CERTIFIED"].includes(r.status)).length;
-  const reverseSlaMet = reversePickups.filter((r) => r.sla?.toLowerCase() === "met").length;
+  const reverseStatusMap = new Map(reversePickupStatuses.map(r => [r.status, r._count._all]));
+  const reverseStatusCount = (...statuses: string[]) =>
+    statuses.reduce((sum, s) => sum + (reverseStatusMap.get(s as never) ?? 0), 0);
+  const reversePickupCount = reverseStatusMap.values().reduce((sum, c) => sum + c, 0);
+  const reversePickupsDone = reverseStatusCount("PICKED_UP", "COMPLETED");
+  const reversePickupsCancelled = reverseStatusCount("PICKUP_CANCELLED") + reverseRemarkCancelCount;
+  const reverseInTransit = reverseStatusCount(
+    "IN_TRANSIT", "DOCKET_REQUESTED", "DC_REQUESTED", "DC_GENERATED",
+    "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "INSPECTED", "PICKED_UP"
+  );
+  const reverseReceivedInWh = reverseStatusCount("RECEIVED_AT_WAREHOUSE", "COMPLETED");
+  const reverseAlignQc = reverseStatusCount("QC_CLEANED", "QC_COMPLETED", "BLANCO_CERTIFIED");
+  const reverseSlaMet = reverseSlaMetCount;
 
   // Group inventory items by invoicing warehouse
   const warehouseMap = new Map<string, number>();

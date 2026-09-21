@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { getSession, requireAuth } from "@/lib/auth";
 import { requirePermission, canModuleAction } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { hasPriorDelivery, createAssignmentOrder } from "@/app/actions/assignment";
@@ -259,6 +259,7 @@ export async function assignQcEngineer(
 }
 
 export async function getQcDropdowns() {
+  await requireAuth();
   const options = await prisma.dropdownOption.findMany({
     where: {
       category: { in: ["warehouseLocation", "engineerName"] },
@@ -299,6 +300,7 @@ export async function deleteQcDropdownOption(id: string) {
 }
 
 export async function getQcItemLocations(itemId: string) {
+  await requireAuth();
   const item = await prisma.inventoryItem.findUnique({
     where: { id: itemId },
     select: { invoicingWarehouse: true, qcLocation: true },

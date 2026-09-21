@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { canViewModule } from "@/lib/permissions";
 
 function sanitize(input: string): string {
   return input
@@ -122,5 +123,14 @@ export async function globalSearch(raw: string): Promise<SearchResult[]> {
     });
   }
 
-  return results.slice(0, 10);
+  const canViewResult = (type: SearchResult["type"]) =>
+    type === "inventory"
+      ? canViewModule(user.permissions, user.role, "inventory")
+      : type === "order"
+        ? canViewModule(user.permissions, user.role, "warehouse")
+        : type === "asset"
+          ? canViewModule(user.permissions, user.role, "provisioning")
+          : canViewModule(user.permissions, user.role, "logistics");
+
+  return results.filter(r => canViewResult(r.type)).slice(0, 10);
 }

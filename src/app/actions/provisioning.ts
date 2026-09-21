@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { getSession, requireAuth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
@@ -71,6 +71,7 @@ export async function advanceOrderToProvisioning(
 }
 
 export async function getOrderInventoryLocations(orderId: string) {
+  await requireAuth();
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: {
@@ -97,6 +98,7 @@ export async function getOrderInventoryLocations(orderId: string) {
 }
 
 export async function getProvisioningDropdowns() {
+  await requireAuth();
   const options = await prisma.dropdownOption.findMany({
     where: {
       category: { in: ["warehouseLocation", "provisioningLocation", "engineerName"] },

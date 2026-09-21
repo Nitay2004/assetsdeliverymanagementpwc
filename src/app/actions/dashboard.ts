@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 import type { OrderStatus, ReversePickupStatus, InventoryStatus, Prisma } from "@prisma/client";
 
 export interface TableOrderData {
@@ -19,6 +20,7 @@ export async function getOrdersByStatus(
   page: number = 1,
   limit: number = 50
 ): Promise<{ orders: TableOrderData[]; total: number }> {
+  await requireAuth();
   const skip = (page - 1) * limit;
 
   const [rawOrders, total] = await Promise.all([
@@ -71,6 +73,7 @@ export async function getReversePickupsByStatus(
   page: number = 1,
   limit: number = 50
 ): Promise<{ items: TableReverseData[]; total: number }> {
+  await requireAuth();
   const skip = (page - 1) * limit;
 
   const [raw, total] = await Promise.all([
@@ -104,6 +107,7 @@ export async function getCancelledReversePickups(
   page: number = 1,
   limit: number = 50
 ): Promise<{ items: TableReverseData[]; total: number }> {
+  await requireAuth();
   const skip = (page - 1) * limit;
 
   const [raw, total] = await Promise.all([
@@ -147,6 +151,7 @@ export async function getInventoryBySlaStatus(
   page: number = 1,
   limit: number = 50
 ): Promise<{ items: TableInventoryData[]; total: number }> {
+  await requireAuth();
   const skip = (page - 1) * limit;
 
   const [raw, total] = await Promise.all([
@@ -188,6 +193,7 @@ export async function getInventoryByStatus(
   page: number = 1,
   limit: number = 50
 ): Promise<{ items: TableInventoryStatusData[]; total: number }> {
+  await requireAuth();
   const skip = (page - 1) * limit;
   const statusFilter: InventoryStatus = status as InventoryStatus;
 
@@ -233,6 +239,7 @@ export async function getInventoryItemsByTrackingKeywords(
   page: number = 1,
   limit: number = 50
 ): Promise<{ items: TableInventoryDeliveryData[]; total: number }> {
+  await requireAuth();
   const skip = (page - 1) * limit;
 
   const orConditions = keywords.flatMap(keyword => [

@@ -142,13 +142,20 @@ export async function POST(request: Request) {
     );
   }
 
+  if (file.size > 20 * 1024 * 1024) {
+    return NextResponse.json(
+      { success: false, error: "File exceeds the 20 MB limit." },
+      { status: 413 }
+    );
+  }
+
   let headers: string[];
   let records: string[][];
   try {
     ({ headers, records } = await parseFile(file));
-  } catch (e: any) {
+  } catch {
     return NextResponse.json(
-      { success: false, error: e.message || "Failed to parse file." },
+      { success: false, error: "Failed to parse file." },
       { status: 400 }
     );
   }

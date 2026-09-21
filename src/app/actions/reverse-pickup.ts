@@ -39,7 +39,7 @@ async function nextReversePickupRequestNumber(): Promise<string> {
 
 export async function getReversePickupRequests() {
   const user = await getSession();
-  if (!user) throw new Error("Unauthorized");
+  requirePermission(user, "reverse-pickup", "canView");
 
   const requests = await prisma.reversePickupRequest.findMany({
     orderBy: { createdAt: "desc" },
@@ -50,7 +50,7 @@ export async function getReversePickupRequests() {
 
 export async function getReversePickupRequest(id: string) {
   const user = await getSession();
-  if (!user) throw new Error("Unauthorized");
+  requirePermission(user, "reverse-pickup", "canView");
 
   return prisma.reversePickupRequest.findUnique({ where: { id } });
 }
@@ -521,7 +521,7 @@ export async function deleteReversePickupRequest(id: string) {
 
 export async function lookupInventoryBySerial(serialNumber: string) {
   const user = await getSession();
-  if (!user) throw new Error("Unauthorized");
+  requirePermission(user, "reverse-pickup", "canView");
 
   if (!serialNumber || serialNumber.trim().length === 0) return null;
 
@@ -558,7 +558,7 @@ const RP_CATEGORIES = [
 
 export async function getReversePickupDropdowns() {
   const user = await getSession();
-  if (!user) throw new Error("Unauthorized");
+  requirePermission(user, "reverse-pickup", "canView");
 
   const options = await prisma.dropdownOption.findMany({
     where: { category: { in: RP_CATEGORIES } },

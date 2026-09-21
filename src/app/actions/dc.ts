@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { getSession, requireAuth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
@@ -41,6 +41,7 @@ function numberToWords(num: number): string {
 }
 
 export async function getNextDcNumber(): Promise<string> {
+  await requireAuth();
   const now = new Date();
   const year = now.getFullYear();
   const shortYear = year % 100;
@@ -63,6 +64,7 @@ export async function getNextDcNumber(): Promise<string> {
 }
 
 export async function getWarehouses() {
+  await requireAuth();
   return prisma.warehouse.findMany({ orderBy: { name: "asc" } });
 }
 
@@ -188,6 +190,7 @@ export async function generateDC(orderId: string, data: DcFormData) {
 }
 
 export async function getDC(dcId: string) {
+  await requireAuth();
   const dc = await prisma.deliveryChallan.findUnique({
     where: { id: dcId },
     include: {
@@ -214,6 +217,7 @@ export async function getDC(dcId: string) {
 }
 
 export async function getDCsByOrder(orderId: string) {
+  await requireAuth();
   const dcs = await prisma.deliveryChallan.findMany({
     where: { orderId },
     include: { items: true },
@@ -238,6 +242,7 @@ export async function getDCsByOrder(orderId: string) {
 // ─── Reverse Pickup DC ───
 
 export async function getReversePickupForDc(rpId: string) {
+  await requireAuth();
   const rp = await prisma.reversePickupRequest.findUnique({
     where: { id: rpId },
   });
@@ -377,6 +382,7 @@ export async function updateDcDocket(docketId: string, docketNumber: string) {
 // ─── Dispatched Through Dropdown ───
 
 export async function getDispatchedThroughOptions() {
+  await requireAuth();
   const options = await prisma.dropdownOption.findMany({
     where: { category: "dispatchedThrough" },
     orderBy: { value: "asc" },
@@ -403,6 +409,7 @@ export async function deleteDispatchedThroughOption(id: string) {
 // ─── Bill To Location Dropdown ───
 
 export async function getBillToLocationOptions() {
+  await requireAuth();
   const options = await prisma.dropdownOption.findMany({
     where: { category: "billToLocation" },
     orderBy: { value: "asc" },
@@ -427,6 +434,7 @@ export async function deleteBillToLocationOption(id: string) {
 }
 
 export async function getOrderForDc(orderId: string) {
+  await requireAuth();
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: {

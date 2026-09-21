@@ -1,9 +1,12 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 
 export async function hasPriorDelivery(itemId: string, serialNumber: string): Promise<boolean> {
+  await requireAuth();
   const [item, fromAssignment, fromAsset, fromDeliveryRecord] = await Promise.all([
     prisma.inventoryItem.findUnique({
       where: { id: itemId },
@@ -42,6 +45,8 @@ export async function createAssignmentOrder(item: {
   city: string | null;
   state: string | null;
 }) {
+  const user = await requireAuth();
+  requirePermission(user, "inventory", "canEdit");
   await prisma.$transaction(async (tx) => {
     const order = await tx.order.create({
       data: {
