@@ -10,6 +10,8 @@ interface DcPdfData {
   warehouseName?: string | null;
   shipToLocation?: string | null;
   billToLocation?: string | null;
+  userName?: string | null;
+  userContact?: string | null;
   modeOfPayment?: string | null;
   referenceNo?: string | null;
   referenceDate?: string | null;
@@ -129,11 +131,17 @@ export async function generateDcPdf(data: DcPdfData, clientName: string): Promis
 
       {
         table: {
-          widths: ["*"],
+          widths: ["30%", "*"],
           body: [
-            [{ text: data.warehouseName || "", style: "tableCell", alignment: "left" }],
-            [{ text: data.shipToLocation || "—", style: "tableCell", alignment: "left" }],
-            [{ text: data.billToLocation || "—", style: "tableCell", alignment: "left" }],
+            [
+              { text: "PARTY DETAILS", style: "sectionTitle", colSpan: 2, alignment: "left", border: [false, false, false, true] },
+              {},
+            ],
+            [{ text: "From Warehouse", style: "fieldLabel" }, { text: data.warehouseName || "—", style: "fieldValue" }],
+            [{ text: "User Name", style: "fieldLabel" }, { text: data.userName || "—", style: "fieldValue" }],
+            [{ text: "User Contact Details", style: "fieldLabel" }, { text: data.userContact || "—", style: "fieldValue" }],
+            [{ text: "Ship To Location", style: "fieldLabel" }, { text: data.shipToLocation || "—", style: "fieldValue" }],
+            [{ text: "Bill To Location", style: "fieldLabel" }, { text: data.billToLocation || "—", style: "fieldValue" }],
           ],
         },
         layout: {
@@ -141,10 +149,10 @@ export async function generateDcPdf(data: DcPdfData, clientName: string): Promis
           vLineWidth: () => 0.5,
           hLineColor: () => "#d1d5db",
           vLineColor: () => "#d1d5db",
-          paddingLeft: () => 6,
-          paddingRight: () => 6,
-          paddingTop: () => 6,
-          paddingBottom: () => 6,
+          paddingLeft: () => 4,
+          paddingRight: () => 4,
+          paddingTop: () => 3,
+          paddingBottom: () => 3,
         },
       },
 

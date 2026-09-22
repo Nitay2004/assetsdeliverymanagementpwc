@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { X, Plus, Trash2, Loader2, FileText, ChevronDown } from "lucide-react";
-import { getWarehouses, createWarehouse, getNextDcNumber, generateReversePickupDc, getReversePickupForDc, getBillToLocationOptions, addBillToLocationOption, deleteBillToLocationOption, getDispatchedThroughOptions, addDispatchedThroughOption, deleteDispatchedThroughOption } from "@/app/actions/dc";
+import { getWarehouses, createWarehouse, deleteWarehouse, getNextDcNumber, generateReversePickupDc, getReversePickupForDc, getBillToLocationOptions, addBillToLocationOption, deleteBillToLocationOption, getDispatchedThroughOptions, addDispatchedThroughOption, deleteDispatchedThroughOption } from "@/app/actions/dc";
 import { DropdownField } from "@/components/shared/dropdown-field";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -199,6 +199,7 @@ export function ReversePickupDcModal({ rpId, open, onClose }: ReversePickupDcMod
                 warehouses={warehouses}
                 value={warehouseId}
                 onChange={setWarehouseId}
+                onListChange={setWarehouses}
               />
             </div>
             <div className="space-y-1.5">
@@ -460,14 +461,17 @@ function WarehouseDropdown({
   warehouses,
   value,
   onChange,
+  onListChange,
 }: {
   warehouses: Warehouse[];
   value: string;
   onChange: (val: string) => void;
+  onListChange: (whs: Warehouse[]) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const [deletingId, setDeletingId] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -488,13 +492,29 @@ function WarehouseDropdown({
     setIsAdding(true);
     try {
       const wh = await createWarehouse(newName.trim());
+      onListChange(await getWarehouses());
       onChange(wh.id);
       setNewName("");
       toast({ title: "Added", description: `Warehouse "${newName.trim()}" created.`, variant: "success" });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "error" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Something went wrong", variant: "error" });
     } finally {
       setIsAdding(false);
+    }
+  }
+
+  async function handleDelete(w: Warehouse) {
+    if (deletingId) return;
+    setDeletingId(w.id);
+    try {
+      await deleteWarehouse(w.id);
+      onListChange(await getWarehouses());
+      if (value === w.id) onChange("");
+      toast({ title: "Deleted", description: `Warehouse "${w.name}" removed.`, variant: "success" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Something went wrong", variant: "error" });
+    } finally {
+      setDeletingId("");
     }
   }
 
@@ -524,14 +544,27 @@ function WarehouseDropdown({
               Clear selection
             </button>
             {warehouses.map(w => (
-              <button
+              <div
                 key={w.id}
-                type="button"
-                onClick={() => { onChange(w.id); setIsOpen(false); }}
-                className={`w-full text-left px-3 py-1.5 text-sm rounded-md hover:bg-muted transition-colors ${w.id === value ? "bg-muted/50 font-medium" : ""}`}
+                className={`flex items-center rounded-md transition-colors ${w.id === value ? "bg-muted/50" : "hover:bg-muted"}`}
               >
-                {w.name}{w.location ? ` - ${w.location}` : ""}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => { onChange(w.id); setIsOpen(false); }}
+                  className="flex-1 text-left px-3 py-1.5 text-sm rounded-md"
+                >
+                  {w.name}{w.location ? ` - ${w.location}` : ""}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(w)}
+                  disabled={deletingId === w.id}
+                  title="Delete warehouse"
+                  className="p-1.5 mr-1 text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors"
+                >
+                  {deletingId === w.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                </button>
+              </div>
             ))}
           </div>
           <div className="border-t p-2 bg-muted/30 shrink-0">

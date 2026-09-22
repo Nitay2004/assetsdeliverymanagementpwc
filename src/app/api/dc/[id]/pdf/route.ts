@@ -15,7 +15,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     include: {
       items: true,
       warehouse: true,
-      order: { include: { dockets: { orderBy: { createdAt: "desc" } } } },
+      order: {
+        include: {
+          dockets: { orderBy: { createdAt: "desc" } },
+          assets: { include: { inventoryItem: true } },
+        },
+      },
       reversePickupRequest: true,
     },
   });
@@ -27,6 +32,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const docketNumber = latestDocket?.docketNumber ?? dc.reversePickupRequest?.docketNumber ?? null;
   const courierName = latestDocket?.courierName ?? null;
 
+  const inventoryItem = dc.order?.assets?.find(a => a.inventoryItem)?.inventoryItem ?? null;
+  const rp = dc.reversePickupRequest;
+
+  const userName = rp?.employeeName ?? inventoryItem?.employeeName ?? null;
+  const userContact = rp
+    ? [rp.mobileNumber, rp.alternatePhoneNumber, rp.contact, rp.emailId].filter(Boolean).join(", ") || null
+    : inventoryItem
+      ? [inventoryItem.mobileNumber, inventoryItem.emailId].filter(Boolean).join(", ") || null
+      : null;
+
   const pdfBuffer = await generateDcPdf(
     {
       dcNumber: dc.dcNumber,
@@ -34,6 +49,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       warehouseName: dc.warehouse?.name,
       shipToLocation: dc.shipToLocation,
       billToLocation: dc.billToLocation,
+      userName,
+      userContact,
       modeOfPayment: dc.modeOfPayment,
       referenceNo: dc.referenceNo,
       referenceDate: dc.referenceDate?.toISOString() ?? null,

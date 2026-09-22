@@ -74,6 +74,21 @@ export async function createWarehouse(name: string, location?: string) {
   return prisma.warehouse.create({ data: { name, location } });
 }
 
+export async function deleteWarehouse(id: string) {
+  const user = await getSession();
+  requirePermission(user, "finance", "canDelete");
+  try {
+    await prisma.warehouse.delete({ where: { id } });
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code === "P2003") {
+      throw new Error("Cannot delete warehouse: it is linked to existing DCs.");
+    }
+    throw err;
+  }
+  revalidatePath("/dashboard/finance");
+  return { ok: true };
+}
+
 export interface DcFormData {
   warehouseId?: string;
   warehouseLocation?: string;
