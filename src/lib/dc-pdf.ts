@@ -41,9 +41,12 @@ const FONT_PREFIX = "pwc-dc-font-";
 
 const LOGO_PATH = path.join(process.cwd(), "public", "devit-logo.png");
 
-function getLogoDataUrl(): string | null {
+function readLogo(): { dataUrl: string; width: number; height: number } | null {
   try {
-    return `data:image/png;base64,${readFileSync(LOGO_PATH).toString("base64")}`;
+    const buffer = readFileSync(LOGO_PATH);
+    const width = buffer.readUInt32BE(16);
+    const height = buffer.readUInt32BE(20);
+    return { dataUrl: `data:image/png;base64,${buffer.toString("base64")}`, width, height };
   } catch {
     return null;
   }
@@ -74,7 +77,11 @@ function initFonts() {
 initFonts();
 
 export async function generateDcPdf(data: DcPdfData, clientName: string): Promise<Buffer> {
-  const logoDataUrl = getLogoDataUrl();
+  const TOP_MARGIN = 50;
+  const LOGO_WIDTH = 56;
+  const logo = readLogo();
+  const logoHeight = logo ? (LOGO_WIDTH * logo.height) / logo.width : 0;
+  const logoTop = logoHeight > 0 ? TOP_MARGIN - logoHeight : 0;
 
   const formatDate = (d: string | null | undefined) => {
     if (!d) return "—";
@@ -83,21 +90,21 @@ export async function generateDcPdf(data: DcPdfData, clientName: string): Promis
   };
 
   const header = () => [
-    { text: "DELIVERY CHALLAN", style: "title", alignment: "center", margin: [0, 0, 0, 8] },
+    { text: "DELIVERY CHALLAN", style: "title", alignment: "center" },
     {
       columns: [
         { text: `DC No: ${data.dcNumber}`, style: "fieldValue" },
         { text: `Date: ${formatDate(data.dcDate)}`, style: "fieldValue", alignment: "right" },
       ],
+      margin: [0, 16, 0, 4],
     },
-    { text: " ", margin: [0, 0, 0, 0] },
   ];
 
   const divider = { canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5 }], margin: [0, 4, 0, 4] };
 
   const dd = {
     pageSize: "A4" as const,
-    pageMargins: [40, 40, 40, 40] as [number, number, number, number],
+    pageMargins: [40, TOP_MARGIN, 40, 40] as [number, number, number, number],
     defaultStyle: { font: "Roboto", fontSize: 9 },
     styles: {
       title: { fontSize: 14, bold: true, color: "#1e40af" },
@@ -113,8 +120,8 @@ export async function generateDcPdf(data: DcPdfData, clientName: string): Promis
       wordsValue: { fontSize: 9, color: "#dc2626", bold: true },
     },
     content: [
-      ...(logoDataUrl
-        ? [{ image: logoDataUrl, width: 80, absolutePosition: { x: 40, y: 40 } }]
+      ...(logo && logoHeight > 0
+        ? [{ image: logo.dataUrl, width: LOGO_WIDTH, absolutePosition: { x: 40, y: logoTop } }]
         : []),
       ...header(),
 
