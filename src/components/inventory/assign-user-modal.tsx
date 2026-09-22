@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { X, Search, Loader2, UserPlus, Users, Check } from "lucide-react";
+import { DataTableFilter, filterRows } from "@/components/shared/data-table-filter";
+import { ColumnFilterHeader, cellValueToLabel } from "@/components/shared/column-filter";
 import { useToast } from "@/hooks/use-toast";
 import { reassignItem, getDistinctFieldValues, addDropdownOption, deleteDropdownOption, seedDropdownOptions } from "@/app/actions/inventory";
 import { ManageableDropdown, useDropdownData } from "@/components/inventory/manageable-dropdown";
@@ -25,6 +27,13 @@ interface AssetItem {
   invoicingWarehouse: string | null;
 }
 
+const FILTER_COLUMNS = [
+  { key: "serialNumber", label: "Serial No" },
+  { key: "model", label: "Model" },
+  { key: "status", label: "Status" },
+  { key: "invoicingWarehouse", label: "Warehouse" },
+] as const;
+
 export function AssignUserModal({ open, onClose, mode }: Props) {
   const { toast } = useToast();
   const router = useRouter();
@@ -40,6 +49,8 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
   const [availableItems, setAvailableItems] = useState<AssetItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [localSearch, setLocalSearch] = useState("");
+  const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
 
   // Assignment form state
   const [showForm, setShowForm] = useState(false);
@@ -70,6 +81,8 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
     setFoundItem(null);
     setSearchError("");
     setSelectedIds(new Set());
+    setLocalSearch("");
+    setColumnFilters({});
     setShowForm(false);
     setFormItem(null);
     setCurrentStepIndex(0);
@@ -94,6 +107,30 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
       setLoadingItems(false);
     }
   }
+
+  const distinctValues = useMemo(() => {
+    const map: Record<string, { value: string; count: number }[]> = {};
+    for (const col of FILTER_COLUMNS) {
+      const counts = new Map<string, number>();
+      for (const item of availableItems) {
+        const label = cellValueToLabel(item[col.key]);
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+      }
+      map[col.key] = [...counts.entries()]
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => a.value.localeCompare(b.value));
+    }
+    return map;
+  }, [availableItems]);
+
+  const filteredItems = useMemo(() => {
+    const searched = filterRows(availableItems, localSearch, ["serialNumber", "model", "status", "invoicingWarehouse"]);
+    const active = FILTER_COLUMNS.filter(c => (columnFilters[c.key]?.length ?? 0) > 0);
+    if (active.length === 0) return searched;
+    return searched.filter(item =>
+      active.every(c => columnFilters[c.key].includes(cellValueToLabel(item[c.key])))
+    );
+  }, [availableItems, localSearch, columnFilters]);
 
   async function handleSerialLookup() {
     if (!serialSearch.trim()) return;
@@ -302,21 +339,26 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
                   <p className="text-center text-muted-foreground py-12">No available assets found.</p>
                 ) : (
                   <>
+                    <DataTableFilter
+                      value={localSearch}
+                      onChange={setLocalSearch}
+                      placeholder="Search by serial no, model, status, warehouse..."
+                    />
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-muted-foreground">
-                        {availableItems.length} available asset(s) — {selectedIds.size} selected
+                        {availableItems.length} available asset(s) — {filteredItems.length} shown — {selectedIds.size} selected
                       </p>
                       <button
                         onClick={() => {
-                          if (selectedIds.size === availableItems.length) {
+                          if (selectedIds.size === filteredItems.length && filteredItems.length > 0) {
                             setSelectedIds(new Set());
                           } else {
-                            setSelectedIds(new Set(availableItems.map(i => i.id)));
+                            setSelectedIds(new Set(filteredItems.map(i => i.id)));
                           }
                         }}
                         className="text-xs text-primary hover:underline"
                       >
-                        {selectedIds.size === availableItems.length ? "Deselect All" : "Select All"}
+                        {selectedIds.size === filteredItems.length && filteredItems.length > 0 ? "Deselect All" : "Select All"}
                       </button>
                     </div>
 
@@ -327,22 +369,57 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
                             <th className="px-3 py-2.5 text-left w-10">
                               <input
                                 type="checkbox"
-                                checked={selectedIds.size === availableItems.length && availableItems.length > 0}
+                                checked={selectedIds.size === filteredItems.length && filteredItems.length > 0}
                                 onChange={e => {
-                                  if (e.target.checked) setSelectedIds(new Set(availableItems.map(i => i.id)));
+                                  if (e.target.checked) setSelectedIds(new Set(filteredItems.map(i => i.id)));
                                   else setSelectedIds(new Set());
                                 }}
                                 className="rounded"
                               />
                             </th>
-                            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Serial No</th>
-                            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Model</th>
-                            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Status</th>
-                            <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Warehouse</th>
+                            <ColumnFilterHeader
+                              label="Serial No"
+                              values={distinctValues.serialNumber}
+                              selected={columnFilters["serialNumber"] ?? []}
+                              onApply={(v) => setColumnFilters(prev => ({ ...prev, serialNumber: v }))}
+                              className="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                              portalZIndex={10001}
+                            />
+                            <ColumnFilterHeader
+                              label="Model"
+                              values={distinctValues.model}
+                              selected={columnFilters["model"] ?? []}
+                              onApply={(v) => setColumnFilters(prev => ({ ...prev, model: v }))}
+                              className="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                              portalZIndex={10001}
+                            />
+                            <ColumnFilterHeader
+                              label="Status"
+                              values={distinctValues.status}
+                              selected={columnFilters["status"] ?? []}
+                              onApply={(v) => setColumnFilters(prev => ({ ...prev, status: v }))}
+                              className="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                              portalZIndex={10001}
+                            />
+                            <ColumnFilterHeader
+                              label="Warehouse"
+                              values={distinctValues.invoicingWarehouse}
+                              selected={columnFilters["invoicingWarehouse"] ?? []}
+                              onApply={(v) => setColumnFilters(prev => ({ ...prev, invoicingWarehouse: v }))}
+                              className="px-3 py-2.5 text-left font-medium text-muted-foreground"
+                              portalZIndex={10001}
+                            />
                           </tr>
                         </thead>
                         <tbody>
-                          {availableItems.map(item => (
+                          {filteredItems.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
+                                No assets match the search or filters.
+                              </td>
+                            </tr>
+                          ) : (
+                          filteredItems.map(item => (
                             <tr
                               key={item.id}
                               className={`border-b last:border-b-0 cursor-pointer transition-colors ${
@@ -382,7 +459,7 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
                               </td>
                               <td className="px-3 py-2.5 text-muted-foreground">{item.invoicingWarehouse || "—"}</td>
                             </tr>
-                          ))}
+                          )))}
                         </tbody>
                       </table>
                     </div>

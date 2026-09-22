@@ -128,6 +128,7 @@ interface ColumnFilterHeaderProps {
   onApply: (values: string[]) => void;
   className?: string;
   align?: "left" | "right";
+  portalZIndex?: number;
 }
 
 export function ColumnFilterHeader({
@@ -137,6 +138,7 @@ export function ColumnFilterHeader({
   onApply,
   className,
   align = "left",
+  portalZIndex = 50,
 }: ColumnFilterHeaderProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -230,11 +232,11 @@ export function ColumnFilterHeader({
 
       {open && anchor && createPortal(
         <>
-          <div className="fixed inset-0 z-40" onClick={closeDropdown} />
+          <div className="fixed inset-0" style={{ zIndex: portalZIndex - 1 }} onClick={closeDropdown} />
           <div
             ref={panelRef}
-            className="fixed z-50 rounded-xl border bg-popover text-popover-foreground shadow-xl"
-            style={{ top: anchor.top, left: anchor.left, width: anchor.width }}
+            className="fixed rounded-xl border bg-popover text-popover-foreground shadow-xl"
+            style={{ top: anchor.top, left: anchor.left, width: anchor.width, zIndex: portalZIndex }}
           >
             <div className="flex items-center justify-between gap-2 border-b px-3 py-2.5">
               <span className="text-xs font-semibold uppercase tracking-wide">
