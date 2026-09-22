@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import path from "path";
 import pdfmake from "pdfmake";
 import virtualfs from "pdfmake/js/virtual-fs";
 import vfs from "pdfmake/build/vfs_fonts";
@@ -37,6 +39,16 @@ interface DcPdfData {
 
 const FONT_PREFIX = "pwc-dc-font-";
 
+const LOGO_PATH = path.join(process.cwd(), "public", "devit-logo.png");
+
+function getLogoDataUrl(): string | null {
+  try {
+    return `data:image/png;base64,${readFileSync(LOGO_PATH).toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
 function initFonts() {
   for (const [name, key] of Object.entries({
     "Roboto-Regular.ttf": "normal",
@@ -62,6 +74,8 @@ function initFonts() {
 initFonts();
 
 export async function generateDcPdf(data: DcPdfData, clientName: string): Promise<Buffer> {
+  const logoDataUrl = getLogoDataUrl();
+
   const formatDate = (d: string | null | undefined) => {
     if (!d) return "—";
     const dt = new Date(d);
@@ -99,6 +113,9 @@ export async function generateDcPdf(data: DcPdfData, clientName: string): Promis
       wordsValue: { fontSize: 9, color: "#dc2626", bold: true },
     },
     content: [
+      ...(logoDataUrl
+        ? [{ image: logoDataUrl, width: 80, absolutePosition: { x: 40, y: 40 } }]
+        : []),
       ...header(),
 
       divider,
