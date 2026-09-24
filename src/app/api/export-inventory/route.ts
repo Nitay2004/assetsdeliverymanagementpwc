@@ -35,7 +35,6 @@ const itemColumns: { label: string; field: string }[] = [
 
   // Laptop Info
   { label: "Laptop Make", field: "laptopMake" },
-  { label: "Laptop Model", field: "laptopModel" },
   { label: "Invoice Product Description", field: "invoiceProductDescription" },
   { label: "Description", field: "description" },
   { label: "Warranty Period", field: "warrantyPeriod" },
