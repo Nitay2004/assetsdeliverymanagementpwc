@@ -16,8 +16,6 @@ const BACKGROUND_PHOTOS = [
 
 export default function LoginPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [nextIndex, setNextIndex] = useState<number | null>(null);
-  const [fading, setFading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   // Randomize starting image only on client after hydration
@@ -29,40 +27,19 @@ export default function LoginPage() {
   useEffect(() => {
     if (!mounted) return;
     const interval = setInterval(() => {
-      const next = (currentIndex + 1) % BACKGROUND_PHOTOS.length;
-      setNextIndex(next);
-      setFading(true);
-
-      setTimeout(() => {
-        setCurrentIndex(next);
-        setNextIndex(null);
-        setFading(false);
-      }, 1000); // crossfade duration
+      setCurrentIndex((i) => (i + 1) % BACKGROUND_PHOTOS.length);
     }, 6000); // change every 6 seconds
 
     return () => clearInterval(interval);
-  }, [currentIndex, mounted]);
+  }, [mounted]);
 
   return (
     <div className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden">
-      {/* Current background */}
+      {/* Background */}
       <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000"
-        style={{
-          backgroundImage: `url(${BACKGROUND_PHOTOS[currentIndex]})`,
-          opacity: fading ? 0 : 1,
-        }}
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${BACKGROUND_PHOTOS[currentIndex]})` }}
       />
-
-      {/* Next background (fades in underneath) */}
-      {nextIndex !== null && (
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{
-            backgroundImage: `url(${BACKGROUND_PHOTOS[nextIndex]})`,
-          }}
-        />
-      )}
 
       {/* Dark overlay for readability */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px]" />
