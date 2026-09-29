@@ -3,6 +3,11 @@ import { prisma } from "./prisma";
 import crypto from "crypto";
 
 const SESSION_COOKIE_NAME = "devit_session";
+// Short-lived signed cookie that marks "password already checked, waiting on the
+// second factor". It never authorises anything on its own — only carries a user
+// id to the TOTP verification step, and expires in 5 minutes.
+const TWO_FACTOR_PENDING_COOKIE_NAME = "devit_2fa_pending";
+const TWO_FACTOR_PENDING_TTL_MS = 5 * 60 * 1000;
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes of inactivity
 const ABSOLUTE_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8 hours absolute maximum
 // Only touch the DB to slide the expiry when the session is within this much
@@ -112,4 +117,62 @@ export async function requireAuth(): Promise<NonNullable<Awaited<ReturnType<type
   const user = await getSession();
   if (!user) throw new Error("Unauthorized");
   return user;
+}
+
+function twoFactorPendingKey(): Buffer {
+  return crypto
+    .createHash("sha256")
+    .update(`devit-2fa-pending:${process.env.TWO_FACTOR_ENCRYPTION_KEY ?? ""}`)
+    .digest();
+}
+
+function signTwoFactorPending(payload: string): string {
+  return crypto.createHmac("sha256", twoFactorPendingKey()).update(payload).digest("base64url");
+}
+
+export async function setPendingTwoFactor(userId: string) {
+  const expiresAt = Date.now() + TWO_FACTOR_PENDING_TTL_MS;
+  const payload = `${userId}.${expiresAt}`;
+  const cookieStore = await cookies();
+  cookieStore.set(
+    TWO_FACTOR_PENDING_COOKIE_NAME,
+    `${payload}.${signTwoFactorPending(payload)}`,
+    {
+      httpOnly: true,
+      secure: SECURE_COOKIE,
+      sameSite: "lax",
+      maxAge: TWO_FACTOR_PENDING_TTL_MS / 1000,
+      path: "/",
+    }
+  );
+}
+
+// Returns the user id awaiting a second factor, or null when the cookie is
+// missing, tampered with, or expired.
+export async function getPendingTwoFactor(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(TWO_FACTOR_PENDING_COOKIE_NAME)?.value;
+  if (!raw) return null;
+
+  const separator = raw.lastIndexOf(".");
+  if (separator <= 0) return null;
+
+  const payload = raw.slice(0, separator);
+  const signature = raw.slice(separator + 1);
+  const expected = Buffer.from(signTwoFactorPending(payload));
+  const provided = Buffer.from(signature);
+  if (expected.length !== provided.length || !crypto.timingSafeEqual(expected, provided)) {
+    return null;
+  }
+
+  const [userId, expiresAt] = payload.split(".");
+  if (!userId || !expiresAt) return null;
+  if (!/^\d+$/.test(expiresAt) || Number(expiresAt) < Date.now()) return null;
+
+  return userId;
+}
+
+export async function clearPendingTwoFactor() {
+  const cookieStore = await cookies();
+  cookieStore.delete(TWO_FACTOR_PENDING_COOKIE_NAME);
 }

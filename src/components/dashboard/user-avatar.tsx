@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { LogOut, ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { LogOut, ChevronDown, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface UserAvatarProps {
@@ -107,6 +108,15 @@ export function UserAvatar({ user, logoutAction }: UserAvatarProps) {
           </div>
 
           <div className="my-1 border-t" />
+
+          <Link
+            href="/dashboard/security"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ShieldCheck className="size-4" />
+            Security
+          </Link>
 
           <form action={logoutAction}>
             <button

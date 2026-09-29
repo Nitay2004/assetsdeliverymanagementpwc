@@ -117,7 +117,12 @@ const routePrefixToModule: [string, ModuleId][] = [
   ["/dashboard", "inventory"],
 ];
 
+// Account-level pages that live under /dashboard but are not part of any
+// module, so they must never be caught by the /dashboard prefix mapping below.
+const ACCOUNT_ROUTES = new Set(["/dashboard/security", "/dashboard/profile"]);
+
 export function resolveModuleFromPath(pathname: string): ModuleId | null {
+  if (ACCOUNT_ROUTES.has(pathname)) return null;
   for (const [prefix, moduleId] of routePrefixToModule) {
     if (pathname === prefix || pathname.startsWith(prefix + "/")) {
       return moduleId;
