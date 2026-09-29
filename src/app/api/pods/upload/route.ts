@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { saveFile, podFileUrl, POD_BUCKET } from "@/lib/storage";
 import { getSession } from "@/lib/auth";
 import { canViewModule } from "@/lib/permissions";
+import { calculateSlaStatus } from "@/lib/sla-utils";
 import { timingSafeEqual } from "crypto";
 
 const ALLOWED_EXT = ["pdf", "jpg", "jpeg", "png"];
@@ -131,6 +132,7 @@ export async function POST(req: NextRequest) {
           where: { id: { in: itemIds } },
           select: {
             id: true,
+            expectedDeliveryDate: true,
             outwardDate1: true,
             outwardDate2: true,
             outwardDate3: true,
@@ -152,7 +154,11 @@ export async function POST(req: NextRequest) {
           else if (!item.outwardDate6) dateToSet.outwardDate6 = now;
           await prisma.inventoryItem.update({
             where: { id: item.id },
-            data: { trackingStatus: trackingStatusMap["DELIVERED"], ...dateToSet },
+            data: {
+              trackingStatus: trackingStatusMap["DELIVERED"],
+              ...dateToSet,
+              slaStatus: calculateSlaStatus(dateToSet.actualDeliveryDate, item.expectedDeliveryDate),
+            },
           });
         }
         delivered.push({ orderId, items: itemIds.length });

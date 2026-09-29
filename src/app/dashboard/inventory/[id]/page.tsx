@@ -18,6 +18,7 @@ export default async function EditInventoryPage(props: { params: Promise<{ id: s
     ...item,
     requestDate: safeISO(item.requestDate),
     slaStartDate: safeISO(item.slaStartDate),
+    expectedDeliveryDate: safeISO(item.expectedDeliveryDate),
     actualDeliveryDate: safeISO(item.actualDeliveryDate),
     laptopAcceptanceDate: safeISO(item.laptopAcceptanceDate),
     warrantyEndPeriod: safeISO(item.warrantyEndPeriod),

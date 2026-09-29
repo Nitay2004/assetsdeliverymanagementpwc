@@ -12,6 +12,7 @@ import { PincodeInput } from "@/components/shared/pincode-input";
 import { useRouter } from "next/navigation";
 import { calculateCutoff } from "@/lib/cutoff-utils";
 import { calculateZone, calculateTier, calculateTatDays, calculateExpectedDeliveryDate } from "@/lib/location-utils";
+import { calculateSlaStatus } from "@/lib/sla-utils";
 
 interface Props {
   open: boolean;
@@ -177,6 +178,17 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
     if (!expectedField) return;
     const expected = calculateExpectedDeliveryDate(slaField?.value, tatDays);
     expectedField.value = expected ?? "";
+    setSlaStatusFromDates();
+  }
+
+  function setSlaStatusFromDates() {
+    const form = formRef.current;
+    if (!form) return;
+    const actualField = form.elements.namedItem("actualDeliveryDate") as HTMLInputElement | null;
+    const expectedField = form.elements.namedItem("expectedDeliveryDate") as HTMLInputElement | null;
+    const slaField = form.elements.namedItem("slaStatus") as HTMLInputElement | null;
+    if (!slaField) return;
+    slaField.value = calculateSlaStatus(actualField?.value ?? null, expectedField?.value ?? null);
   }
 
   function setDerivedLocationFields(city: string, state: string, odaLocation: string) {
@@ -645,11 +657,11 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground block mb-1">Expected Delivery Date</label>
-                    <input name="expectedDeliveryDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                    <input name="expectedDeliveryDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" onChange={() => setSlaStatusFromDates()} />
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground block mb-1">Actual Delivery Date</label>
-                    <input name="actualDeliveryDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                    <input name="actualDeliveryDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" onChange={() => setSlaStatusFromDates()} />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 mb-2">
@@ -666,7 +678,7 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
                   <input name="deliveryTatDays" placeholder="Delivery TAT (Days)" type="number" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <input name="slaStatus" placeholder="SLA Missed/Met" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                  <input name="slaStatus" placeholder="SLA Missed/Met" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
                   <div>
                     <label className="text-xs text-muted-foreground block mb-1">Acceptance Date</label>
                     <input name="laptopAcceptanceDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />

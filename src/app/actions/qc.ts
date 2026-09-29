@@ -6,6 +6,7 @@ import { requirePermission, canModuleAction } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { hasPriorDelivery, createAssignmentOrder } from "@/app/actions/assignment";
 import { calculateExpectedDeliveryDate, normalizeOdaLocation } from "@/lib/location-utils";
+import { calculateSlaStatus } from "@/lib/sla-utils";
 
 function requireQcWorkPermission(
   user: { permissions: unknown; role: string } | null
@@ -120,7 +121,7 @@ export async function sendToQc(id: string, formData: FormData) {
     parseDate(formData.get("expectedDeliveryDate") as string) ??
     parseDate(calculateExpectedDeliveryDate(slaStartDate, deliveryTatDays));
   const actualDeliveryDate = parseDate(formData.get("actualDeliveryDate") as string);
-  const slaStatus = (formData.get("slaStatus") as string) || null;
+  const slaStatus = calculateSlaStatus(actualDeliveryDate, expectedDeliveryDate);
   const laptopAcceptanceDate = parseDate(formData.get("laptopAcceptanceDate") as string);
   const adaptorAdded = (formData.get("adaptorAdded") as string) || null;
   const accessoryHeadsetMouse = (formData.get("accessoryHeadsetMouse") as string) || null;

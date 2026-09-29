@@ -9,6 +9,7 @@ import { fields, toFieldName } from "@/lib/inventory-form-config";
 import { useDropdownData, SmartDropdownField } from "@/components/inventory/manageable-dropdown";
 import { PincodeInput } from "@/components/shared/pincode-input";
 import { normalizeOdaLocation } from "@/lib/location-utils";
+import { calculateSlaStatus } from "@/lib/sla-utils";
 import { getProductsForDropdown, getProductByPartNo } from "@/app/actions/product-master";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
@@ -50,6 +51,7 @@ interface Item {
   odaLocation: string | null;
   tat: string | null;
   deliveryTatDays: number | null;
+  expectedDeliveryDate: string | null;
   actualDeliveryDate: string | null;
   slaStatus: string | null;
   laptopAcceptanceDate: string | null;
@@ -150,6 +152,17 @@ export function EditInventoryForm({ item }: { item: Item }) {
     return type;
   }
 
+  /** SLA Missed/Met is derived from the two dates, never typed. */
+  function handleFormFieldChange(e: React.FormEvent<HTMLFormElement>) {
+    const target = e.target as HTMLInputElement;
+    if (target.name !== "actualDeliveryDate" && target.name !== "expectedDeliveryDate") return;
+    const form = e.currentTarget;
+    const actual = (form.elements.namedItem("actualDeliveryDate") as HTMLInputElement | null)?.value ?? "";
+    const expected = (form.elements.namedItem("expectedDeliveryDate") as HTMLInputElement | null)?.value ?? "";
+    const sla = form.elements.namedItem("slaStatus") as HTMLInputElement | null;
+    if (sla) sla.value = calculateSlaStatus(actual, expected);
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -186,7 +199,7 @@ export function EditInventoryForm({ item }: { item: Item }) {
         </div>
       </div>
 
-      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit} onChange={handleFormFieldChange} className="space-y-4">
         {Object.entries(fields).map(([section, sectionFields]) => (
           <div key={section} className="rounded-xl glass shadow-sm">
             <button
@@ -274,6 +287,26 @@ export function EditInventoryForm({ item }: { item: Item }) {
                           <option value="">Select Model</option>
                           {filteredModels.map(p => <option key={p.id} value={p.model}>{p.model}</option>)}
                         </select>
+                      </div>
+                    );
+                  }
+
+                  if (fieldName === "slaStatus") {
+                    return (
+                      <div key={f.label} className="space-y-1.5">
+                        <label htmlFor={fieldName} className="text-xs font-medium text-foreground">
+                          {f.label}
+                        </label>
+                        <input
+                          id={fieldName}
+                          name={fieldName}
+                          defaultValue={calculateSlaStatus(
+                            String(getValue("actualDeliveryDate") ?? ""),
+                            String(getValue("expectedDeliveryDate") ?? "")
+                          )}
+                          readOnly
+                          className="flex h-9 w-full cursor-not-allowed rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
                       </div>
                     );
                   }

@@ -11,6 +11,7 @@ import { PincodeInput } from "@/components/shared/pincode-input";
 import { useRouter } from "next/navigation";
 import { calculateCutoff } from "@/lib/cutoff-utils";
 import { calculateExpectedDeliveryDate } from "@/lib/location-utils";
+import { calculateSlaStatus } from "@/lib/sla-utils";
 
 interface Props {
   open: boolean;
@@ -57,6 +58,16 @@ export function SendToQcModal({ open, onClose, item }: Props) {
     if (!expectedField) return;
     const expected = calculateExpectedDeliveryDate(sla, rawTat ? parseInt(rawTat, 10) : null);
     expectedField.value = expected ?? "";
+    fillSlaStatus(form);
+  }
+
+  /** SLA Missed/Met is derived from the two dates, never typed. */
+  function fillSlaStatus(form: HTMLFormElement) {
+    const actualField = form.querySelector<HTMLInputElement>('input[name="actualDeliveryDate"]');
+    const expectedField = form.querySelector<HTMLInputElement>('input[name="expectedDeliveryDate"]');
+    const slaField = form.querySelector<HTMLInputElement>('input[name="slaStatus"]');
+    if (!slaField) return;
+    slaField.value = calculateSlaStatus(actualField?.value ?? null, expectedField?.value ?? null);
   }
 
   function handleTimelineChange(e: React.FormEvent<HTMLFormElement>) {
@@ -205,11 +216,11 @@ export function SendToQcModal({ open, onClose, item }: Props) {
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">Expected Delivery Date</label>
-                  <input name="expectedDeliveryDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                  <input name="expectedDeliveryDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" onChange={(e) => fillSlaStatus(e.currentTarget.closest("form")!)} />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">Actual Delivery Date</label>
-                  <input name="actualDeliveryDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                  <input name="actualDeliveryDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" onChange={(e) => fillSlaStatus(e.currentTarget.closest("form")!)} />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2 mb-2">
@@ -226,7 +237,7 @@ export function SendToQcModal({ open, onClose, item }: Props) {
                 <input name="deliveryTatDays" placeholder="Delivery TAT (Days)" type="number" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <input name="slaStatus" placeholder="SLA Missed/Met" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                <input name="slaStatus" placeholder="SLA Missed/Met" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">Acceptance Date</label>
                   <input name="laptopAcceptanceDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />

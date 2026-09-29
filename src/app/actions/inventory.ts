@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
 import { hasPriorDelivery, createAssignmentOrder } from "@/app/actions/assignment";
 import { calculateZone, calculateTier, calculateTatDays, calculateExpectedDeliveryDate, normalizeOdaLocation } from "@/lib/location-utils";
+import { calculateSlaStatus } from "@/lib/sla-utils";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -19,6 +20,22 @@ function parseIntValue(value: string | null): number | null {
   if (!value) return null;
   const n = parseInt(value, 10);
   return isNaN(n) ? null : n;
+}
+
+/** Derives Expected Delivery Date and SLA Missed/Met from the two dates. */
+function resolveSla(formData: FormData, existingExpected?: Date | null) {
+  const actualDeliveryDate = parseDate(formData.get("actualDeliveryDate") as string);
+  const slaStartDate = parseDate(formData.get("slaStartDate") as string);
+  const deliveryTatDays = parseIntValue(formData.get("deliveryTatDays") as string);
+  const expectedDeliveryDate =
+    parseDate(formData.get("expectedDeliveryDate") as string) ??
+    parseDate(calculateExpectedDeliveryDate(slaStartDate, deliveryTatDays)) ??
+    existingExpected ??
+    null;
+  return {
+    expectedDeliveryDate,
+    slaStatus: calculateSlaStatus(actualDeliveryDate, expectedDeliveryDate),
+  };
 }
 
 export async function addInventoryItem(formData: FormData) {
@@ -37,6 +54,7 @@ export async function addInventoryItem(formData: FormData) {
   const isDelivered = trackingValue.includes("delivered") || trackingValue.includes("confirmed") || trackingValue.includes("dispatched") || trackingValue.includes("invoiced") || trackingValue.includes("payment") || trackingValue.includes("warranty");
   const hasEmployee = !!(formData.get("employeeName") as string);
   const effectiveStatus = isDelivered || hasEmployee ? "ALLOCATED" : "NEW";
+  const slaFallback: Date | null = null;
 
   try {
     await prisma.inventoryItem.create({
@@ -76,8 +94,9 @@ export async function addInventoryItem(formData: FormData) {
         odaLocation: normalizeOdaLocation(formData.get("odaLocation") as string),
         tat: (formData.get("tat") as string) || null,
         deliveryTatDays: parseIntValue(formData.get("deliveryTatDays") as string),
+        expectedDeliveryDate: resolveSla(formData, slaFallback).expectedDeliveryDate,
         actualDeliveryDate: parseDate(formData.get("actualDeliveryDate") as string),
-        slaStatus: (formData.get("slaStatus") as string) || null,
+        slaStatus: resolveSla(formData, slaFallback).slaStatus,
         laptopAcceptanceDate: parseDate(formData.get("laptopAcceptanceDate") as string),
         invoicedQuantity: parseIntValue(formData.get("invoicedQuantity") as string),
         warrantyPeriod: (formData.get("warrantyPeriod") as string) || null,
@@ -137,11 +156,12 @@ export async function updateInventoryItem(id: string, formData: FormData) {
   const trackingValue = rawTrackingStatus?.toLowerCase() || "";
   const isDelivered = trackingValue.includes("delivered") || trackingValue.includes("confirmed") || trackingValue.includes("dispatched") || trackingValue.includes("invoiced") || trackingValue.includes("payment") || trackingValue.includes("warranty");
 
-  const current = await prisma.inventoryItem.findUnique({ where: { id }, select: { status: true } });
+  const current = await prisma.inventoryItem.findUnique({ where: { id }, select: { status: true, expectedDeliveryDate: true } });
   let effectiveStatus = current?.status;
   if (isDelivered && effectiveStatus === "AVAILABLE") {
     effectiveStatus = "ALLOCATED";
   }
+  const slaFallback = current?.expectedDeliveryDate ?? null;
 
   try {
     await prisma.inventoryItem.update({
@@ -181,8 +201,9 @@ export async function updateInventoryItem(id: string, formData: FormData) {
         odaLocation: normalizeOdaLocation(formData.get("odaLocation") as string),
         tat: (formData.get("tat") as string) || null,
         deliveryTatDays: parseIntValue(formData.get("deliveryTatDays") as string),
+        expectedDeliveryDate: resolveSla(formData, slaFallback).expectedDeliveryDate,
         actualDeliveryDate: parseDate(formData.get("actualDeliveryDate") as string),
-        slaStatus: (formData.get("slaStatus") as string) || null,
+        slaStatus: resolveSla(formData, slaFallback).slaStatus,
         laptopAcceptanceDate: parseDate(formData.get("laptopAcceptanceDate") as string),
         invoicedQuantity: parseIntValue(formData.get("invoicedQuantity") as string),
         warrantyPeriod: (formData.get("warrantyPeriod") as string) || null,
@@ -558,7 +579,7 @@ export async function reassignItem(id: string, formData: FormData) {
     parseDate(formData.get("expectedDeliveryDate") as string) ??
     parseDate(calculateExpectedDeliveryDate(slaStartDate, tatDays));
   const actualDeliveryDate = parseDate(formData.get("actualDeliveryDate") as string);
-  const slaStatus = (formData.get("slaStatus") as string) || null;
+  const slaStatus = calculateSlaStatus(actualDeliveryDate, expectedDeliveryDate);
   const laptopAcceptanceDate = parseDate(formData.get("laptopAcceptanceDate") as string);
   const adaptorAdded = (formData.get("adaptorAdded") as string) || null;
   const accessoryHeadsetMouse = (formData.get("accessoryHeadsetMouse") as string) || null;
@@ -661,6 +682,8 @@ export async function reassignItem(id: string, formData: FormData) {
     tat,
     deliveryTatDays,
     expectedDeliveryDate,
+    actualDeliveryDate,
+    slaStatus,
   };
 
   if (wasDelivered) {

@@ -49,6 +49,7 @@ export const fields: Record<string, { label: string; type: string; required?: bo
     { label: "ODA Location", type: "text" },
     { label: "TAT", type: "text" },
     { label: "Delivery TAT (Days)", type: "number" },
+    { label: "Expected Delivery Date", type: "date" },
     { label: "Actual Delivery Date", type: "date" },
     { label: "SLA Missed/Met", type: "text" },
     { label: "Laptop Acceptance Date", type: "date" },

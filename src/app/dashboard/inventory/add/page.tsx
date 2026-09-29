@@ -11,6 +11,7 @@ import { PincodeInput } from "@/components/shared/pincode-input";
 import { getProductsForDropdown, getProductByPartNo } from "@/app/actions/product-master";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
+import { calculateSlaStatus } from "@/lib/sla-utils";
 
 export default function AddInventoryPage() {
   const { toast } = useToast();
@@ -69,6 +70,17 @@ export default function AddInventoryPage() {
     }, 50);
   }
 
+  /** SLA Missed/Met is derived from the two dates, never typed. */
+  function handleFormFieldChange(e: React.FormEvent<HTMLFormElement>) {
+    const target = e.target as HTMLInputElement;
+    if (target.name !== "actualDeliveryDate" && target.name !== "expectedDeliveryDate") return;
+    const form = e.currentTarget;
+    const actual = (form.elements.namedItem("actualDeliveryDate") as HTMLInputElement | null)?.value ?? "";
+    const expected = (form.elements.namedItem("expectedDeliveryDate") as HTMLInputElement | null)?.value ?? "";
+    const sla = form.elements.namedItem("slaStatus") as HTMLInputElement | null;
+    if (sla) sla.value = calculateSlaStatus(actual, expected);
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -113,7 +125,7 @@ export default function AddInventoryPage() {
         </div>
       </div>
 
-      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit} onChange={handleFormFieldChange} className="space-y-4">
         {Object.entries(fields).map(([section, sectionFields]) => (
           <div key={section} className="rounded-xl glass shadow-sm">
             <button
@@ -217,6 +229,23 @@ export default function AddInventoryPage() {
                           <option value="">Select Model</option>
                           {filteredModels.map(p => <option key={p.id} value={p.model}>{p.model}</option>)}
                         </select>
+                      </div>
+                    );
+                  }
+
+                  if (fieldName === "slaStatus") {
+                    return (
+                      <div key={f.label} className="space-y-1.5">
+                        <label htmlFor={fieldName} className="text-xs font-medium text-foreground">
+                          {f.label}
+                        </label>
+                        <input
+                          id={fieldName}
+                          name={fieldName}
+                          defaultValue={calculateSlaStatus("", "")}
+                          readOnly
+                          className="flex h-9 w-full cursor-not-allowed rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
                       </div>
                     );
                   }
