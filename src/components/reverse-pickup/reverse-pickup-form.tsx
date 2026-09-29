@@ -208,7 +208,7 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
         <h2 className="text-lg font-semibold text-foreground">User Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <ManualInput name="employeeName" label="Name of User" required colSpan value={employeeName} onChange={setEmployeeName} />
-          <ManualInput name="emailId" label="Email ID" type="email" placeholder="john@example.com" value={emailId} onChange={setEmailId} />
+          <ManualInput name="emailId" label="Email ID" type="text" placeholder="Email ID" value={emailId} onChange={setEmailId} />
           <ManualInput name="mobileNumber" label="User Contact Details" placeholder="+91 9876543210" value={mobileNumber} onChange={setMobileNumber} />
           <ManualInput name="contact" label="Contact" placeholder="Alternate contact" />
         </div>
