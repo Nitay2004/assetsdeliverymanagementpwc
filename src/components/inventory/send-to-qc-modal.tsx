@@ -114,7 +114,7 @@ export function SendToQcModal({ open, onClose, item }: Props) {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <input name="employeeName" placeholder="Employee Name" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-              <input name="emailId" type="email" placeholder="Email ID" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+              <input name="emailId" type="text" placeholder="Email ID" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <input name="mobileNumber" placeholder="Mobile Number" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
@@ -184,6 +184,10 @@ export function SendToQcModal({ open, onClose, item }: Props) {
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">SLA Start Date <span className="text-red-500">*</span></label>
                   <input name="slaStartDate" type="date" required readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">Expected Delivery Date</label>
+                  <input name="expectedDeliveryDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">Actual Delivery Date</label>

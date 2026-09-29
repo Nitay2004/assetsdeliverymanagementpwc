@@ -552,6 +552,7 @@ export async function reassignItem(id: string, formData: FormData) {
   const tatDays = calculateTatDays(city, state, odaLocation);
   const tat = tatDays === null ? null : String(tatDays);
   const deliveryTatDays = tatDays;
+  const expectedDeliveryDate = parseDate(formData.get("expectedDeliveryDate") as string);
   const actualDeliveryDate = parseDate(formData.get("actualDeliveryDate") as string);
   const slaStatus = (formData.get("slaStatus") as string) || null;
   const laptopAcceptanceDate = parseDate(formData.get("laptopAcceptanceDate") as string);
@@ -655,6 +656,7 @@ export async function reassignItem(id: string, formData: FormData) {
     tier,
     tat,
     deliveryTatDays,
+    expectedDeliveryDate,
   };
 
   if (wasDelivered) {

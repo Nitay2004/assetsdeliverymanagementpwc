@@ -114,6 +114,7 @@ export async function sendToQc(id: string, formData: FormData) {
   const odaLocation = (formData.get("odaLocation") as string) || null;
   const tat = (formData.get("tat") as string) || null;
   const deliveryTatDays = parseIntValue(formData.get("deliveryTatDays") as string);
+  const expectedDeliveryDate = parseDate(formData.get("expectedDeliveryDate") as string);
   const actualDeliveryDate = parseDate(formData.get("actualDeliveryDate") as string);
   const slaStatus = (formData.get("slaStatus") as string) || null;
   const laptopAcceptanceDate = parseDate(formData.get("laptopAcceptanceDate") as string);
@@ -214,6 +215,7 @@ export async function sendToQc(id: string, formData: FormData) {
       odaLocation,
       tat,
       deliveryTatDays,
+      expectedDeliveryDate,
       actualDeliveryDate,
       slaStatus,
       laptopAcceptanceDate,

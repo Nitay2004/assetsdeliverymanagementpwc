@@ -41,6 +41,7 @@ const columns: { label: string; field: string }[] = [
   { label: "ODA Location", field: "odaLocation" },
   { label: "TAT", field: "tat" },
   { label: "Delivery TAT Days", field: "deliveryTatDays" },
+  { label: "Expected Delivery Date", field: "expectedDeliveryDate" },
   { label: "Actual Delivery Date", field: "actualDeliveryDate" },
   { label: "SLA Status", field: "slaStatus" },
   { label: "Laptop Acceptance Date", field: "laptopAcceptanceDate" },

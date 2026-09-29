@@ -52,6 +52,7 @@ interface AssignedItem {
   odaLocation: string | null;
   tat: string | null;
   deliveryTatDays: number | null;
+  expectedDeliveryDate: string | null;
   actualDeliveryDate: string | null;
   slaStatus: string | null;
   laptopAcceptanceDate: string | null;
@@ -211,6 +212,7 @@ export function AssignedAssetsTable({
                 selected={Array.from(filters["location"] ?? [])}
                 onApply={(v) => applyColumn("location", v)}
               />
+              <th className="px-4 py-4 font-semibold text-muted-foreground">Expected Delivery</th>
               <th className="px-4 py-4 font-semibold text-right">Actions</th>
             </tr>
           </thead>
@@ -218,7 +220,7 @@ export function AssignedAssetsTable({
             {displayItems.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-6 py-8 text-center text-muted-foreground"
                 >
                   {items.length === 0 ? "No allocated assets found." : "No assets match the selected filters."}
@@ -266,6 +268,11 @@ export function AssignedAssetsTable({
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-muted-foreground">
                       {location || "—"}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-muted-foreground">
+                      {item.expectedDeliveryDate
+                        ? new Date(item.expectedDeliveryDate).toLocaleDateString("en-IN")
+                        : "—"}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>

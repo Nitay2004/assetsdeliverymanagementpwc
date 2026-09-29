@@ -239,6 +239,7 @@ export default async function AssignedAssetsPage(props: {
               ...i,
               requestDate: safeISO(i.requestDate),
               slaStartDate: safeISO(i.slaStartDate),
+              expectedDeliveryDate: safeISO(i.expectedDeliveryDate),
               actualDeliveryDate: safeISO(i.actualDeliveryDate),
               laptopAcceptanceDate: safeISO(i.laptopAcceptanceDate),
               warrantyEndPeriod: safeISO(i.warrantyEndPeriod),

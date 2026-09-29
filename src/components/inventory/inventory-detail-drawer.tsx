@@ -49,6 +49,7 @@ interface InventoryItem {
   odaLocation: string | null;
   tat: string | null;
   deliveryTatDays: number | null;
+  expectedDeliveryDate: string | null;
   actualDeliveryDate: string | null;
   slaStatus: string | null;
   laptopAcceptanceDate: string | null;
@@ -607,6 +608,10 @@ export function InventoryDetailDrawer({
                       <div>
                         <label className="text-xs text-muted-foreground block mb-1">SLA Start Date <span className="text-red-500">*</span></label>
                         <input name="slaStartDate" type="date" required readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground block mb-1">Expected Delivery Date</label>
+                        <input name="expectedDeliveryDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
                       </div>
                       <div>
                         <label className="text-xs text-muted-foreground block mb-1">Actual Delivery Date</label>

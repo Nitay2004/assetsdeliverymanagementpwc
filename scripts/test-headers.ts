@@ -52,6 +52,7 @@ const fieldKeywords: [string, string[]][] = [
   ["tier",              ["tier", "level", "service tier"]],
   ["tat",               ["tat", "turn around", "turnaround"]],
   ["deliveryTatDays",   ["tat days", "delivery tat", "tat in days", "delivery tat in days"]],
+  ["expectedDeliveryDate", ["expected delivery", "exp delivery", "expected delivery date"]],
   ["vendor",            ["vendor", "courier", "courier name", "service provider", "logistics partner", "carrier", "transporter"]],
   ["docketNumber",      ["docket", "docket number", "docket no", "tracking number", "docket #", "docket no.", "awb", "awb number", "consignment"]],
   ["dcNumber",          ["dc number", "dc no", "dc #", "delivery challan", "delivey challan", "challan number", "challan no", "challan"]],

@@ -252,6 +252,7 @@ model InventoryItem {
   // ── Assignment file fields (remote/office assignments) ──
   reqDateToDevIt        DateTime?         @map("req_date_to_dev_it") @db.Date
   deliveryTatDate       DateTime?         @map("delivery_tat_date") @db.Date
+  expectedDeliveryDate  DateTime?         @map("expected_delivery_date") @db.Date
   ewayBill              String?           @map("eway_bill")
   docketDate            DateTime?         @map("docket_date") @db.Date
   fromWarehouseLocation String?           @map("from_warehouse_location")

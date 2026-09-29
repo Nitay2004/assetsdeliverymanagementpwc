@@ -64,6 +64,7 @@ interface InventoryItem {
   odaLocation: string | null;
   tat: string | null;
   deliveryTatDays: number | null;
+  expectedDeliveryDate: string | null;
   actualDeliveryDate: string | null;
   slaStatus: string | null;
   laptopAcceptanceDate: string | null;
@@ -297,13 +298,14 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                 selected={Array.from(filters["trackingStatus"] ?? [])}
                 onApply={(v) => applyColumn("trackingStatus", v)}
               />
+              <th className="px-4 py-4 font-semibold text-muted-foreground">Expected Delivery</th>
               <th className="px-4 py-4 font-semibold text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">
+                <td colSpan={9} className="px-6 py-8 text-center text-muted-foreground">
                   No inventory found.
                 </td>
               </tr>
@@ -348,6 +350,9 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                     {item.invoicingWarehouse || "—"}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">{item.employeeName || "—"}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-muted-foreground">
+                    {item.expectedDeliveryDate ? new Date(item.expectedDeliveryDate).toLocaleDateString("en-IN") : "—"}
+                  </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     {item.trackingStatus ? (
                       <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
