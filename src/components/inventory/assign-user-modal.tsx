@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X, Search, Loader2, UserPlus, Users, Check } from "lucide-react";
 import { DataTableFilter, filterRows } from "@/components/shared/data-table-filter";
@@ -11,6 +11,7 @@ import { ManageableDropdown, useDropdownData } from "@/components/inventory/mana
 import { PincodeInput } from "@/components/shared/pincode-input";
 import { useRouter } from "next/navigation";
 import { calculateCutoff } from "@/lib/cutoff-utils";
+import { calculateZone, calculateTier, calculateTatDays } from "@/lib/location-utils";
 
 interface Props {
   open: boolean;
@@ -37,6 +38,7 @@ const FILTER_COLUMNS = [
 export function AssignUserModal({ open, onClose, mode }: Props) {
   const { toast } = useToast();
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [activeMode, setActiveMode] = useState<"single" | "multiple">(mode);
 
   // Single assign state
@@ -165,6 +167,37 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
     setCurrentStepIndex(0);
     setFormItem(items[0]);
     setShowForm(true);
+  }
+
+  function setDerivedLocationFields(city: string, state: string, odaLocation: string) {
+    const form = formRef.current;
+    if (!form) return;
+    const zoneField = form.elements.namedItem("zone") as HTMLInputElement | null;
+    if (zoneField) zoneField.value = calculateZone(city, state) ?? "";
+    const tierField = form.elements.namedItem("tier") as HTMLInputElement | null;
+    if (tierField) tierField.value = calculateTier(city, state) ?? "";
+    const tatDays = calculateTatDays(city, state, odaLocation);
+    const tatValue = tatDays === null ? "" : String(tatDays);
+    const tatField = form.elements.namedItem("tat") as HTMLInputElement | null;
+    if (tatField) tatField.value = tatValue;
+    const deliveryTatField = form.elements.namedItem("deliveryTatDays") as HTMLInputElement | null;
+    if (deliveryTatField) deliveryTatField.value = tatValue;
+  }
+
+  function handlePincodeLocation(city: string, state: string) {
+    const form = formRef.current;
+    const odaLocation = (form?.elements.namedItem("odaLocation") as HTMLInputElement | null)?.value ?? "";
+    setDerivedLocationFields(city, state, odaLocation);
+  }
+
+  function handleLocationChange(e: React.FormEvent<HTMLFormElement>) {
+    const target = e.target as HTMLInputElement;
+    if (target.name !== "city" && target.name !== "state" && target.name !== "odaLocation") return;
+    const form = e.currentTarget;
+    const city = (form.elements.namedItem("city") as HTMLInputElement | null)?.value ?? "";
+    const state = (form.elements.namedItem("state") as HTMLInputElement | null)?.value ?? "";
+    const odaLocation = (form.elements.namedItem("odaLocation") as HTMLInputElement | null)?.value ?? "";
+    setDerivedLocationFields(city, state, odaLocation);
   }
 
   async function handleFormSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -478,7 +511,7 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
             )
           ) : (
             /* ─── Assignment Form ─── */
-            <form key={activeMode === "multiple" ? `step-${currentStepIndex}-${formItem?.id}` : "single"} onSubmit={handleFormSubmit} className="space-y-4">
+            <form ref={formRef} key={activeMode === "multiple" ? `step-${currentStepIndex}-${formItem?.id}` : "single"} onSubmit={handleFormSubmit} onChange={handleLocationChange} className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium">
                   Assigning: <span className="text-primary">{formItem?.serialNumber}</span>
@@ -526,7 +559,7 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <input name="employeeName" placeholder="Employee Name" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-                <input name="emailId" type="email" placeholder="Email ID" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                <input name="emailId" type="text" placeholder="Email ID" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <input name="mobileNumber" placeholder="Mobile Number" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
@@ -535,7 +568,7 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
 
               <input name="shippingAddress" placeholder="Shipping Address" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
 
-              <PincodeInput />
+              <PincodeInput onLocationChange={handlePincodeLocation} />
 
               <div className="grid grid-cols-2 gap-2">
                 <ManageableDropdown
@@ -604,13 +637,13 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
                 </div>
                 <div className="grid grid-cols-3 gap-2 mb-2">
                   <input name="slaState" placeholder="State (SLA)" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-                  <input name="zone" placeholder="Zone" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-                  <input name="tier" placeholder="Tier" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                  <input name="zone" placeholder="Zone" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
+                  <input name="tier" placeholder="Tier" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
                 </div>
                 <div className="grid grid-cols-3 gap-2 mb-2">
                   <input name="odaLocation" placeholder="ODA Location" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-                  <input name="tat" placeholder="TAT" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-                  <input name="deliveryTatDays" placeholder="Delivery TAT (Days)" type="number" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                  <input name="tat" placeholder="TAT" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
+                  <input name="deliveryTatDays" placeholder="Delivery TAT (Days)" type="number" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <input name="slaStatus" placeholder="SLA Missed/Met" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />

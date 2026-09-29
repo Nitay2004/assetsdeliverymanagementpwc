@@ -10,6 +10,7 @@ interface PincodeInputProps {
   defaultCity?: string;
   defaultState?: string;
   required?: boolean;
+  onLocationChange?: (city: string, state: string) => void;
 }
 
 export function PincodeInput({
@@ -20,6 +21,7 @@ export function PincodeInput({
   defaultCity = "",
   defaultState = "",
   required,
+  onLocationChange,
 }: PincodeInputProps) {
   const [pincode, setPincode] = useState(defaultPincode);
   const [city, setCity] = useState(defaultCity);
@@ -27,21 +29,35 @@ export function PincodeInput({
   const [loading, setLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchPincode = useCallback(async (code: string) => {
-    if (!/^\d{6}$/.test(code)) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/pincode/${code}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.city) setCity(data.city);
-      if (data.state) setState(data.state);
-    } catch {
-      // silent
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const notify = useCallback(
+    (nextCity: string, nextState: string) => {
+      onLocationChange?.(nextCity, nextState);
+    },
+    [onLocationChange]
+  );
+
+  const fetchPincode = useCallback(
+    async (code: string) => {
+      if (!/^\d{6}$/.test(code)) return;
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/pincode/${code}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.city && !data.state) return;
+        const nextCity = data.city ?? "";
+        const nextState = data.state ?? "";
+        if (data.city) setCity(data.city);
+        if (data.state) setState(data.state);
+        notify(nextCity, nextState);
+      } catch {
+        // silent
+      } finally {
+        setLoading(false);
+      }
+    },
+    [notify]
+  );
 
   function handlePincodeChange(value: string) {
     const digits = value.replace(/\D/g, "").slice(0, 6);

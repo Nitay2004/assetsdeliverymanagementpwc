@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
 import { hasPriorDelivery, createAssignmentOrder } from "@/app/actions/assignment";
+import { calculateZone, calculateTier, calculateTatDays } from "@/lib/location-utils";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -545,11 +546,12 @@ export async function reassignItem(id: string, formData: FormData) {
   const cutOffStatus = (formData.get("cutOffStatus") as string) || null;
   const slaStartDate = parseDate(formData.get("slaStartDate") as string);
   const slaState = (formData.get("slaState") as string) || null;
-  const zone = (formData.get("zone") as string) || null;
-  const tier = (formData.get("tier") as string) || null;
+  const zone = calculateZone(city, state);
+  const tier = calculateTier(city, state);
   const odaLocation = (formData.get("odaLocation") as string) || null;
-  const tat = (formData.get("tat") as string) || null;
-  const deliveryTatDays = parseIntValue(formData.get("deliveryTatDays") as string);
+  const tatDays = calculateTatDays(city, state, odaLocation);
+  const tat = tatDays === null ? null : String(tatDays);
+  const deliveryTatDays = tatDays;
   const actualDeliveryDate = parseDate(formData.get("actualDeliveryDate") as string);
   const slaStatus = (formData.get("slaStatus") as string) || null;
   const laptopAcceptanceDate = parseDate(formData.get("laptopAcceptanceDate") as string);
@@ -649,6 +651,10 @@ export async function reassignItem(id: string, formData: FormData) {
     partner,
     sr,
     entity,
+    zone,
+    tier,
+    tat,
+    deliveryTatDays,
   };
 
   if (wasDelivered) {

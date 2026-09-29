@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Pencil, RotateCcw, ArrowRight, History, User, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,7 @@ import { returnItemToStock, reassignItem, cancelItemAssignment, getAssignmentHis
 import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
 import { PincodeInput } from "@/components/shared/pincode-input";
 import { calculateCutoff } from "@/lib/cutoff-utils";
+import { calculateZone, calculateTier, calculateTatDays } from "@/lib/location-utils";
 
 interface InventoryItem {
   id: string;
@@ -211,6 +212,7 @@ export function InventoryDetailDrawer({
 
   const [showReassign, setShowReassign] = useState(false);
   const [reassigning, setReassigning] = useState(false);
+  const reassignFormRef = useRef<HTMLFormElement>(null);
   const [records, setRecords] = useState<HistoryRecord[] | null>(null);
   const [displayItem, setDisplayItem] = useState(item);
   const [entities, setEntities] = useState<string[]>([]);
@@ -325,6 +327,37 @@ export function InventoryDetailDrawer({
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });
     }
+  }
+
+  function setDerivedLocationFields(city: string, state: string, odaLocation: string) {
+    const form = reassignFormRef.current;
+    if (!form) return;
+    const zoneField = form.elements.namedItem("zone") as HTMLInputElement | null;
+    if (zoneField) zoneField.value = calculateZone(city, state) ?? "";
+    const tierField = form.elements.namedItem("tier") as HTMLInputElement | null;
+    if (tierField) tierField.value = calculateTier(city, state) ?? "";
+    const tatDays = calculateTatDays(city, state, odaLocation);
+    const tatValue = tatDays === null ? "" : String(tatDays);
+    const tatField = form.elements.namedItem("tat") as HTMLInputElement | null;
+    if (tatField) tatField.value = tatValue;
+    const deliveryTatField = form.elements.namedItem("deliveryTatDays") as HTMLInputElement | null;
+    if (deliveryTatField) deliveryTatField.value = tatValue;
+  }
+
+  function handlePincodeLocation(city: string, state: string) {
+    const form = reassignFormRef.current;
+    const odaLocation = (form?.elements.namedItem("odaLocation") as HTMLInputElement | null)?.value ?? "";
+    setDerivedLocationFields(city, state, odaLocation);
+  }
+
+  function handleReassignLocationChange(e: React.FormEvent<HTMLFormElement>) {
+    const target = e.target as HTMLInputElement;
+    if (target.name !== "city" && target.name !== "state" && target.name !== "odaLocation") return;
+    const form = e.currentTarget;
+    const city = (form.elements.namedItem("city") as HTMLInputElement | null)?.value ?? "";
+    const state = (form.elements.namedItem("state") as HTMLInputElement | null)?.value ?? "";
+    const odaLocation = (form.elements.namedItem("odaLocation") as HTMLInputElement | null)?.value ?? "";
+    setDerivedLocationFields(city, state, odaLocation);
   }
 
   async function handleReassign(e: React.FormEvent<HTMLFormElement>) {
@@ -479,7 +512,7 @@ export function InventoryDetailDrawer({
               )}
 
               {showReassign && (
-                <form onSubmit={handleReassign} className="rounded-lg border p-4 space-y-3">
+                <form ref={reassignFormRef} onSubmit={handleReassign} onChange={handleReassignLocationChange} className="rounded-lg border p-4 space-y-3">
                   <p className="text-xs font-semibold text-muted-foreground">
                     New Assignment for {displayItem.serialNumber}
                   </p>
@@ -500,7 +533,7 @@ export function InventoryDetailDrawer({
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input name="employeeName" placeholder="Employee Name" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-                    <input name="emailId" type="email" placeholder="Email ID" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                    <input name="emailId" type="text" placeholder="Email ID" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input name="mobileNumber" placeholder="Mobile Number" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
@@ -509,7 +542,7 @@ export function InventoryDetailDrawer({
                   
                   <input name="shippingAddress" placeholder="Shipping Address" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
                   
-                  <PincodeInput />
+                  <PincodeInput onLocationChange={handlePincodeLocation} />
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
@@ -582,13 +615,13 @@ export function InventoryDetailDrawer({
                     </div>
                     <div className="grid grid-cols-3 gap-2 mb-2">
                       <input name="slaState" placeholder="State (SLA)" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-                      <input name="zone" placeholder="Zone" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-                      <input name="tier" placeholder="Tier" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                      <input name="zone" placeholder="Zone" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
+                      <input name="tier" placeholder="Tier" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
                     </div>
                     <div className="grid grid-cols-3 gap-2 mb-2">
                       <input name="odaLocation" placeholder="ODA Location" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-                      <input name="tat" placeholder="TAT" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-                      <input name="deliveryTatDays" placeholder="Delivery TAT (Days)" type="number" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                      <input name="tat" placeholder="TAT" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
+                      <input name="deliveryTatDays" placeholder="Delivery TAT (Days)" type="number" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <input name="slaStatus" placeholder="SLA Missed/Met" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
