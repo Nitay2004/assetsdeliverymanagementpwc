@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -149,11 +150,17 @@ export function Sidebar({ role, permissions }: { role: string | null; permission
       >
         <div className="relative flex items-center h-16 border-b border-sidebar-border">
           <div className="flex items-center gap-3 px-6 w-full">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow shrink-0">
-              <Package className="size-5" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 shadow shrink-0">
+              <Image
+                src="/devitlogo.png"
+                alt="DevIT"
+                width={28}
+                height={28}
+                className="size-6"
+              />
             </div>
             <span className="text-xl font-bold tracking-tight text-sidebar-foreground whitespace-nowrap">
-              Devit
+              DevIT
             </span>
           </div>
           <button
@@ -184,12 +191,18 @@ export function Sidebar({ role, permissions }: { role: string | null; permission
               collapsed ? "justify-center" : "px-6"
             )}
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow shrink-0">
-              <Package className="size-5" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white p-1 shadow shrink-0">
+              <Image
+                src="/devitlogo.png"
+                alt="DevIT"
+                width={28}
+                height={28}
+                className="size-6"
+              />
             </div>
             {!collapsed && (
               <span className="text-xl font-bold tracking-tight text-sidebar-foreground whitespace-nowrap">
-                Devit
+                DevIT
               </span>
             )}
           </div>

@@ -1,8 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import { useState, useEffect } from "react";
 import { LoginForm } from "@/components/login-form";
-import { Package } from "lucide-react";
 
 // Unsplash CDN background images
 const BACKGROUND_PHOTOS = [
@@ -47,15 +47,21 @@ export default function LoginPage() {
       {/* Content */}
       <div className="relative z-10 flex w-full max-w-sm flex-col gap-6 px-6 animate-fade-in-up">
         {/* Brand */}
-        <a
-          href="#"
-          className="flex items-center justify-center gap-2.5 font-semibold text-white"
-        >
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-black shadow-md">
-            <Package className="size-4" />
+        <div className="flex items-center justify-center gap-2.5">
+          <div className="flex size-9 items-center justify-center rounded-xl bg-white p-1 shadow-md">
+            <Image
+              src="/devitlogo.png"
+              alt="DevIT"
+              width={28}
+              height={28}
+              className="size-7"
+              priority
+            />
           </div>
-          <span className="text-lg tracking-tight">Devit</span>
-        </a>
+          <span className="text-lg font-semibold tracking-tight text-white">
+            DevIT
+          </span>
+        </div>
 
         {/* Login card */}
         <LoginForm />
