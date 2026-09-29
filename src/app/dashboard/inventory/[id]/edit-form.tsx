@@ -8,6 +8,7 @@ import { updateInventoryItem } from "@/app/actions/inventory";
 import { fields, toFieldName } from "@/lib/inventory-form-config";
 import { useDropdownData, SmartDropdownField } from "@/components/inventory/manageable-dropdown";
 import { PincodeInput } from "@/components/shared/pincode-input";
+import { normalizeOdaLocation } from "@/lib/location-utils";
 import { getProductsForDropdown, getProductByPartNo } from "@/app/actions/product-master";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
@@ -272,6 +273,25 @@ export function EditInventoryForm({ item }: { item: Item }) {
                         >
                           <option value="">Select Model</option>
                           {filteredModels.map(p => <option key={p.id} value={p.model}>{p.model}</option>)}
+                        </select>
+                      </div>
+                    );
+                  }
+
+                  if (fieldName === "odaLocation") {
+                    return (
+                      <div key={f.label} className="space-y-1.5">
+                        <label htmlFor={fieldName} className="text-xs font-medium text-foreground">
+                          {f.label}
+                        </label>
+                        <select
+                          id={fieldName}
+                          name={fieldName}
+                          defaultValue={normalizeOdaLocation(String(getValue(fieldName) ?? ""))}
+                          className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          <option value="No">No</option>
+                          <option value="Yes">Yes</option>
                         </select>
                       </div>
                     );

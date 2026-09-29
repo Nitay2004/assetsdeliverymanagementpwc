@@ -11,7 +11,7 @@ import { ManageableDropdown, useDropdownData } from "@/components/inventory/mana
 import { PincodeInput } from "@/components/shared/pincode-input";
 import { useRouter } from "next/navigation";
 import { calculateCutoff } from "@/lib/cutoff-utils";
-import { calculateZone, calculateTier, calculateTatDays } from "@/lib/location-utils";
+import { calculateZone, calculateTier, calculateTatDays, calculateExpectedDeliveryDate } from "@/lib/location-utils";
 
 interface Props {
   open: boolean;
@@ -169,6 +169,16 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
     setShowForm(true);
   }
 
+  function setExpectedDeliveryDateFromSla(tatDays: number | null) {
+    const form = formRef.current;
+    if (!form) return;
+    const slaField = form.elements.namedItem("slaStartDate") as HTMLInputElement | null;
+    const expectedField = form.elements.namedItem("expectedDeliveryDate") as HTMLInputElement | null;
+    if (!expectedField) return;
+    const expected = calculateExpectedDeliveryDate(slaField?.value, tatDays);
+    expectedField.value = expected ?? "";
+  }
+
   function setDerivedLocationFields(city: string, state: string, odaLocation: string) {
     const form = formRef.current;
     if (!form) return;
@@ -182,6 +192,7 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
     if (tatField) tatField.value = tatValue;
     const deliveryTatField = form.elements.namedItem("deliveryTatDays") as HTMLInputElement | null;
     if (deliveryTatField) deliveryTatField.value = tatValue;
+    setExpectedDeliveryDateFromSla(tatDays);
   }
 
   function handlePincodeLocation(city: string, state: string) {
@@ -622,6 +633,8 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
                     } else {
                       if (cutoffField) cutoffField.value = "";
                     }
+                    const tatField = form.querySelector<HTMLInputElement>('input[name="deliveryTatDays"]');
+                    setExpectedDeliveryDateFromSla(tatField?.value ? parseInt(tatField.value, 10) : null);
                   }} />
                   <input name="cutOffStatus" placeholder="Cut Off Status" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
                 </div>
@@ -645,7 +658,10 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
                   <input name="tier" placeholder="Tier" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
                 </div>
                 <div className="grid grid-cols-3 gap-2 mb-2">
-                  <input name="odaLocation" placeholder="ODA Location" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                  <select name="odaLocation" defaultValue="No" className="w-full rounded-lg border px-3 py-2 text-sm bg-background">
+                    <option value="No">ODA: No</option>
+                    <option value="Yes">ODA: Yes</option>
+                  </select>
                   <input name="tat" placeholder="TAT" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
                   <input name="deliveryTatDays" placeholder="Delivery TAT (Days)" type="number" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
                 </div>

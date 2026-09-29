@@ -5,6 +5,7 @@ import { getSession, requireAuth } from "@/lib/auth";
 import { requirePermission, canModuleAction } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { hasPriorDelivery, createAssignmentOrder } from "@/app/actions/assignment";
+import { calculateExpectedDeliveryDate, normalizeOdaLocation } from "@/lib/location-utils";
 
 function requireQcWorkPermission(
   user: { permissions: unknown; role: string } | null
@@ -111,10 +112,13 @@ export async function sendToQc(id: string, formData: FormData) {
   const slaState = (formData.get("slaState") as string) || null;
   const zone = (formData.get("zone") as string) || null;
   const tier = (formData.get("tier") as string) || null;
-  const odaLocation = (formData.get("odaLocation") as string) || null;
+  const odaLocation = normalizeOdaLocation(formData.get("odaLocation") as string);
   const tat = (formData.get("tat") as string) || null;
   const deliveryTatDays = parseIntValue(formData.get("deliveryTatDays") as string);
-  const expectedDeliveryDate = parseDate(formData.get("expectedDeliveryDate") as string);
+  // Falls back to SLA start date + TAT when the operator left it blank.
+  const expectedDeliveryDate =
+    parseDate(formData.get("expectedDeliveryDate") as string) ??
+    parseDate(calculateExpectedDeliveryDate(slaStartDate, deliveryTatDays));
   const actualDeliveryDate = parseDate(formData.get("actualDeliveryDate") as string);
   const slaStatus = (formData.get("slaStatus") as string) || null;
   const laptopAcceptanceDate = parseDate(formData.get("laptopAcceptanceDate") as string);

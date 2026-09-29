@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
 import { hasPriorDelivery, createAssignmentOrder } from "@/app/actions/assignment";
-import { calculateZone, calculateTier, calculateTatDays } from "@/lib/location-utils";
+import { calculateZone, calculateTier, calculateTatDays, calculateExpectedDeliveryDate, normalizeOdaLocation } from "@/lib/location-utils";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -73,7 +73,7 @@ export async function addInventoryItem(formData: FormData) {
         slaState: (formData.get("slaState") as string) || null,
         zone: (formData.get("zone") as string) || null,
         tier: (formData.get("tier") as string) || null,
-        odaLocation: (formData.get("odaLocation") as string) || null,
+        odaLocation: normalizeOdaLocation(formData.get("odaLocation") as string),
         tat: (formData.get("tat") as string) || null,
         deliveryTatDays: parseIntValue(formData.get("deliveryTatDays") as string),
         actualDeliveryDate: parseDate(formData.get("actualDeliveryDate") as string),
@@ -178,7 +178,7 @@ export async function updateInventoryItem(id: string, formData: FormData) {
         slaState: (formData.get("slaState") as string) || null,
         zone: (formData.get("zone") as string) || null,
         tier: (formData.get("tier") as string) || null,
-        odaLocation: (formData.get("odaLocation") as string) || null,
+        odaLocation: normalizeOdaLocation(formData.get("odaLocation") as string),
         tat: (formData.get("tat") as string) || null,
         deliveryTatDays: parseIntValue(formData.get("deliveryTatDays") as string),
         actualDeliveryDate: parseDate(formData.get("actualDeliveryDate") as string),
@@ -548,11 +548,15 @@ export async function reassignItem(id: string, formData: FormData) {
   const slaState = (formData.get("slaState") as string) || null;
   const zone = calculateZone(city, state);
   const tier = calculateTier(city, state);
-  const odaLocation = (formData.get("odaLocation") as string) || null;
+  const odaLocation = normalizeOdaLocation(formData.get("odaLocation") as string);
   const tatDays = calculateTatDays(city, state, odaLocation);
   const tat = tatDays === null ? null : String(tatDays);
   const deliveryTatDays = tatDays;
-  const expectedDeliveryDate = parseDate(formData.get("expectedDeliveryDate") as string);
+  // Falls back to SLA start date + TAT when the operator left it blank, so the
+  // promise date can never silently disagree with the tier it was derived from.
+  const expectedDeliveryDate =
+    parseDate(formData.get("expectedDeliveryDate") as string) ??
+    parseDate(calculateExpectedDeliveryDate(slaStartDate, tatDays));
   const actualDeliveryDate = parseDate(formData.get("actualDeliveryDate") as string);
   const slaStatus = (formData.get("slaStatus") as string) || null;
   const laptopAcceptanceDate = parseDate(formData.get("laptopAcceptanceDate") as string);

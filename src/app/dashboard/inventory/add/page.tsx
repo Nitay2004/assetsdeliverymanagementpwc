@@ -221,6 +221,25 @@ export default function AddInventoryPage() {
                     );
                   }
 
+                  if (fieldName === "odaLocation") {
+                    return (
+                      <div key={f.label} className="space-y-1.5">
+                        <label htmlFor={fieldName} className="text-xs font-medium text-foreground">
+                          {f.label}
+                        </label>
+                        <select
+                          id={fieldName}
+                          name={fieldName}
+                          defaultValue={"No"}
+                          className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          <option value="No">No</option>
+                          <option value="Yes">Yes</option>
+                        </select>
+                      </div>
+                    );
+                  }
+
                   const isDropdown = fieldName === "entity" || fieldName === "purpose" || fieldName === "imageType" || fieldName === "invoicingWarehouse";
 
                   return (

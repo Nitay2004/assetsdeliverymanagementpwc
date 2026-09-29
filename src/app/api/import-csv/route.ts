@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { parse } from "csv-parse/sync";
 import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
+import { normalizeOdaLocation } from "@/lib/location-utils";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
@@ -964,6 +965,13 @@ export async function POST(request: Request) {
     if (rows.length === 0) {
       errors.push(`${prefix}No valid data rows found.`);
       continue;
+    }
+
+    // Coerce the free-text ODA column to a strict Yes/No before it is written.
+    for (const row of rows) {
+      if (row.data.odaLocation !== undefined && row.data.odaLocation !== null) {
+        row.data.odaLocation = normalizeOdaLocation(String(row.data.odaLocation));
+      }
     }
 
     // ── PRODUCT MASTER ENRICHMENT ──

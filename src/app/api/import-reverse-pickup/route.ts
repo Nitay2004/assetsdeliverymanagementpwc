@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { parse } from "csv-parse/sync";
 import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
+import { normalizeOdaLocation } from "@/lib/location-utils";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
@@ -354,6 +355,10 @@ export async function POST(request: Request) {
     data.requestNumber = `RPU-${String(requestCounter).padStart(4, "0")}`;
     requestCounter++;
     data.status = "REQUESTED";
+
+    if (data.odaLocation !== undefined && data.odaLocation !== null) {
+      data.odaLocation = normalizeOdaLocation(String(data.odaLocation));
+    }
 
     rows.push({ data, rowNum: r + 2 });
   }

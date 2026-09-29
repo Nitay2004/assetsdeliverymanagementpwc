@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { normalizeOdaLocation } from "@/lib/location-utils";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -125,7 +126,7 @@ export async function createReversePickupRequest(formData: FormData) {
       slaState: (formData.get("slaState") as string) || null,
       zone1: (formData.get("zone1") as string) || null,
       tier1: (formData.get("tier1") as string) || null,
-      odaLocation: (formData.get("odaLocation") as string) || null,
+      odaLocation: normalizeOdaLocation(formData.get("odaLocation") as string),
       tat: (formData.get("tat") as string) || null,
       deliveryTat: (formData.get("deliveryTat") as string) || null,
       actualDeliveryPodDate: parseDate(formData.get("actualDeliveryPodDate") as string),

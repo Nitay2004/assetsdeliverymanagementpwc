@@ -35,19 +35,7 @@ const HOME_CITY_KEYWORDS = ["bengaluru", "bangalore"];
 const HOME_STATE_KEYWORDS = ["karnataka"];
 const METRO_CITY_KEYWORDS = ["hyderabad", "chennai", "mumbai", "delhi"];
 
-const NEGATIVE_ODA_KEYWORDS = [
-  "no",
-  "n",
-  "na",
-  "n a",
-  "none",
-  "nil",
-  "nope",
-  "not applicable",
-  "not oda",
-  "false",
-  "0",
-];
+const POSITIVE_ODA_KEYWORDS = ["yes", "y", "true", "1", "oda"];
 
 const TAT_DAYS_BY_TIER: Record<string, number> = {
   [TIER_CITY]: 3,
@@ -127,13 +115,91 @@ export function calculateTatDays(
 }
 
 /**
- * ODA is free text, so "No", "N", "NA", "None", "nil" and "0" all mean
- * "not an ODA location" and must not add the uplift.
+ * Expected delivery date = SLA start date + the delivery TAT, counted in
+ * business days. Saturday and Sunday never count, and a weekend SLA start
+ * rolls forward to the next business day before counting begins.
+ *
+ * The SLA start date is day zero, so a 3 day TAT starting Monday lands on
+ * Thursday. Returns null unless both inputs are usable, so the field stays
+ * blank while the SLA date or the TAT is still unknown.
+ */
+export function calculateExpectedDeliveryDate(
+  slaStartDate?: string | Date | null,
+  tatDays?: number | null
+): string | null {
+  if (tatDays === null || tatDays === undefined || tatDays < 0) return null;
+  const start = toDate(slaStartDate);
+  if (!start) return null;
+  return formatISODate(addBusinessDays(start, tatDays));
+}
+
+/**
+ * Steps forward `days` business days, skipping Saturday and Sunday. Each step
+ * advances a calendar day first, so the start date itself is day zero.
+ */
+function addBusinessDays(start: Date, days: number): Date {
+  const d = new Date(start);
+  let remaining = days;
+
+  // A weekend SLA start would push the first counted day into the next week.
+  while (isWeekend(d)) d.setDate(d.getDate() + 1);
+  if (remaining === 0) return d;
+
+  while (remaining > 0) {
+    d.setDate(d.getDate() + 1);
+    if (!isWeekend(d)) remaining--;
+  }
+  return d;
+}
+
+function isWeekend(d: Date): boolean {
+  const day = d.getDay();
+  return day === 0 || day === 6;
+}
+
+/** Accepts "YYYY-MM-DD", a full ISO timestamp or a Date, returns a local-midnight Date. */
+function toDate(value?: string | Date | null): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime())
+      ? null
+      : new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function formatISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * ODA is stored as a strict Yes/No. Only an explicit positive token counts —
+ * anything a user might type, including flag words ("Yes"/"No") or junk, is
+ * coerced to a clean value by normalizeOdaLocation() first.
  */
 export function hasOdaLocation(odaLocation?: string | null): boolean {
-  const normalized = normalize(odaLocation);
+  const normalized = normalizeOda(odaLocation);
   if (!normalized) return false;
-  return !NEGATIVE_ODA_KEYWORDS.some((keyword) => normalized === keyword);
+  return POSITIVE_ODA_KEYWORDS.includes(normalized);
+}
+
+/**
+ * Coerces any free-text ODA value to a clean "Yes"/"No" before it is stored,
+ * so junk like "abcdefgh" or flag tokens no longer sneak into the column.
+ * Only "yes"/"y"/"true"/"1"/"oda" map to "Yes"; everything else maps to "No".
+ */
+export function normalizeOdaLocation(odaLocation?: string | null): string {
+  return hasOdaLocation(odaLocation) ? "Yes" : "No";
+}
+
+function normalizeOda(value?: string | null): string {
+  if (!value) return "";
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 /**

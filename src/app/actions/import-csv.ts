@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { parse } from "csv-parse/sync";
+import { normalizeOdaLocation } from "@/lib/location-utils";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[-/()]+/g, " ").replace(/\s+/g, " ").trim();
@@ -300,6 +301,11 @@ export async function importInventoryCSV(formData: FormData) {
   for (const item of rows) {
     const sn = String(item.data.serialNumber ?? "").trim();
     let itemId = existingMap.get(sn);
+
+    // Coerce the free-text ODA column to a strict Yes/No before it is written.
+    if (item.data.odaLocation !== undefined && item.data.odaLocation !== null) {
+      item.data.odaLocation = normalizeOdaLocation(String(item.data.odaLocation));
+    }
 
     if (!itemId) {
       try {

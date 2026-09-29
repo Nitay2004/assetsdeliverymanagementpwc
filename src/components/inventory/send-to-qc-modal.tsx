@@ -10,6 +10,7 @@ import { ManageableDropdown, useDropdownData } from "@/components/inventory/mana
 import { PincodeInput } from "@/components/shared/pincode-input";
 import { useRouter } from "next/navigation";
 import { calculateCutoff } from "@/lib/cutoff-utils";
+import { calculateExpectedDeliveryDate } from "@/lib/location-utils";
 
 interface Props {
   open: boolean;
@@ -47,6 +48,22 @@ export function SendToQcModal({ open, onClose, item }: Props) {
   const adaptorAddeds = allOptions.filter(o => o.category === "adaptorAdded").map(o => o.value);
   const accessoryHeadsetMouses = allOptions.filter(o => o.category === "accessoryHeadsetMouse").map(o => o.value);
   const stickerColours = allOptions.filter(o => o.category === "stickerColour").map(o => o.value);
+
+  /** Expected Delivery Date = SLA Start Date + Delivery TAT, unless typed over. */
+  function fillExpectedDeliveryDate(form: HTMLFormElement) {
+    const sla = form.querySelector<HTMLInputElement>('input[name="slaStartDate"]')?.value;
+    const rawTat = form.querySelector<HTMLInputElement>('input[name="deliveryTatDays"]')?.value;
+    const expectedField = form.querySelector<HTMLInputElement>('input[name="expectedDeliveryDate"]');
+    if (!expectedField) return;
+    const expected = calculateExpectedDeliveryDate(sla, rawTat ? parseInt(rawTat, 10) : null);
+    expectedField.value = expected ?? "";
+  }
+
+  function handleTimelineChange(e: React.FormEvent<HTMLFormElement>) {
+    const target = e.target as HTMLInputElement;
+    if (target.name !== "deliveryTatDays" && target.name !== "slaStartDate") return;
+    fillExpectedDeliveryDate(e.currentTarget);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -96,7 +113,7 @@ export function SendToQcModal({ open, onClose, item }: Props) {
             </span>
           </div>
 
-          <form key={item.id} onSubmit={handleSubmit} className="space-y-4">
+          <form key={item.id} onSubmit={handleSubmit} onChange={handleTimelineChange} className="space-y-4">
             <div className="grid grid-cols-3 gap-2">
               <input name="partner" placeholder="Partner" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
               <input name="sr" placeholder="Sr #" type="number" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
@@ -177,6 +194,7 @@ export function SendToQcModal({ open, onClose, item }: Props) {
                   } else {
                     if (cutoffField) cutoffField.value = "";
                   }
+                  fillExpectedDeliveryDate(form);
                 }} />
                 <input name="cutOffStatus" placeholder="Cut Off Status" readOnly className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed" />
               </div>
@@ -200,7 +218,10 @@ export function SendToQcModal({ open, onClose, item }: Props) {
                 <input name="tier" placeholder="Tier" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
               </div>
               <div className="grid grid-cols-3 gap-2 mb-2">
-                <input name="odaLocation" placeholder="ODA Location" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
+                <select name="odaLocation" defaultValue="No" className="w-full rounded-lg border px-3 py-2 text-sm bg-background">
+                  <option value="No">ODA: No</option>
+                  <option value="Yes">ODA: Yes</option>
+                </select>
                 <input name="tat" placeholder="TAT" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
                 <input name="deliveryTatDays" placeholder="Delivery TAT (Days)" type="number" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
               </div>
