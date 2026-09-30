@@ -36,6 +36,10 @@ interface RequestData {
   dcId: string | null;
   createdAt: string;
   pickupDate: string | null;
+  requestDateHp: string | null;
+  actualDeliveryPodDate: string | null;
+  podDocumentUrl: string | null;
+  blancoCertificateDate: string | null;
   [key: string]: any;
 }
 
@@ -57,10 +61,16 @@ const REVERSE_PICKUP_COLUMNS: ColumnFilterConfig<RequestData>[] = [
   { key: "model", getValue: r => r.model },
   { key: "type", getValue: r => r.type },
   { key: "status", getValue: r => r.status },
+  { key: "requestDateHp", getValue: r => (r.requestDateHp ? new Date(r.requestDateHp).toLocaleDateString("en-GB") : "") },
+  { key: "pickupDate", getValue: r => (r.pickupDate ? new Date(r.pickupDate).toLocaleDateString("en-GB") : "") },
+  { key: "podDocument", getValue: r => (r.podDocumentUrl ? "Has POD" : "") },
+  { key: "actualDeliveryPodDate", getValue: r => (r.actualDeliveryPodDate ? new Date(r.actualDeliveryPodDate).toLocaleDateString("en-GB") : "") },
   { key: "dcNo", getValue: r => r.dcNo },
   { key: "docketNumber", getValue: r => r.docketNumber },
   { key: "eWayBillNo", getValue: r => r.eWayBillNo },
   { key: "blancoCertificate", getValue: r => (r.blancoCertificateUrl ? "Has Certificate" : "") },
+  { key: "blancoCertificateDate", getValue: r => (r.blancoCertificateDate ? new Date(r.blancoCertificateDate).toLocaleDateString("en-GB") : "") },
+  { key: "qcResult", getValue: r => r.qcResult },
   { key: "partnerCourier", getValue: r => r.courierName || r.partnerName },
   { key: "createdAt", getValue: r => new Date(r.createdAt).toLocaleDateString("en-GB") },
 ];
@@ -162,6 +172,30 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
                 onApply={(v) => applyColumn("status", v)}
               />
               <ColumnFilterHeader
+                label="HP Req Date"
+                values={distinctValues.requestDateHp ?? []}
+                selected={Array.from(filters["requestDateHp"] ?? [])}
+                onApply={(v) => applyColumn("requestDateHp", v)}
+              />
+              <ColumnFilterHeader
+                label="Pickup Date"
+                values={distinctValues.pickupDate ?? []}
+                selected={Array.from(filters["pickupDate"] ?? [])}
+                onApply={(v) => applyColumn("pickupDate", v)}
+              />
+              <ColumnFilterHeader
+                label="POD"
+                values={distinctValues.podDocument ?? []}
+                selected={Array.from(filters["podDocument"] ?? [])}
+                onApply={(v) => applyColumn("podDocument", v)}
+              />
+              <ColumnFilterHeader
+                label="POD Date"
+                values={distinctValues.actualDeliveryPodDate ?? []}
+                selected={Array.from(filters["actualDeliveryPodDate"] ?? [])}
+                onApply={(v) => applyColumn("actualDeliveryPodDate", v)}
+              />
+              <ColumnFilterHeader
                 label="DC"
                 values={distinctValues.dcNo ?? []}
                 selected={Array.from(filters["dcNo"] ?? [])}
@@ -186,6 +220,18 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
                 onApply={(v) => applyColumn("blancoCertificate", v)}
               />
               <ColumnFilterHeader
+                label="Blancco Cert Date"
+                values={distinctValues.blancoCertificateDate ?? []}
+                selected={Array.from(filters["blancoCertificateDate"] ?? [])}
+                onApply={(v) => applyColumn("blancoCertificateDate", v)}
+              />
+              <ColumnFilterHeader
+                label="QC Status"
+                values={distinctValues.qcResult ?? []}
+                selected={Array.from(filters["qcResult"] ?? [])}
+                onApply={(v) => applyColumn("qcResult", v)}
+              />
+              <ColumnFilterHeader
                 label="Partner/Courier"
                 values={distinctValues.partnerCourier ?? []}
                 selected={Array.from(filters["partnerCourier"] ?? [])}
@@ -203,7 +249,7 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
           <tbody className="divide-y">
             {displayRequests.length === 0 ? (
               <tr>
-                <td colSpan={canManage ? 13 : 12} className="px-6 py-12 text-center text-muted-foreground">
+                <td colSpan={canManage ? 19 : 18} className="px-6 py-12 text-center text-muted-foreground">
                   {requests.length === 0 ? "No reverse pickup requests found." : "No rows match the selected filters."}
                 </td>
               </tr>
@@ -229,6 +275,29 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
                     <td className="px-6 py-4 text-muted-foreground">{req.model}</td>
                     <td className="px-6 py-4 text-muted-foreground">{req.type || "—"}</td>
                     <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
+                    <td className="px-6 py-4 text-muted-foreground text-xs">
+                      {req.requestDateHp ? new Date(req.requestDateHp).toLocaleDateString("en-GB") : "—"}
+                    </td>
+                    <td className="px-6 py-4 text-muted-foreground text-xs">
+                      {req.pickupDate ? new Date(req.pickupDate).toLocaleDateString("en-GB") : "—"}
+                    </td>
+                    <td className="px-6 py-4">
+                      {req.podDocumentUrl ? (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); if (req.podDocumentUrl) handleViewFile(req.podDocumentUrl); }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-50 text-sky-700 text-xs font-semibold hover:underline"
+                        >
+                          <FileText className="size-3" />
+                          View
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-muted-foreground text-xs">
+                      {req.actualDeliveryPodDate ? new Date(req.actualDeliveryPodDate).toLocaleDateString("en-GB") : "—"}
+                    </td>
                     <td className="px-6 py-4">
                       {req.dcNo ? (
                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-xs font-mono">
@@ -280,6 +349,18 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
                         <span className="text-xs text-muted-foreground italic">—</span>
                       )}
                     </td>
+                    <td className="px-6 py-4 text-muted-foreground text-xs">
+                      {req.blancoCertificateDate ? new Date(req.blancoCertificateDate).toLocaleDateString("en-GB") : "—"}
+                    </td>
+                    <td className="px-6 py-4">
+                      {req.qcResult ? (
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          req.qcResult === "PASS" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                        }`}>{req.qcResult}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-muted-foreground">
                       {req.courierName || req.partnerName || "—"}
                     </td>
@@ -309,7 +390,7 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
                   </tr>
                   {expandedId === req.id && (
                     <tr className="bg-muted/5">
-                      <td colSpan={canManage ? 13 : 12} className="px-6 py-6">
+                      <td colSpan={canManage ? 19 : 18} className="px-6 py-6">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
                           <div>
                             <p className="text-xs font-semibold uppercase text-muted-foreground mb-1">Contact</p>

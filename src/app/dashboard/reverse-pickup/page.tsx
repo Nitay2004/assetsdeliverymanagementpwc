@@ -7,7 +7,7 @@ import { ReversePickupExportButton } from "@/components/reverse-pickup/reverse-p
 import { parseColumnFilters } from "@/lib/column-filters";
 import type { Prisma } from "@prisma/client";
 
-const REVERSE_PICKUP_FILTER_KEYS = ["requestNumber", "employeeName", "serialNumber", "model", "type", "status", "dcNo", "docketNumber", "eWayBillNo", "blancoCertificate", "partnerCourier", "createdAt"];
+const REVERSE_PICKUP_FILTER_KEYS = ["requestNumber", "employeeName", "serialNumber", "model", "type", "status", "dcNo", "docketNumber", "eWayBillNo", "blancoCertificate", "partnerCourier", "createdAt", "requestDateHp", "pickupDate", "podDocument", "actualDeliveryPodDate", "blancoCertificateDate", "qcResult"];
 
 const STATUS_STYLES: Record<string, { label: string; color: string }> = {
   REQUESTED:              { label: "Requested",              color: "bg-yellow-100 text-yellow-700" },
@@ -133,10 +133,11 @@ export default async function ReversePickupPage({
   const filterableFields: Record<string, string> = {
     requestNumber: "requestNumber", employeeName: "employeeName", serialNumber: "serialNumber",
     model: "model", type: "type", status: "status", dcNo: "dcNo", docketNumber: "docketNumber",
-    eWayBillNo: "eWayBillNo",
+    eWayBillNo: "eWayBillNo", qcResult: "qcResult",
   };
   if (columnFilters.partnerCourier) where.partnerName = { in: columnFilters.partnerCourier };
   if (columnFilters.blancoCertificate) where.blancoCertificateUrl = { not: null };
+  if (columnFilters.podDocument) where.podDocumentUrl = { not: null };
   if (columnFilters.createdAt) {
     const parts = columnFilters.createdAt[0].split("/").map(Number);
     if (parts.length === 3 && parts.every(p => !isNaN(p))) {
@@ -149,6 +150,27 @@ export default async function ReversePickupPage({
   }
   for (const [key, field] of Object.entries(filterableFields)) {
     if (columnFilters[key]) (where as Record<string, unknown>)[field] = { in: columnFilters[key] };
+  }
+  const dateRangeFilters: Prisma.ReversePickupRequestWhereInput[] = [];
+  for (const key of ["requestDateHp", "pickupDate", "actualDeliveryPodDate", "blancoCertificateDate"] as const) {
+    const vals = columnFilters[key];
+    if (!vals?.length) continue;
+    dateRangeFilters.push({
+      OR: vals.map(v => {
+        const parts = v.split("/").map(Number);
+        if (parts.length !== 3 || parts.some(p => isNaN(p))) return {} as Prisma.ReversePickupRequestWhereInput;
+        const from = new Date(parts[2], parts[1] - 1, parts[0]);
+        if (isNaN(from.getTime())) return {} as Prisma.ReversePickupRequestWhereInput;
+        const to = new Date(parts[2], parts[1] - 1, parts[0] + 1);
+        return { [key]: { gte: from, lt: to } };
+      }),
+    });
+  }
+  if (dateRangeFilters.length > 0) {
+    (where as Record<string, unknown>).AND = [
+      ...(((where as Record<string, unknown>).AND as unknown[]) ?? []),
+      ...dateRangeFilters,
+    ];
   }
 
   const [requests, totalCount] = await Promise.all([
@@ -166,9 +188,9 @@ export default async function ReversePickupPage({
 
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
-  const scalarFields = ["requestNumber", "employeeName", "serialNumber", "model", "type", "status", "dcNo", "docketNumber", "eWayBillNo"] as const;
+  const scalarFields = ["requestNumber", "employeeName", "serialNumber", "model", "type", "status", "dcNo", "docketNumber", "eWayBillNo", "qcResult"] as const;
 
-  const [statusGroups, scalarGroups, blancoGroups, partnerGroups, createdGroups] = await Promise.all([
+  const [statusGroups, scalarGroups, blancoGroups, partnerGroups, createdGroups, podGroups, dateGroups] = await Promise.all([
     prisma.reversePickupRequest.groupBy({ by: ["status"], _count: { _all: true } }),
     Promise.all(
       scalarFields.map(field =>
@@ -195,6 +217,24 @@ export default async function ReversePickupPage({
       where,
       _count: { _all: true },
     }),
+    prisma.reversePickupRequest.groupBy({
+      by: ["podDocumentUrl"],
+      where,
+      _count: { _all: true },
+    }),
+    Promise.all(
+      (["requestDateHp", "pickupDate", "actualDeliveryPodDate", "blancoCertificateDate"] as const).map(field =>
+        prisma.reversePickupRequest
+          .groupBy({ by: [field], where, _count: { _all: true } })
+          .then(rows => rows.map(r => {
+            const d = (r as Record<string, unknown>)[field] as Date | null;
+            return {
+              value: d ? new Date(d).toLocaleDateString("en-GB") : "(Blank)",
+              count: r._count._all,
+            };
+          }))
+      )
+    ),
   ]);
 
   const statusCounts = new Map(statusGroups.map(r => [r.status, r._count._all]));
@@ -223,6 +263,22 @@ export default async function ReversePickupPage({
   columnFilterValues.blancoCertificate = [...blancoMap.entries()]
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => a.value.localeCompare(b.value));
+
+  const podMap = new Map<string, number>();
+  for (const row of podGroups) {
+    const token = row.podDocumentUrl ? "Has POD" : "(Blank)";
+    podMap.set(token, (podMap.get(token) ?? 0) + row._count._all);
+  }
+  columnFilterValues.podDocument = [...podMap.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+
+  const dateFieldKeys = ["requestDateHp", "pickupDate", "actualDeliveryPodDate", "blancoCertificateDate"] as const;
+  dateGroups.forEach((rows, i) => {
+    columnFilterValues[dateFieldKeys[i]] = rows
+      .map(r => ({ value: r.value, count: r.count }))
+      .sort((a, b) => b.value.localeCompare(a.value));
+  });
 
   const partnerMap = new Map<string, number>();
   for (const row of partnerGroups) {
@@ -253,6 +309,8 @@ export default async function ReversePickupPage({
     receivedDate: r.receivedDate?.toISOString() ?? null,
     qcDate: r.qcDate?.toISOString() ?? null,
     blancoCertificateDate: r.blancoCertificateDate?.toISOString() ?? null,
+    requestDateHp: r.requestDateHp?.toISOString() ?? null,
+    actualDeliveryPodDate: r.actualDeliveryPodDate?.toISOString() ?? null,
   }));
 
   return (

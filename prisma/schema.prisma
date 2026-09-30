@@ -484,6 +484,9 @@ model ReversePickupRequest {
   etaForUnitReceived    DateTime?            @map("eta_for_unit_received") @db.Date
   caseAge               String?              @map("case_age") // Automatic
 
+  // ── POD ──
+  podDocumentUrl        String?              @map("pod_document_url")
+
   // ── Partner ──
   partnerName           String?              @map("partner_name")
   partnerReference      String?              @map("partner_reference")

@@ -376,6 +376,23 @@ export async function uploadBlancoCertificate(formData: FormData) {
   revalidatePath("/dashboard/reverse-pickup");
 }
 
+export async function uploadPodDocument(formData: FormData) {
+  const user = await getSession();
+  requirePermission(user, "reverse-pickup", "canEdit");
+
+  const id = formData.get("id") as string;
+  const podDocumentUrl = formData.get("podDocumentUrl") as string;
+
+  if (!id || !podDocumentUrl) throw new Error("Request ID and POD document URL are required.");
+
+  await prisma.reversePickupRequest.update({
+    where: { id },
+    data: { podDocumentUrl },
+  });
+
+  revalidatePath("/dashboard/reverse-pickup");
+}
+
 export async function completeReversePickup(formData: FormData) {
   const user = await getSession();
   requirePermission(user, "reverse-pickup", "canEdit");

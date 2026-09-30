@@ -15,6 +15,7 @@ import {
   recordPurgeQc,
   requestEwayBill,
   uploadBlancoCertificate,
+  uploadPodDocument,
   completeReversePickup,
   getReversePickupDropdowns,
   addReversePickupDropdownOption,
@@ -100,6 +101,7 @@ interface RequestData {
   blanccoDate: string | null;
   blancoCertificateUrl: string | null;
   blancoCertificateDate: string | null;
+  podDocumentUrl: string | null;
   caseId: string | null;
   issueReported: string | null;
   replacementPart: string | null;
@@ -272,6 +274,60 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       const res = await fetch(`/api/pod-url?path=${encodeURIComponent(path)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load certificate");
+      window.open(data.url, "_blank");
+    } catch (err) {
+      toast({ title: "Error", description: String(err), variant: "error" });
+    }
+  };
+
+  const handleUploadPod = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const file = formData.get("podDocumentFile") as File | null;
+
+    if (!file) {
+      toast({ title: "Error", description: "Please select a POD file.", variant: "error" });
+      return;
+    }
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!["pdf", "jpg", "jpeg", "png"].includes(ext)) {
+      toast({ title: "Error", description: "Only PDF, JPG, JPEG and PNG files are allowed.", variant: "error" });
+      return;
+    }
+
+    setLoading("uploadPodDocument");
+    try {
+      const uploadFd = new FormData();
+      uploadFd.set("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: uploadFd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+
+      const actionFd = new FormData();
+      actionFd.set("id", request.id);
+      actionFd.set("podDocumentUrl", data.url);
+      await uploadPodDocument(actionFd);
+
+      toast({ title: "Action completed successfully", variant: "success" });
+      router.refresh();
+    } catch (err) {
+      toast({ title: "Action failed", description: String(err), variant: "error" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleViewPod = async () => {
+    const path = request.podDocumentUrl;
+    if (!path) return;
+    try {
+      if (/^https?:\/\//i.test(path)) {
+        window.open(path, "_blank");
+        return;
+      }
+      const res = await fetch(`/api/pod-url?path=${encodeURIComponent(path)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load POD");
       window.open(data.url, "_blank");
     } catch (err) {
       toast({ title: "Error", description: String(err), variant: "error" });
@@ -494,7 +550,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               </div>
             </div>
           )}
-          {(request.displayStatus || request.dependency || request.courierName || request.docketNumber || request.dcNo) && (
+          {(request.displayStatus || request.dependency || request.courierName || request.docketNumber || request.dcNo || request.actualDeliveryPodDate || request.podDocumentUrl) && (
             <div className="rounded-xl glass shadow-sm p-5 space-y-2">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Logistics</h3>
               <div className="space-y-1.5 text-sm">
@@ -515,6 +571,13 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                 {request.srnNo && <div className="flex justify-between"><span className="text-muted-foreground">SRN</span><span>{request.srnNo}</span></div>}
                 {request.eWayBillNo && <div className="flex justify-between"><span className="text-muted-foreground">E-Way Bill</span><span>{request.eWayBillNo}</span></div>}
                 {request.etaForUnitReceived && <div className="flex justify-between"><span className="text-muted-foreground">ETA Received</span><span>{new Date(request.etaForUnitReceived).toLocaleDateString("en-GB")}</span></div>}
+                {request.actualDeliveryPodDate && <div className="flex justify-between"><span className="text-muted-foreground">POD Date</span><span>{new Date(request.actualDeliveryPodDate).toLocaleDateString("en-GB")}</span></div>}
+                {request.podDocumentUrl && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">POD PDF</span>
+                    <button onClick={handleViewPod} className="text-primary font-semibold hover:underline text-sm">View</button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -536,6 +599,47 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       {/* Action Forms */}
       {canManage && (
         <>
+          <div className="rounded-xl glass shadow-sm p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-foreground">POD Document</h2>
+              {request.podDocumentUrl && (
+                <button
+                  onClick={handleViewPod}
+                  className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold text-primary hover:bg-accent"
+                >
+                  <FileText className="size-4" />
+                  View POD
+                </button>
+              )}
+            </div>
+            <form onSubmit={handleUploadPod} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label htmlFor="podDocumentFile" className="text-sm font-medium text-foreground">
+                    POD File
+                  </label>
+                  <input
+                    id="podDocumentFile"
+                    name="podDocumentFile"
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary file:mr-2 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                  <p className="text-xs text-muted-foreground">PDF, JPG, JPEG or PNG</p>
+                </div>
+                <div className="space-y-1.5 self-end">
+                  <button
+                    type="submit"
+                    disabled={isPending("uploadPodDocument")}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {isPending("uploadPodDocument") ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {isPending("uploadPodDocument") ? "Uploading..." : request.podDocumentUrl ? "Replace POD" : "Upload POD"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
           {nextAction && (
             <div className="rounded-xl glass shadow-sm p-6 space-y-4">
               <h2 className="text-lg font-semibold text-foreground">
