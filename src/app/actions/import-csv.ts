@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { parse } from "csv-parse/sync";
 import { normalizeOdaLocation } from "@/lib/location-utils";
+import { calculateSlaStatus } from "@/lib/sla-utils";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[-/()]+/g, " ").replace(/\s+/g, " ").trim();
@@ -230,6 +231,11 @@ export async function importInventoryCSV(formData: FormData) {
     if (!data.model && data.laptopModel) {
       data.model = data.laptopModel;
     }
+
+    data.slaStatus = calculateSlaStatus(
+      data.actualDeliveryDate as string | Date | null | undefined,
+      data.expectedDeliveryDate as string | Date | null | undefined
+    );
 
     rows.push({ data, rowNum: r + 1 });
   }

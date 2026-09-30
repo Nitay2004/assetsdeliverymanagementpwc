@@ -5,6 +5,7 @@ import { parse } from "csv-parse/sync";
 import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 import { normalizeOdaLocation } from "@/lib/location-utils";
+import { calculateSlaStatus } from "@/lib/sla-utils";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
@@ -958,6 +959,11 @@ export async function POST(request: Request) {
       if (!data.model && data.laptopModel) {
         data.model = data.laptopModel;
       }
+
+      data.slaStatus = calculateSlaStatus(
+        data.actualDeliveryDate as string | Date | null | undefined,
+        data.expectedDeliveryDate as string | Date | null | undefined
+      );
 
       rows.push({ data, rowNum: r + 2 });
     }
