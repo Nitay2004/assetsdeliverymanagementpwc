@@ -63,6 +63,12 @@ const REVERSE_PICKUP_COLUMNS: ColumnFilterConfig<RequestData>[] = [
   { key: "status", getValue: r => r.status },
   { key: "requestDateHp", getValue: r => (r.requestDateHp ? new Date(r.requestDateHp).toLocaleDateString("en-GB") : "") },
   { key: "pickupDate", getValue: r => (r.pickupDate ? new Date(r.pickupDate).toLocaleDateString("en-GB") : "") },
+  { key: "expectedPickupDate", getValue: r => (r.expectedPickupDate ? new Date(r.expectedPickupDate).toLocaleDateString("en-GB") : "") },
+  { key: "zone1", getValue: r => r.zone1 },
+  { key: "tier1", getValue: r => r.tier1 },
+  { key: "tat", getValue: r => r.tat },
+  { key: "cutOffStatus", getValue: r => r.cutOffStatus },
+  { key: "sla", getValue: r => r.sla },
   { key: "podDocument", getValue: r => (r.podDocumentUrl ? "Has POD" : "") },
   { key: "actualDeliveryPodDate", getValue: r => (r.actualDeliveryPodDate ? new Date(r.actualDeliveryPodDate).toLocaleDateString("en-GB") : "") },
   { key: "dcNo", getValue: r => r.dcNo },
@@ -184,6 +190,42 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
                 onApply={(v) => applyColumn("pickupDate", v)}
               />
               <ColumnFilterHeader
+                label="Exp. Pickup"
+                values={distinctValues.expectedPickupDate ?? []}
+                selected={Array.from(filters["expectedPickupDate"] ?? [])}
+                onApply={(v) => applyColumn("expectedPickupDate", v)}
+              />
+              <ColumnFilterHeader
+                label="Zone"
+                values={distinctValues.zone1 ?? []}
+                selected={Array.from(filters["zone1"] ?? [])}
+                onApply={(v) => applyColumn("zone1", v)}
+              />
+              <ColumnFilterHeader
+                label="Tier"
+                values={distinctValues.tier1 ?? []}
+                selected={Array.from(filters["tier1"] ?? [])}
+                onApply={(v) => applyColumn("tier1", v)}
+              />
+              <ColumnFilterHeader
+                label="TAT"
+                values={distinctValues.tat ?? []}
+                selected={Array.from(filters["tat"] ?? [])}
+                onApply={(v) => applyColumn("tat", v)}
+              />
+              <ColumnFilterHeader
+                label="Cut Off"
+                values={distinctValues.cutOffStatus ?? []}
+                selected={Array.from(filters["cutOffStatus"] ?? [])}
+                onApply={(v) => applyColumn("cutOffStatus", v)}
+              />
+              <ColumnFilterHeader
+                label="SLA"
+                values={distinctValues.sla ?? []}
+                selected={Array.from(filters["sla"] ?? [])}
+                onApply={(v) => applyColumn("sla", v)}
+              />
+              <ColumnFilterHeader
                 label="POD"
                 values={distinctValues.podDocument ?? []}
                 selected={Array.from(filters["podDocument"] ?? [])}
@@ -280,6 +322,26 @@ export function ReversePickupTable({ requests, canManage, statusStyles, currentP
                     </td>
                     <td className="px-6 py-4 text-muted-foreground text-xs">
                       {req.pickupDate ? new Date(req.pickupDate).toLocaleDateString("en-GB") : "—"}
+                    </td>
+                    <td className="px-6 py-4 text-muted-foreground text-xs">
+                      {req.expectedPickupDate ? new Date(req.expectedPickupDate).toLocaleDateString("en-GB") : "—"}
+                    </td>
+                    <td className="px-6 py-4 text-muted-foreground text-xs">{req.zone1 || "—"}</td>
+                    <td className="px-6 py-4 text-muted-foreground text-xs">{req.tier1 || "—"}</td>
+                    <td className="px-6 py-4 text-muted-foreground text-xs">{req.tat || "—"}</td>
+                    <td className="px-6 py-4 text-muted-foreground text-xs">{req.cutOffStatus || "—"}</td>
+                    <td className="px-6 py-4 text-xs">
+                      {req.sla ? (
+                        <span className={req.sla === "Met"
+                          ? "px-2 py-0.5 rounded bg-green-50 text-green-700 font-semibold"
+                          : req.sla === "Missed"
+                            ? "px-2 py-0.5 rounded bg-red-50 text-red-700 font-semibold"
+                            : "px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-semibold"}>
+                          {req.sla}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground italic">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       {req.podDocumentUrl ? (

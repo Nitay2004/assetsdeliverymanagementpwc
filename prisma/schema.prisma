@@ -458,16 +458,17 @@ model ReversePickupRequest {
   dependency            String?              // DD
   remarks               String?              // Manual (general remarks)
 
-  // ── SLA / TAT (mostly Automatic) ──
+// ── SLA / TAT (mostly Automatic) ──
   emailReceivedHour     String?              @map("email_received_hour")
   cutOffStatus          String?              @map("cut_off_status") // Automatic
   slaStartDate          DateTime?            @map("sla_start_date") // Automatic
-  slaState              String?              @map("sla_state") // Automatic
+  slaState              String?              @map("sla_state") // Manual
   zone1                 String?              @map("zone_1") // Automatic
   tier1                 String?              @map("tier_1") // Automatic
   odaLocation           String?              @map("oda_location") // Automatic
   tat                   String?              // Automatic
   deliveryTat           String?              @map("delivery_tat") // Automatic
+  expectedPickupDate    DateTime?            @map("expected_pickup_date") @db.Date // Automatic
   actualDeliveryPodDate DateTime?            @map("actual_delivery_pod_date") @db.Date
   sla                   String?              // Automatic
   laptopAcceptanceDate  DateTime?            @map("laptop_acceptance_date") // Automatic
@@ -548,6 +549,8 @@ model ReversePickupRequest {
 
   deliveryChallans      DeliveryChallan[]
 
+  @@index([expectedPickupDate])
+  @@index([sla])
   @@map("reverse_pickup_requests")
 }
 

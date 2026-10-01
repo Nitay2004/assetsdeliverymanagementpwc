@@ -7,7 +7,7 @@ import { ReversePickupExportButton } from "@/components/reverse-pickup/reverse-p
 import { parseColumnFilters } from "@/lib/column-filters";
 import type { Prisma } from "@prisma/client";
 
-const REVERSE_PICKUP_FILTER_KEYS = ["requestNumber", "employeeName", "serialNumber", "model", "type", "status", "dcNo", "docketNumber", "eWayBillNo", "blancoCertificate", "partnerCourier", "createdAt", "requestDateHp", "pickupDate", "podDocument", "actualDeliveryPodDate", "blancoCertificateDate", "qcResult"];
+const REVERSE_PICKUP_FILTER_KEYS = ["requestNumber", "employeeName", "serialNumber", "model", "type", "status", "dcNo", "docketNumber", "eWayBillNo", "blancoCertificate", "partnerCourier", "createdAt", "requestDateHp", "pickupDate", "podDocument", "actualDeliveryPodDate", "blancoCertificateDate", "qcResult", "zone1", "tier1", "tat", "sla", "cutOffStatus", "expectedPickupDate"];
 
 const STATUS_STYLES: Record<string, { label: string; color: string }> = {
   REQUESTED:              { label: "Requested",              color: "bg-yellow-100 text-yellow-700" },
@@ -311,6 +311,9 @@ export default async function ReversePickupPage({
     blancoCertificateDate: r.blancoCertificateDate?.toISOString() ?? null,
     requestDateHp: r.requestDateHp?.toISOString() ?? null,
     actualDeliveryPodDate: r.actualDeliveryPodDate?.toISOString() ?? null,
+    slaStartDate: r.slaStartDate?.toISOString() ?? null,
+    expectedPickupDate: r.expectedPickupDate?.toISOString() ?? null,
+    laptopAcceptanceDate: r.laptopAcceptanceDate?.toISOString() ?? null,
   }));
 
   return (

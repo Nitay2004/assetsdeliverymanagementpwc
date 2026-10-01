@@ -4,6 +4,14 @@ import { useState, useCallback, useEffect } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { createReversePickupRequest, getReversePickupDropdowns, addReversePickupDropdownOption, deleteReversePickupDropdownOption, seedReversePickupDropdowns, lookupInventoryBySerial } from "@/app/actions/reverse-pickup";
+import { calculateCutoff } from "@/lib/cutoff-utils";
+import {
+  calculateExpectedDeliveryDate,
+  calculateTatDays,
+  calculateTier,
+  calculateZone,
+} from "@/lib/location-utils";
+import { calculateSlaStatus } from "@/lib/sla-utils";
 import { useToast } from "@/hooks/use-toast";
 import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
 
@@ -64,13 +72,18 @@ function DDField({ name, label, category, placeholder, required, dd, onAdd, onDe
   );
 }
 
-function AutoField({ label, value }: { label: string; value: string }) {
+function AutoField({ label, name, value, type = "text" }: { label: string; name?: string; value: string; type?: string }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-foreground">{label}</label>
-      <div className="flex h-10 w-full items-center rounded-lg border border-input/50 bg-muted/20 px-3 text-sm text-muted-foreground">
-        {value}
-      </div>
+      <label htmlFor={name} className="text-sm font-medium text-foreground">{label}</label>
+      <input
+        id={name}
+        name={name}
+        type={type}
+        readOnly
+        value={value}
+        className="flex h-10 w-full cursor-default rounded-lg border border-input/50 bg-muted/20 px-3 text-sm text-muted-foreground"
+      />
     </div>
   );
 }
@@ -94,6 +107,28 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
   const [accessories, setAccessories] = useState("");
   const [lookupPending, setLookupPending] = useState(false);
   const [pincodeLoading, setPincodeLoading] = useState(false);
+  const [emailReceivedHour, setEmailReceivedHour] = useState("");
+  const [odaLocation, setOdaLocation] = useState("No");
+  const [pickupDate, setPickupDate] = useState("");
+
+  // Frozen for the life of the form so the mirrored SLA start cannot drift as
+  // days pass while the operator is filling the form in.
+  const [raisedDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  // Derived during render rather than stored in state: these are pure functions
+  // of the inputs above, so there is nothing to keep in sync. This mirrors
+  // resolveReversePickupSla on the server, including the fallback that anchors the
+  // TAT clock on the raised date when the email hour yields no cutoff, so what is
+  // shown here is exactly what gets saved.
+  const cutoff = emailReceivedHour ? calculateCutoff(emailReceivedHour) : null;
+  const cutOffStatus = cutoff?.cutOffStatus ?? "";
+  const slaStartDate = cutoff?.slaStartDate ?? raisedDate;
+  const zone1 = calculateZone(city, state) ?? "";
+  const tier1 = calculateTier(city, state) ?? "";
+  const tatDays = calculateTatDays(city, state, odaLocation);
+  const tat = String(tatDays ?? 4);
+  const expectedPickupDate = calculateExpectedDeliveryDate(slaStartDate, tatDays ?? 4) ?? "";
+  const sla = calculateSlaStatus(pickupDate || null, expectedPickupDate || null);
 
   const loadDd = useCallback(async () => {
     let data = await getReversePickupDropdowns();
@@ -256,19 +291,49 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
       <div className="rounded-xl glass shadow-sm p-6 space-y-4">
         <h2 className="text-lg font-semibold text-foreground">SLA &amp; TAT</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <ManualInput name="emailReceivedHour" label="Email Received Hour" placeholder="10:00 AM" />
-          <AutoField label="Cut Off Status" value="(auto)" />
-          <AutoField label="SLA Start Date" value="(auto)" />
-          <AutoField label="State (SLA)" value="(auto)" />
-          <AutoField label="Zone (1)" value="(auto)" />
-          <AutoField label="Tier 1" value="(auto)" />
-          <AutoField label="ODA Location" value="(auto)" />
-          <AutoField label="TAT" value="(auto)" />
-          <AutoField label="Delivery TAT" value="(auto)" />
+          <ManualInput
+            name="emailReceivedHour"
+            label="Email Received Hour"
+            placeholder="10:00 AM"
+            value={emailReceivedHour}
+            onChange={setEmailReceivedHour}
+          />
+          <AutoField name="cutOffStatus" label="Cut Off Status" value={cutOffStatus} />
+          <AutoField name="slaStartDate" label="SLA Start Date" value={slaStartDate} type="date" />
+          <ManualInput name="slaState" label="State (SLA)" placeholder="Manual" />
+          <AutoField name="zone1" label="Zone (1)" value={zone1} />
+          <AutoField name="tier1" label="Tier 1" value={tier1} />
+          <div className="space-y-1.5">
+            <label htmlFor="odaLocation" className="text-sm font-medium text-foreground">ODA Location</label>
+            <select
+              id="odaLocation"
+              name="odaLocation"
+              value={odaLocation}
+              onChange={(e) => setOdaLocation(e.target.value)}
+              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              <option value="No">ODA: No</option>
+              <option value="Yes">ODA: Yes</option>
+            </select>
+          </div>
+          <AutoField name="tat" label="TAT (days)" value={tat} />
+          <AutoField name="deliveryTat" label="Delivery TAT" value={tat} />
+          <AutoField name="expectedPickupDate" label="Expected Pickup Date" value={expectedPickupDate} type="date" />
+          <ManualInput
+            name="pickupDate"
+            label="Actual Pickup Date"
+            type="date"
+            value={pickupDate}
+            onChange={setPickupDate}
+          />
           <ManualInput name="actualDeliveryPodDate" label="Actual Delivery/POD Date" type="date" />
-          <AutoField label="SLA" value="(auto)" />
-          <AutoField label="Laptop Acceptance Date" value="(auto)" />
+          <AutoField name="sla" label="SLA" value={sla} />
         </div>
+        <p className="text-xs text-muted-foreground">
+          Cut Off, SLA Start, Zone, Tier, TAT, Expected Pickup Date and SLA are derived automatically.
+          Leave the email hour blank and the SLA Start Date defaults to today.
+          SLA stays To Be Updated until an actual pickup date is entered, then turns Met or Missed.
+        </p>
       </div>
 
       {/* ── Submit ── */}

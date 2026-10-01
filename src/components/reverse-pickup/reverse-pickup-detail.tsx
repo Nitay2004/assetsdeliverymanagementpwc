@@ -68,6 +68,7 @@ interface RequestData {
   odaLocation: string | null;
   tat: string | null;
   deliveryTat: string | null;
+  expectedPickupDate: string | null;
   actualDeliveryPodDate: string | null;
   sla: string | null;
   laptopAcceptanceDate: string | null;
@@ -474,6 +475,72 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
           )}
           {request.landmark && <p className="text-sm text-muted-foreground">Landmark: {request.landmark}</p>}
         </div>
+
+        {/* SLA & TAT — all values derived on the server from the email hour, the
+            pickup location and the ODA flag. */}
+        {(request.emailReceivedHour || request.zone1 || request.tier1 || request.sla) && (
+          <div className="rounded-xl glass shadow-sm p-5 space-y-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">SLA &amp; TAT</h3>
+            <div className="space-y-2 text-sm">
+              {request.emailReceivedHour && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Email Received Hour</span>
+                  <span>{request.emailReceivedHour}</span>
+                </div>
+              )}
+              {request.cutOffStatus && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Cut Off Status</span>
+                  <span>{request.cutOffStatus}</span>
+                </div>
+              )}
+              {request.slaStartDate && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">SLA Start Date</span>
+                  <span>{new Date(request.slaStartDate).toLocaleDateString("en-GB")}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Zone</span>
+                <span>{request.zone1 || "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Tier</span>
+                <span>{request.tier1 || "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">ODA Location</span>
+                <span>{request.odaLocation || "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">TAT</span>
+                <span>{request.tat ? `${request.tat} days` : "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Expected Pickup Date</span>
+                <span>{request.expectedPickupDate ? new Date(request.expectedPickupDate).toLocaleDateString("en-GB") : "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Actual Pickup Date</span>
+                <span>{request.pickupDate ? new Date(request.pickupDate).toLocaleDateString("en-GB") : "—"}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">SLA</span>
+                {request.sla ? (
+                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                    request.sla === "Met"
+                      ? "bg-green-100 text-green-700"
+                      : request.sla === "Missed"
+                        ? "bg-red-100 text-red-700"
+                        : "bg-gray-100 text-gray-600"
+                  }`}>{request.sla}</span>
+                ) : (
+                  <span className="text-muted-foreground italic">—</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {request.warehouseLocation && (
           <div className="rounded-xl glass shadow-sm p-5 space-y-3">

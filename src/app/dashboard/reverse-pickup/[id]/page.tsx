@@ -28,6 +28,7 @@ export default async function ReversePickupDetailPage(props: { params: Promise<{
         eta: request.eta?.toISOString() ?? null,
         futureDatePickup: request.futureDatePickup?.toISOString() ?? null,
         slaStartDate: request.slaStartDate?.toISOString() ?? null,
+        expectedPickupDate: request.expectedPickupDate?.toISOString() ?? null,
         actualDeliveryPodDate: request.actualDeliveryPodDate?.toISOString() ?? null,
         laptopAcceptanceDate: request.laptopAcceptanceDate?.toISOString() ?? null,
         etaForUnitReceived: request.etaForUnitReceived?.toISOString() ?? null,

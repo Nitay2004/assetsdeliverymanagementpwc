@@ -12,12 +12,19 @@ const globalForPrisma = globalThis as unknown as {
 // building it at module scope while caching only the client leaks a fresh set of
 // connections on every hot reload until the pooler rejects new clients with
 // EMAXCONNSESSION.
+//
+// max: 5 is also narrower than the widest fan-out in the app (a dashboard page
+// fires 7 aggregates at once), so some queries queue for a free slot. A cold
+// connect over the pooler measures ~2s, and the pooler can stall briefly when it
+// is near its session cap, so the 10s budget was small enough that a burst could
+// fail the whole request with "timeout exceeded when trying to connect". 30s only
+// affects the worst case; successful queries do not wait.
 function createPrismaClient() {
   const pool = new Pool({
     connectionString: `${process.env.DATABASE_URL}`,
     max: 5,
     idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 30_000,
   });
 
   return new PrismaClient({

@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeOdaLocation } from "@/lib/location-utils";
+import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -36,6 +37,56 @@ async function nextReversePickupRequestNumber(): Promise<string> {
   }
 
   return `RPU-${String(seq).padStart(4, "0")}`;
+}
+
+/**
+ * Re-derives the SLA/TAT chain for a stored request. Workflow actions call this
+ * whenever they change an input the chain depends on, so a request that was
+ * created before the location or email hour was known still ends up with a
+ * correct SLA. The stored expected date is *not* fed back in as an override — it
+ * is always recomputed from the current city/state/ODA, otherwise a later change
+ * of any of those would leave it stale.
+ *
+ * A record with no stored SLA start date (raised before this logic existed, or
+ * with an unusable email hour) is anchored on the day the request was created,
+ * not on today, so the expected date stays put instead of sliding forward on
+ * every recompute.
+ */
+async function recomputeSlaForRequest(
+  id: string,
+  overrides: {
+    pickupDate?: Date | null;
+    emailReceivedHour?: string | null;
+    city?: string | null;
+    state?: string | null;
+    odaLocation?: string | null;
+  } = {}
+) {
+  const existing = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: {
+      emailReceivedHour: true,
+      city: true,
+      state: true,
+      odaLocation: true,
+      slaStartDate: true,
+      pickupDate: true,
+      createdAt: true,
+    },
+  });
+
+  if (!existing) return {};
+
+  return resolveReversePickupSla({
+    emailReceivedHour: overrides.emailReceivedHour ?? existing.emailReceivedHour,
+    city: overrides.city !== undefined ? overrides.city : existing.city,
+    state: overrides.state !== undefined ? overrides.state : existing.state,
+    odaLocation:
+      overrides.odaLocation !== undefined ? overrides.odaLocation : existing.odaLocation,
+    pickupDate: overrides.pickupDate !== undefined ? overrides.pickupDate : existing.pickupDate,
+    slaStartDate: existing.slaStartDate,
+    fallbackStartDate: existing.createdAt,
+  });
 }
 
 export async function getReversePickupRequests() {
@@ -75,6 +126,28 @@ export async function createReversePickupRequest(formData: FormData) {
   const year = formData.get("year") as string;
   const currentYear = year ? parseIntValue(year) : new Date().getFullYear();
 
+  const city = (formData.get("city") as string) || null;
+  const state = (formData.get("state") as string) || null;
+  const emailReceivedHour = (formData.get("emailReceivedHour") as string) || null;
+  const odaLocation = normalizeOdaLocation(formData.get("odaLocation") as string);
+  const pickupDate = parseDate(formData.get("pickupDate") as string);
+
+  // Every SLA/TAT field is derived on the server so the stored values can never
+  // disagree with the location and email hour they came from. The expected date
+  // is deliberately not taken from the form: that field is read-only and echoes
+  // the same derivation, so re-deriving here is both simpler and authoritative.
+  // The raised date is the fallback SLA anchor, so a request with no usable email
+  // hour still gets an expected date and a real Met/Missed verdict later.
+  const sla = resolveReversePickupSla({
+    emailReceivedHour,
+    city,
+    state,
+    odaLocation,
+    pickupDate,
+    slaStartDate: parseDate(formData.get("slaStartDate") as string),
+    fallbackStartDate: new Date(),
+  });
+
   await prisma.reversePickupRequest.create({
     data: {
       requestNumber,
@@ -105,8 +178,8 @@ export async function createReversePickupRequest(formData: FormData) {
       // Location
       pickupAddress,
       landmark: (formData.get("landmark") as string) || null,
-      city: (formData.get("city") as string) || null,
-      state: (formData.get("state") as string) || null,
+      city,
+      state,
       pinCode: (formData.get("pinCode") as string) || null,
 
       // Warehouse / Logistics
@@ -120,23 +193,24 @@ export async function createReversePickupRequest(formData: FormData) {
       remarks: (formData.get("remarks") as string) || null,
 
       // SLA / TAT
-      emailReceivedHour: (formData.get("emailReceivedHour") as string) || null,
-      cutOffStatus: (formData.get("cutOffStatus") as string) || null,
-      slaStartDate: parseDate(formData.get("slaStartDate") as string),
+      emailReceivedHour,
+      cutOffStatus: sla.cutOffStatus,
+      slaStartDate: sla.slaStartDate,
       slaState: (formData.get("slaState") as string) || null,
-      zone1: (formData.get("zone1") as string) || null,
-      tier1: (formData.get("tier1") as string) || null,
-      odaLocation: normalizeOdaLocation(formData.get("odaLocation") as string),
-      tat: (formData.get("tat") as string) || null,
-      deliveryTat: (formData.get("deliveryTat") as string) || null,
+      zone1: sla.zone1,
+      tier1: sla.tier1,
+      odaLocation,
+      tat: sla.tat,
+      deliveryTat: sla.deliveryTat,
+      expectedPickupDate: sla.expectedPickupDate,
       actualDeliveryPodDate: parseDate(formData.get("actualDeliveryPodDate") as string),
-      sla: (formData.get("sla") as string) || null,
+      sla: sla.sla,
       laptopAcceptanceDate: parseDate(formData.get("laptopAcceptanceDate") as string),
 
       // Courier / Tracking
       courierName: (formData.get("courierName") as string) || null,
       docketNumber: (formData.get("docketNumber") as string) || null,
-      pickupDate: parseDate(formData.get("pickupDate") as string),
+      pickupDate,
       dcNo: (formData.get("dcNo") as string) || null,
       srnNo: (formData.get("srnNo") as string) || null,
       eWayBillNo: (formData.get("eWayBillNo") as string) || null,
@@ -266,12 +340,18 @@ export async function markAsPickedUp(formData: FormData) {
     select: { docketNumber: true },
   });
 
+  // The pickup date is what the SLA verdict is measured against, so the whole
+  // derived chain is recomputed here rather than trusting whatever was stored
+  // when the request was created.
+  const sla = await recomputeSlaForRequest(id, { pickupDate });
+
   await prisma.reversePickupRequest.update({
     where: { id },
     data: {
       status: "PICKED_UP",
       pickupDate,
       docketNumber: docketNumber || existing?.docketNumber || null,
+      ...sla,
     },
   });
 

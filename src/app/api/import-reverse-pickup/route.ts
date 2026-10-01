@@ -5,6 +5,7 @@ import { parse } from "csv-parse/sync";
 import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 import { normalizeOdaLocation } from "@/lib/location-utils";
+import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
@@ -80,6 +81,7 @@ const baseMapping: Record<string, string> = {
   "TAT": "tat",
   "Delivery TAT ": "deliveryTat",
   "Actual Delivery/POD Date": "actualDeliveryPodDate",
+  "Expected Pickup Date": "expectedPickupDate",
   "SLA": "sla",
   "Laptop Acceptance Date": "laptopAcceptanceDate",
   "DC No": "dcNo",
@@ -153,6 +155,7 @@ const aliases: Record<string, string> = {
   "tier 1": "tier1",
   "delivery tat": "deliveryTat",
   "actual delivery/pod date": "actualDeliveryPodDate",
+  "expected pickup date": "expectedPickupDate",
   "laptop acceptance date": "laptopAcceptanceDate",
   "email recieved hour": "emailReceivedHour",
   "cut off status": "cutOffStatus",
@@ -185,6 +188,7 @@ const dateFields = new Set([
   "pickupDate", "inspectionDate", "receivedDate", "qcDate",
   "blanccoDate", "blancoCertificateDate", "actualDeliveryPodDate",
   "laptopAcceptanceDate", "etaForUnitReceived", "slaStartDate",
+  "expectedPickupDate",
 ]);
 
 // User-facing fields can repeat in the file (e.g. user pickup block vs warehouse
@@ -417,6 +421,22 @@ export async function POST(request: Request) {
     if (!row.data.city && item.city) row.data.city = item.city;
     if (!row.data.state && item.state) row.data.state = item.state;
     if (!row.data.pinCode && item.pinCode) row.data.pinCode = item.pinCode;
+
+    // Run after the inventory autofill, because city/state drive zone, tier and
+    // TAT. Derived values win over whatever the spreadsheet carried, so an
+    // imported sheet can never disagree with the location it was imported for.
+    const sla = resolveReversePickupSla({
+      emailReceivedHour: (row.data.emailReceivedHour as string) ?? null,
+      city: (row.data.city as string) ?? null,
+      state: (row.data.state as string) ?? null,
+      odaLocation: (row.data.odaLocation as string) ?? null,
+      pickupDate: (row.data.pickupDate as Date) ?? null,
+      slaStartDate: (row.data.slaStartDate as Date) ?? null,
+      // Rows without a usable email hour still need an expected date, so anchor
+      // them on the date the request was raised rather than on the import date.
+      fallbackStartDate: (row.data.requestDateHp as Date) ?? new Date(),
+    });
+    Object.assign(row.data, sla);
 
     // Skip rows missing required fields
     if (!row.data.model || !String(row.data.model).trim()) {
