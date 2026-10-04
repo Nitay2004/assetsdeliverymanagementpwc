@@ -358,9 +358,10 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
       buyersOrderNo: data.buyersOrderNo,
       buyersOrderDate: data.buyersOrderDate ? new Date(data.buyersOrderDate) : null,
       dispatchDocNo: data.dispatchDocNo,
-      // The return leg moves through the pickup partner recorded on the request,
-      // so that is what the challan has to name.
-      dispatchedThrough: rp.partnerName || data.dispatchedThrough,
+      // Dispatched Through is pre-filled in the modal with the pickup partner
+      // from the request, but the dropdown stays usable for requests that have
+      // no partner recorded, so whatever was chosen wins.
+      dispatchedThrough: data.dispatchedThrough || rp.partnerName,
       destination: data.destination,
       termsOfDelivery: data.termsOfDelivery,
       amountInWords,

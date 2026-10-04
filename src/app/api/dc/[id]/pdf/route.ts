@@ -62,8 +62,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       buyersOrderDate: dc.buyersOrderDate?.toISOString() ?? null,
       dispatchDocNo: docketNumber || dc.dispatchDocNo,
       // A reverse pickup challan travels back through the pickup partner, which
-      // lives on the request; only forward orders have a docket courier.
-      dispatchedThrough: isReversePickup ? rp?.partnerName || dc.dispatchedThrough : courierName || dc.dispatchedThrough,
+      // lives on the request; only forward orders have a docket courier. The
+      // stored value wins because the modal already falls back to the partner.
+      dispatchedThrough: isReversePickup ? dc.dispatchedThrough || rp?.partnerName : courierName || dc.dispatchedThrough,
       destination: dc.destination,
       termsOfDelivery: dc.termsOfDelivery,
       amountInWords: dc.amountInWords,
