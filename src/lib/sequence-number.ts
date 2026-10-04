@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 
-const SQL_IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
+// Postgres folds unquoted identifiers to lower case, so mixed-case columns only
+// work because every identifier here is double-quoted. Both cases are therefore
+// legitimate: "requestNumber" and "dc_number" are real columns in this schema.
+const SQL_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function assertSqlIdentifier(value: string) {
   if (!SQL_IDENTIFIER.test(value)) {
