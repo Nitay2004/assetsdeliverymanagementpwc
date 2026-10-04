@@ -251,6 +251,43 @@ export async function getDCsByOrder(orderId: string) {
 
 // ─── Reverse Pickup DC ───
 
+// A reverse pickup request only stores a serial number and a model name, while
+// the HSN code lives in Product Master. The serial is resolved against
+// inventory first because the inventory row carries the part number that
+// Product Master is keyed on; the model name is the fallback for requests whose
+// asset never made it into inventory.
+async function resolveProductHsn(serialNumber: string | null, model: string | null): Promise<string | null> {
+  const lookup = async (partNo?: string | null, modelName?: string | null) => {
+    if (partNo) {
+      const byPartNo = await prisma.productMaster.findFirst({
+        where: { partNo: { equals: partNo, mode: "insensitive" } },
+        select: { hsnCode: true },
+      });
+      if (byPartNo?.hsnCode) return byPartNo.hsnCode;
+    }
+    if (modelName) {
+      const byModel = await prisma.productMaster.findFirst({
+        where: { model: { equals: modelName, mode: "insensitive" } },
+        select: { hsnCode: true },
+      });
+      if (byModel?.hsnCode) return byModel.hsnCode;
+    }
+    return null;
+  };
+
+  const serial = serialNumber?.trim();
+  if (serial) {
+    const item = await prisma.inventoryItem.findUnique({
+      where: { serialNumber: serial },
+      select: { partNo: true, model: true },
+    });
+    const hsn = await lookup(item?.partNo, item?.model);
+    if (hsn) return hsn;
+  }
+
+  return lookup(null, model?.trim());
+}
+
 export async function getReversePickupForDc(rpId: string) {
   await requireAuth();
   const rp = await prisma.reversePickupRequest.findUnique({
@@ -259,6 +296,7 @@ export async function getReversePickupForDc(rpId: string) {
   if (!rp) return null;
 
   const fullAddress = [rp.pickupAddress, rp.city, rp.state, rp.pinCode].filter(Boolean).join(", ");
+  const hsnCode = await resolveProductHsn(rp.serialNumber, rp.model);
 
   return {
     id: rp.id,
@@ -268,7 +306,10 @@ export async function getReversePickupForDc(rpId: string) {
     fullAddress: fullAddress || rp.pickupAddress,
     warehouseLocation: rp.warehouseLocation || "",
     docketNumber: "",
-    items: [{ description: rp.model || "Laptop", hsnSac: "", quantity: 1, rate: 0 }],
+    // Reverse pickup is a return leg, so the DC leaves through the same pickup
+    // partner that collected the asset rather than a forward courier.
+    partnerName: rp.partnerName || "",
+    items: [{ description: rp.model || "Laptop", hsnSac: hsnCode ?? "", quantity: 1, rate: 0 }],
   };
 }
 
@@ -282,10 +323,14 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
   const dcNumber = await getNextDcNumber();
   const dcDate = new Date();
 
+  // Product Master stays the source of truth for the HSN: whatever the browser
+  // sent only fills in when the product has no HSN on file.
+  const resolvedHsn = await resolveProductHsn(rp.serialNumber, rp.model);
+
   const items = data.items.map((item) => {
     const amount = item.quantity * item.rate;
     const taxableValue = amount;
-    return { ...item, amount, taxableValue };
+    return { ...item, hsnSac: item.hsnSac || resolvedHsn || "", amount, taxableValue };
   });
 
   const totalAmount = items.reduce((sum, i) => sum + i.amount, 0);
@@ -304,14 +349,18 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
       warehouseId: data.warehouseId || null,
       shipToLocation: data.shipToLocation,
       billToLocation: data.billToLocation,
-      modeOfPayment: data.modeOfPayment,
+      // Reverse pickup DCs are raised on a return leg, so there is no payment
+      // term to capture.
+      modeOfPayment: null,
       referenceNo: data.referenceNo,
       referenceDate: data.referenceDate ? new Date(data.referenceDate) : null,
       otherReferences: data.otherReferences,
       buyersOrderNo: data.buyersOrderNo,
       buyersOrderDate: data.buyersOrderDate ? new Date(data.buyersOrderDate) : null,
       dispatchDocNo: data.dispatchDocNo,
-      dispatchedThrough: data.dispatchedThrough,
+      // The return leg moves through the pickup partner recorded on the request,
+      // so that is what the challan has to name.
+      dispatchedThrough: rp.partnerName || data.dispatchedThrough,
       destination: data.destination,
       termsOfDelivery: data.termsOfDelivery,
       amountInWords,

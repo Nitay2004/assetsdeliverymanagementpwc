@@ -38,7 +38,6 @@ export function ReversePickupDcModal({ rpId, open, onClose }: ReversePickupDcMod
   const [warehouseId, setWarehouseId] = useState("");
   const [shipToLocation, setShipToLocation] = useState("");
   const [billToLocation, setBillToLocation] = useState("");
-  const [modeOfPayment, setModeOfPayment] = useState("");
   const [referenceNo, setReferenceNo] = useState("");
   const [referenceDate, setReferenceDate] = useState("");
   const [otherReferences, setOtherReferences] = useState("");
@@ -68,6 +67,9 @@ export function ReversePickupDcModal({ rpId, open, onClose }: ReversePickupDcMod
       if (rpData.items.length > 0) {
         setItems(rpData.items);
       }
+      // The return leg goes back through the pickup partner already recorded on
+      // the request, so the challan never has to be told about it.
+      setDispatchedThrough(rpData.partnerName || "");
       if (rpData.warehouseLocation) {
         const matched = wh.find(w => w.name === rpData.warehouseLocation || w.location === rpData.warehouseLocation);
         if (matched) setWarehouseId(matched.id);
@@ -81,7 +83,6 @@ export function ReversePickupDcModal({ rpId, open, onClose }: ReversePickupDcMod
       setWarehouseId("");
       setShipToLocation("");
       setBillToLocation("");
-      setModeOfPayment("");
       setReferenceNo("");
       setReferenceDate("");
       setOtherReferences("");
@@ -142,7 +143,7 @@ export function ReversePickupDcModal({ rpId, open, onClose }: ReversePickupDcMod
         warehouseId: warehouseId || undefined,
         shipToLocation: shipToLocation.trim(),
         billToLocation: billToLocation.trim(),
-        modeOfPayment,
+        modeOfPayment: "",
         referenceNo,
         referenceDate: referenceDate || undefined,
         otherReferences,
@@ -228,15 +229,6 @@ export function ReversePickupDcModal({ rpId, open, onClose }: ReversePickupDcMod
           <div className="border-t pt-4">
             <h3 className="text-sm font-semibold text-foreground mb-3">Reference Details</h3>
             <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">Mode / Terms of Payment</label>
-                <input
-                  value={modeOfPayment}
-                  onChange={e => setModeOfPayment(e.target.value)}
-                  placeholder="e.g. Bank Transfer"
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-foreground">Reference No.</label>
                 <input

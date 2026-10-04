@@ -7,6 +7,12 @@ import vfs from "pdfmake/build/vfs_fonts";
 interface DcPdfData {
   dcNumber: string;
   dcDate: string;
+  // Reverse pickup challans are titled separately so the return leg is never
+  // mistaken for a forward delivery challan.
+  documentTitle?: string;
+  // Reverse pickup DCs have no payment terms, so the row is dropped entirely
+  // instead of being printed empty.
+  includeModeOfPayment?: boolean;
   warehouseName?: string | null;
   shipToLocation?: string | null;
   billToLocation?: string | null;
@@ -92,7 +98,7 @@ export async function generateDcPdf(data: DcPdfData, clientName: string): Promis
   };
 
   const header = () => [
-    { text: "DELIVERY CHALLAN", style: "title", alignment: "center" },
+    { text: data.documentTitle || "DELIVERY CHALLAN", style: "title", alignment: "center" },
     {
       columns: [
         { text: `DC No: ${data.dcNumber}`, style: "fieldValue" },
@@ -161,7 +167,9 @@ export async function generateDcPdf(data: DcPdfData, clientName: string): Promis
           widths: ["30%", "*"],
           body: [
             [{ text: "REFERENCE DETAILS", style: "sectionTitle", colSpan: 2, alignment: "left", border: [false, false, false, true] }, {}],
-            [{ text: "Mode / Terms of Payment", style: "fieldLabel" }, { text: data.modeOfPayment || "—", style: "fieldValue" }],
+            ...(data.includeModeOfPayment === false
+              ? []
+              : [[{ text: "Mode / Terms of Payment", style: "fieldLabel" }, { text: data.modeOfPayment || "—", style: "fieldValue" }]]),
             [{ text: "Reference No. & Date", style: "fieldLabel" }, { text: `${data.referenceNo || ""} ${data.referenceNo && data.referenceDate ? "/" : ""} ${formatDate(data.referenceDate)}`, style: "fieldValue" }],
             [{ text: "Other References", style: "fieldLabel" }, { text: data.otherReferences || "—", style: "fieldValue" }],
             [{ text: "Buyer's Order No. & Date", style: "fieldLabel" }, { text: `${data.buyersOrderNo || ""} ${data.buyersOrderNo && data.buyersOrderDate ? "/" : ""} ${formatDate(data.buyersOrderDate)}`, style: "fieldValue" }],

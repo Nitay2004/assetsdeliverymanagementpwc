@@ -162,6 +162,15 @@ Makes an order dispatchable by generating documents.
 - Click **Generate DC & Download PDF** → DC created **and** the PDF opens automatically.
 - Order status → `DC_GENERATED`.
 
+**Reverse pickup DC differences** (`STEP RP-4`)
+- The PDF is titled **REVERSE PICKUP DELIVERY CHALLAN** instead of DELIVERY CHALLAN.
+- **Mode / Terms of Payment is not captured** on a reverse DC.
+- **HSN/SAC auto-fills from Product Master** — the request's serial number is
+  resolved against inventory to get the part number, then matched to the HSN on
+  the product (model name is the fallback).
+- **Dispatched Through auto-fills** with the pickup partner assigned on the
+  reverse request, since the return leg travels back through them.
+
 **4.2 E-Way Bill**
 - Enter the E-Way bill number against the order (and upload the document if available).
 

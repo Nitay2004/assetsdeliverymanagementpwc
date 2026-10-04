@@ -34,6 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const inventoryItem = dc.order?.assets?.find(a => a.inventoryItem)?.inventoryItem ?? null;
   const rp = dc.reversePickupRequest;
+  const isReversePickup = !!rp;
 
   const userName = rp?.employeeName ?? inventoryItem?.employeeName ?? null;
   const userContact = rp
@@ -46,6 +47,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     {
       dcNumber: dc.dcNumber,
       dcDate: dc.dcDate.toISOString(),
+      documentTitle: isReversePickup ? "REVERSE PICKUP DELIVERY CHALLAN" : "DELIVERY CHALLAN",
+      includeModeOfPayment: !isReversePickup,
       warehouseName: dc.warehouse?.name,
       shipToLocation: dc.shipToLocation,
       billToLocation: dc.billToLocation,
@@ -58,7 +61,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       buyersOrderNo: dc.buyersOrderNo,
       buyersOrderDate: dc.buyersOrderDate?.toISOString() ?? null,
       dispatchDocNo: docketNumber || dc.dispatchDocNo,
-      dispatchedThrough: courierName || dc.dispatchedThrough,
+      // A reverse pickup challan travels back through the pickup partner, which
+      // lives on the request; only forward orders have a docket courier.
+      dispatchedThrough: isReversePickup ? rp?.partnerName || dc.dispatchedThrough : courierName || dc.dispatchedThrough,
       destination: dc.destination,
       termsOfDelivery: dc.termsOfDelivery,
       amountInWords: dc.amountInWords,
