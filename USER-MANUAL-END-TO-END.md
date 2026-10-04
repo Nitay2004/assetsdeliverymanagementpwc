@@ -260,7 +260,9 @@ Requested → Partner Assigned → DC Requested → DC Generated
 3. Status → `EWAY_BILL_REQUESTED` → Finance enters **E-Way #** (+ attachment) → `EWAY_BILL_GENERATED`.
 4. Click **Request Docket from Logistics** → `DOCKET_REQUESTED` → Logistics enters the docket in
    **Logistics → Reverse Pickup Docket** → `DOCKET_ASSIGNED`.
-5. Request → **Completed**. ✔
+5. Once the asset is received at the warehouse (`RECEIVED_AT_WAREHOUSE`) the
+   **POD document upload** unlocks in the request detail view.
+6. Request → **Completed**. ✔
 
 ---
 

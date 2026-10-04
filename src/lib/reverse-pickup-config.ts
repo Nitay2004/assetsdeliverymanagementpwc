@@ -125,6 +125,23 @@ export function getNextStatus(currentStatus: string): { next: string; label: str
   return STATUS_FLOW[currentStatus] ?? null;
 }
 
+// Warehouse documents (POD) only make sense once the courier has actually
+// handed the asset over, so the upload stays hidden until then. Everything from
+// RECEIVED_AT_WAREHOUSE onwards qualifies, including the QC and Blancco stages.
+const WAREHOUSE_REACHED_STATUSES = new Set([
+  "RECEIVED_AT_WAREHOUSE",
+  "QC_CLEANED",
+  "QC_COMPLETED",
+  "BLANCO_CLEARED",
+  "BLANCO_PURGED",
+  "BLANCO_CERTIFIED",
+  "COMPLETED",
+]);
+
+export function hasReachedWarehouse(status: string): boolean {
+  return WAREHOUSE_REACHED_STATUSES.has(status);
+}
+
 // All seedable categories for the DropdownOption table
 export const SEED_CATEGORIES: Record<string, { value: string; label: string }[]> = {
   type: TYPE_OPTIONS,

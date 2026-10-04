@@ -24,7 +24,7 @@ import {
   deleteReversePickupDropdownOption,
   seedReversePickupDropdowns,
 } from "@/app/actions/reverse-pickup";
-import { getNextStatus } from "@/lib/reverse-pickup-config";
+import { getNextStatus, hasReachedWarehouse } from "@/lib/reverse-pickup-config";
 import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
 
 interface RequestData {
@@ -723,6 +723,9 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       {/* Action Forms */}
       {canManage && (
         <>
+          {/* POD is handed over by the courier at the warehouse, so the upload
+              only unlocks from RECEIVED_AT_WAREHOUSE onwards. */}
+          {hasReachedWarehouse(effectiveStatus) && (
           <div className="rounded-xl glass shadow-sm p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">POD Document</h2>
@@ -764,6 +767,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               </div>
             </form>
           </div>
+          )}
           {nextAction && (
             <div className="rounded-xl glass shadow-sm p-6 space-y-4">
               <h2 className="text-lg font-semibold text-foreground">
@@ -773,33 +777,22 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               {/* Assign Partner */}
               {effectiveStatus === "REQUESTED" && (
                 <form action={async (formData) => handleAction("assignPartner", formData)} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-foreground">
-                        Partner Name <span className="text-red-500">*</span>
-                      </label>
-                      <ManageableDropdown
-                        name="partnerName"
-                        placeholder="Select partner..."
-                        value={partnerName}
-                        onChange={setPartnerName}
-                        options={dropdownData?.partnerName ?? []}
-                        allOptions={dropdownData?.allOptions ?? []}
-                        category="partnerName"
-                        onAdd={handleAdd}
-                        onDelete={handleDelete}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="partnerReference" className="text-sm font-medium text-foreground">Reference No.</label>
-                      <input
-                        id="partnerReference"
-                        name="partnerReference"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        placeholder="AWB / Ref number"
-                      />
-                    </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-foreground">
+                      Partner Name <span className="text-red-500">*</span>
+                    </label>
+                    <ManageableDropdown
+                      name="partnerName"
+                      placeholder="Select partner..."
+                      value={partnerName}
+                      onChange={setPartnerName}
+                      options={dropdownData?.partnerName ?? []}
+                      allOptions={dropdownData?.allOptions ?? []}
+                      category="partnerName"
+                      onAdd={handleAdd}
+                      onDelete={handleDelete}
+                      required
+                    />
                   </div>
                   <button
                     type="submit"

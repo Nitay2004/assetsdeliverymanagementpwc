@@ -231,6 +231,10 @@ Return flow when an asset comes back from a user.
 - Request info, user details, asset details, pickup location, SLA/TAT,
   courier & tracking (courier name, docket no, pickup date), inspection,
   warehouse receipt, QC results, Blancco, case info, final disposition.
+- **POD upload unlocks only from `RECEIVED_AT_WAREHOUSE` onwards** — before
+  that the courier has not handed the asset over, so the upload card is hidden.
+- Partner assignment asks only for the partner name; the courier docket/AWB is
+  entered by Logistics after the DC and e-way bill exist.
 - Export button available.
 
 ### 4.8 Warranty
