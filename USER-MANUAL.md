@@ -216,6 +216,12 @@ Return flow when an asset comes back from a user.
 8. Blancco — two stages: `BLANCO_CLEARED` (Clear) → `BLANCO_PURGED` (Purge + certificate PDF)
 9. `COMPLETED`
 
+**Overall QC result rule**
+- `qcResult` is auto-derived: **FAIL** if Hardware QC **or** Software QC is marked `FAIL`.
+- `PASS` only when **both** Hardware QC and Software QC are `PASS`.
+- Both stages stay recordable even after a failure, but Blancco Clear/Purge is blocked
+  until the overall QC result is `PASS`.
+
 **Special statuses**
 - `PICKUP_CANCELLED`, `DUPLICATE`, `ALREADY_SUBMITTED_TO_PWC_OFFICE`,
   `PENDING`, `PWC_CONFIRMATION_AWAITED`, `GATEPASS_PENDING`,

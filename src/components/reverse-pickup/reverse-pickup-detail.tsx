@@ -609,7 +609,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
               {request.qcResult && (
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">QC Result</span>
+                  <span className="text-muted-foreground">Overall QC Result</span>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                     request.qcResult === "PASS" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                   }`}>{request.qcResult}</span>
@@ -1112,6 +1112,13 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               {/* Record Blanco Clear */}
               {request.status === "QC_COMPLETED" && (
                 <form action={async (formData) => handleAction("recordBlancoClear", formData)} className="space-y-4">
+                  {request.qcResult !== "PASS" && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      Blancco Clear is blocked because the overall QC result is{" "}
+                      <span className="font-semibold">{request.qcResult ?? "not recorded as PASS"}</span>. Both
+                      Hardware QC and Software QC must pass to continue.
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label htmlFor="blancoClearResult" className="text-sm font-medium text-foreground">
@@ -1159,7 +1166,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                   </div>
                   <button
                     type="submit"
-                    disabled={isPending("recordBlancoClear")}
+                    disabled={isPending("recordBlancoClear") || request.qcResult !== "PASS"}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
                   >
                     {isPending("recordBlancoClear") ? <Loader2 className="size-4 animate-spin" /> : null}

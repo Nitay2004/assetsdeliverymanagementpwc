@@ -305,6 +305,9 @@ Requested → Partner Assigned → DC Requested → DC Generated
 | BLANCO_PURGED | Blancco Purge done + certificate |
 | COMPLETED | Fully processed |
 
+> **Overall QC result:** `qcResult` is `FAIL` when Hardware QC **or** Software QC fails,
+> and `PASS` only when both pass. A failed QC blocks the Blancco Clear/Purge stage.
+
 ---
 
 ## 7. Reports & Exports (used by every team daily)

@@ -382,6 +382,17 @@ export async function receiveAtWarehouse(formData: FormData) {
   revalidatePath("/dashboard/reverse-pickup");
 }
 
+// Overall QC result is derived from both stages: FAIL if either stage failed,
+// PASS only when both passed, otherwise still pending.
+function deriveQcResult(...stageResults: (string | null | undefined)[]) {
+  const recorded = stageResults.filter((r): r is string => !!r).map((r) => r.toUpperCase());
+  if (recorded.includes("FAIL")) return "FAIL";
+  if (stageResults.length > 0 && recorded.length === stageResults.length && recorded.every((r) => r === "PASS")) {
+    return "PASS";
+  }
+  return null;
+}
+
 export async function recordCleanQc(formData: FormData) {
   const user = await getSession();
   requirePermission(user, "reverse-pickup", "canEdit");
@@ -392,7 +403,12 @@ export async function recordCleanQc(formData: FormData) {
   const qcCleanDate = parseDate(formData.get("qcCleanDate") as string);
   const qcCleanBy = formData.get("qcCleanBy") as string;
 
-  if (!id || !qcCleanResult) throw new Error("Request ID and Clean QC result are required.");
+  if (!id || !qcCleanResult) throw new Error("Request ID and Hardware QC result are required.");
+
+  const existing = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: { qcPurgeResult: true },
+  });
 
   await prisma.reversePickupRequest.update({
     where: { id },
@@ -402,6 +418,7 @@ export async function recordCleanQc(formData: FormData) {
       qcCleanRemarks: qcCleanRemarks || null,
       qcCleanDate,
       qcCleanBy: qcCleanBy || null,
+      qcResult: deriveQcResult(qcCleanResult, existing?.qcPurgeResult),
     },
   });
 
@@ -418,7 +435,12 @@ export async function recordPurgeQc(formData: FormData) {
   const qcPurgeDate = parseDate(formData.get("qcPurgeDate") as string);
   const qcPurgeBy = formData.get("qcPurgeBy") as string;
 
-  if (!id || !qcPurgeResult) throw new Error("Request ID and Purge QC result are required.");
+  if (!id || !qcPurgeResult) throw new Error("Request ID and Software QC result are required.");
+
+  const existing = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: { qcCleanResult: true },
+  });
 
   await prisma.reversePickupRequest.update({
     where: { id },
@@ -428,6 +450,7 @@ export async function recordPurgeQc(formData: FormData) {
       qcPurgeRemarks: qcPurgeRemarks || null,
       qcPurgeDate,
       qcPurgeBy: qcPurgeBy || null,
+      qcResult: deriveQcResult(existing?.qcCleanResult, qcPurgeResult),
     },
   });
 
@@ -445,6 +468,15 @@ export async function recordBlancoClear(formData: FormData) {
   const clearBy = formData.get("blancoClearBy") as string;
 
   if (!id || !result) throw new Error("Request ID and Blancco Clear result are required.");
+
+  const existing = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: { qcCleanResult: true, qcPurgeResult: true },
+  });
+
+  if (deriveQcResult(existing?.qcCleanResult, existing?.qcPurgeResult) !== "PASS") {
+    throw new Error("Blancco Clear is blocked until both Hardware QC and Software QC pass.");
+  }
 
   await prisma.reversePickupRequest.update({
     where: { id },
