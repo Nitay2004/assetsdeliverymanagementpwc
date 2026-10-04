@@ -12,6 +12,12 @@ const REVERSE_PICKUP_FILTER_KEYS = ["requestNumber", "employeeName", "serialNumb
 const STATUS_STYLES: Record<string, { label: string; color: string }> = {
   REQUESTED:              { label: "Requested",              color: "bg-yellow-100 text-yellow-700" },
   PARTNER_ASSIGNED:       { label: "Partner Assigned",       color: "bg-blue-100 text-blue-700" },
+  DOCKET_REQUESTED:       { label: "Docket Requested",       color: "bg-orange-100 text-orange-700" },
+  DOCKET_ASSIGNED:        { label: "Docket Assigned",        color: "bg-cyan-100 text-cyan-700" },
+  DC_REQUESTED:           { label: "DC Requested",           color: "bg-orange-100 text-orange-700" },
+  DC_GENERATED:           { label: "DC Generated",           color: "bg-indigo-100 text-indigo-700" },
+  EWAY_BILL_REQUESTED:    { label: "E-Way Bill Requested",   color: "bg-yellow-100 text-yellow-700" },
+  EWAY_BILL_GENERATED:    { label: "E-Way Bill Generated",   color: "bg-indigo-100 text-indigo-700" },
   INSPECTED:              { label: "Inspected",              color: "bg-indigo-100 text-indigo-700" },
   PICKED_UP:              { label: "Picked Up",              color: "bg-purple-100 text-purple-700" },
   PICKUP_CANCELLED:       { label: "Pickup Cancelled",       color: "bg-red-100 text-red-700" },
@@ -26,8 +32,10 @@ const STATUS_STYLES: Record<string, { label: string; color: string }> = {
   RTO_CASE:               { label: "RTO Case",               color: "bg-rose-100 text-rose-700" },
   LOST_DEVICE:            { label: "Lost Device",            color: "bg-stone-100 text-stone-700" },
   RECEIVED_AT_WAREHOUSE:  { label: "At Warehouse",           color: "bg-cyan-100 text-cyan-700" },
-  QC_CLEANED:             { label: "Clean QC",               color: "bg-lime-100 text-lime-700" },
-  QC_COMPLETED:           { label: "QC Completed",           color: "bg-green-100 text-green-700" },
+  QC_CLEANED:             { label: "Hardware QC",            color: "bg-lime-100 text-lime-700" },
+  QC_COMPLETED:           { label: "Software QC",            color: "bg-green-100 text-green-700" },
+  BLANCO_CLEARED:         { label: "Blanco Clear",           color: "bg-sky-100 text-sky-700" },
+  BLANCO_PURGED:          { label: "Blanco Purge",           color: "bg-teal-100 text-teal-700" },
   BLANCO_CERTIFIED:       { label: "Blanco Certified",       color: "bg-teal-100 text-teal-700" },
   COMPLETED:              { label: "Completed",              color: "bg-emerald-100 text-emerald-700" },
 };
@@ -35,6 +43,12 @@ const STATUS_STYLES: Record<string, { label: string; color: string }> = {
 const STATUS_ICONS: Record<string, typeof Truck> = {
   REQUESTED: Clock,
   PARTNER_ASSIGNED: Truck,
+  DOCKET_REQUESTED: FileText,
+  DOCKET_ASSIGNED: FileText,
+  DC_REQUESTED: FileText,
+  DC_GENERATED: FileText,
+  EWAY_BILL_REQUESTED: FileText,
+  EWAY_BILL_GENERATED: FileText,
   INSPECTED: ClipboardCheck,
   PICKED_UP: Truck,
   PICKUP_CANCELLED: Clock,
@@ -51,6 +65,8 @@ const STATUS_ICONS: Record<string, typeof Truck> = {
   RECEIVED_AT_WAREHOUSE: Warehouse,
   QC_CLEANED: ShieldCheck,
   QC_COMPLETED: ShieldCheck,
+  BLANCO_CLEARED: ShieldCheck,
+  BLANCO_PURGED: FileText,
   BLANCO_CERTIFIED: FileText,
   COMPLETED: CheckCircle,
 };
@@ -62,20 +78,22 @@ const STRING_SEARCH_FIELDS = [
 ] as const;
 
 const ALL_STATUSES = [
-  "REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "DC_REQUESTED",
-  "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED",
+  "REQUESTED", "PARTNER_ASSIGNED", "DC_REQUESTED", "DC_GENERATED",
+  "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED",
+  "DOCKET_REQUESTED", "DOCKET_ASSIGNED",
   "INSPECTED", "PICKED_UP", "PICKUP_CANCELLED", "DUPLICATE",
   "ALREADY_SUBMITTED_TO_PWC_OFFICE", "PENDING", "PWC_CONFIRMATION_AWAITED",
   "GATEPASS_PENDING", "ALIGN_FOR_PICKUP", "IN_TRANSIT", "ON_HOLD",
   "RTO_CASE", "LOST_DEVICE",
   "RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED",
-  "BLANCO_CERTIFIED", "COMPLETED",
+  "BLANCO_CLEARED", "BLANCO_PURGED", "BLANCO_CERTIFIED", "COMPLETED",
 ] as const;
 
 const STATUS_LABELS: Record<string, string> = {
   REQUESTED: "requested",
   PARTNER_ASSIGNED: "partner assigned",
   DOCKET_REQUESTED: "docket requested",
+  DOCKET_ASSIGNED: "docket assigned",
   INSPECTED: "inspected",
   PICKED_UP: "picked up",
   PICKUP_CANCELLED: "pickup cancelled",
@@ -90,12 +108,14 @@ const STATUS_LABELS: Record<string, string> = {
   RTO_CASE: "rto case",
   LOST_DEVICE: "lost device",
   RECEIVED_AT_WAREHOUSE: "received at warehouse",
-  QC_CLEANED: "clean qc",
-  QC_COMPLETED: "qc completed",
+  QC_CLEANED: "hardware qc",
+  QC_COMPLETED: "software qc",
   DC_REQUESTED: "dc requested",
   DC_GENERATED: "dc generated",
   EWAY_BILL_REQUESTED: "eway bill requested",
   EWAY_BILL_GENERATED: "eway bill generated",
+  BLANCO_CLEARED: "blanco clear",
+  BLANCO_PURGED: "blanco purge",
   BLANCO_CERTIFIED: "blanco certified",
   COMPLETED: "completed",
 };
@@ -242,7 +262,7 @@ export default async function ReversePickupPage({
     statuses.reduce((sum, s) => sum + (statusCounts.get(s as never) ?? 0), 0);
   const pendingCount = statusCount("REQUESTED", "PARTNER_ASSIGNED", "INSPECTED", "PICKED_UP");
   const atWarehouse = statusCount("RECEIVED_AT_WAREHOUSE", "QC_COMPLETED", "COMPLETED");
-  const completedCount = statusCount("BLANCO_CERTIFIED", "COMPLETED");
+  const completedCount = statusCount("BLANCO_PURGED", "BLANCO_CERTIFIED", "COMPLETED");
 
   const columnFilterValues: Record<string, { value: string; count: number }[]> = {};
   scalarGroups.forEach((rows, i) => {
@@ -322,7 +342,7 @@ export default async function ReversePickupPage({
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Reverse Pickup</h1>
           <p className="text-muted-foreground mt-2">
-            Manage asset returns from employees — from pickup request to restock.
+            Manage asset returns from employees â€” from pickup request to restock.
           </p>
         </div>
         <div className="flex items-center gap-2">

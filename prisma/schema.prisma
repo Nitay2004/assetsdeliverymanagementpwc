@@ -46,6 +46,7 @@ enum ReversePickupStatus {
   REQUESTED
   PARTNER_ASSIGNED
   DOCKET_REQUESTED
+  DOCKET_ASSIGNED
   INSPECTED
   PICKED_UP
   PICKUP_CANCELLED
@@ -66,6 +67,8 @@ enum ReversePickupStatus {
   DC_GENERATED
   EWAY_BILL_REQUESTED
   EWAY_BILL_GENERATED
+  BLANCO_CLEARED
+  BLANCO_PURGED
   BLANCO_CERTIFIED
   COMPLETED
 }
@@ -506,17 +509,29 @@ model ReversePickupRequest {
   qcPerformedBy         String?              @map("qc_performed_by")
   qcResult              String?              @map("qc_result")
 
-  // ── QC Level 1: Clean ──
+  // ── QC Level 1: Hardware ──
   qcCleanResult         String?              @map("qc_clean_result")
   qcCleanRemarks        String?              @map("qc_clean_remarks")
   qcCleanDate           DateTime?            @map("qc_clean_date") @db.Date
   qcCleanBy             String?              @map("qc_clean_by")
 
-  // ── QC Level 2: Purge ──
+  // ── QC Level 2: Software ──
   qcPurgeResult         String?              @map("qc_purge_result")
   qcPurgeRemarks        String?              @map("qc_purge_remarks")
   qcPurgeDate           DateTime?            @map("qc_purge_date") @db.Date
   qcPurgeBy             String?              @map("qc_purge_by")
+
+  // ── Blancco Stage 1: Clear ──
+  blancoClearResult     String?              @map("blanco_clear_result")
+  blancoClearRemarks    String?              @map("blanco_clear_remarks")
+  blancoClearDate       DateTime?            @map("blanco_clear_date") @db.Date
+  blancoClearBy         String?              @map("blanco_clear_by")
+
+  // ── Blancco Stage 2: Purge ──
+  blancoPurgeResult     String?              @map("blanco_purge_result")
+  blancoPurgeRemarks    String?              @map("blanco_purge_remarks")
+  blancoPurgeDate       DateTime?            @map("blanco_purge_date") @db.Date
+  blancoPurgeBy         String?              @map("blanco_purge_by")
 
   // ── Blancco ──
   blanccoYesNo          String?              @map("blancco_yes_no") // DD

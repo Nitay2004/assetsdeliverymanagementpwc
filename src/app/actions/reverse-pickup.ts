@@ -434,21 +434,55 @@ export async function recordPurgeQc(formData: FormData) {
   revalidatePath("/dashboard/reverse-pickup");
 }
 
-export async function uploadBlancoCertificate(formData: FormData) {
+export async function recordBlancoClear(formData: FormData) {
   const user = await getSession();
   requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
-  const blancoCertificateUrl = formData.get("blancoCertificateUrl") as string;
-  const blancoCertificateDate = parseDate(formData.get("blancoCertificateDate") as string);
+  const result = formData.get("blancoClearResult") as string;
+  const remarks = formData.get("blancoClearRemarks") as string;
+  const clearDate = parseDate(formData.get("blancoClearDate") as string);
+  const clearBy = formData.get("blancoClearBy") as string;
 
-  if (!id || !blancoCertificateUrl) throw new Error("Request ID and certificate URL are required.");
+  if (!id || !result) throw new Error("Request ID and Blancco Clear result are required.");
 
   await prisma.reversePickupRequest.update({
     where: { id },
     data: {
-      status: "BLANCO_CERTIFIED",
-      blancoCertificateUrl,
+      status: "BLANCO_CLEARED",
+      blancoClearResult: result,
+      blancoClearRemarks: remarks || null,
+      blancoClearDate: clearDate,
+      blancoClearBy: clearBy || null,
+    },
+  });
+
+  revalidatePath("/dashboard/reverse-pickup");
+}
+
+export async function recordBlancoPurge(formData: FormData) {
+  const user = await getSession();
+  requirePermission(user, "reverse-pickup", "canEdit");
+
+  const id = formData.get("id") as string;
+  const result = formData.get("blancoPurgeResult") as string;
+  const remarks = formData.get("blancoPurgeRemarks") as string;
+  const purgeDate = parseDate(formData.get("blancoPurgeDate") as string);
+  const purgeBy = formData.get("blancoPurgeBy") as string;
+  const blancoCertificateUrl = formData.get("blancoCertificateUrl") as string;
+  const blancoCertificateDate = parseDate(formData.get("blancoCertificateDate") as string);
+
+  if (!id || !result) throw new Error("Request ID and Blancco Purge result are required.");
+
+  await prisma.reversePickupRequest.update({
+    where: { id },
+    data: {
+      status: "BLANCO_PURGED",
+      blancoPurgeResult: result,
+      blancoPurgeRemarks: remarks || null,
+      blancoPurgeDate: purgeDate,
+      blancoPurgeBy: purgeBy || null,
+      blancoCertificateUrl: blancoCertificateUrl || null,
       blancoCertificateDate,
     },
   });
@@ -576,7 +610,11 @@ export async function completeReversePickup(formData: FormData) {
 
 export async function assignReversePickupDocket(formData: FormData) {
   const user = await getSession();
-  requirePermission(user, "reverse-pickup", "canEdit");
+  // This action is driven from the Logistics dashboard, so it is authorised
+  // against the logistics module. A plain LOGISTICS user has no
+  // reverse-pickup:canEdit grant and would otherwise be shown the docket queue
+  // only to be rejected on submit.
+  requirePermission(user, "logistics", "canEdit");
 
   const id = formData.get("id") as string;
   const docketNumber = formData.get("docketNumber") as string;
@@ -584,7 +622,7 @@ export async function assignReversePickupDocket(formData: FormData) {
 
   await prisma.reversePickupRequest.update({
     where: { id },
-    data: { docketNumber, status: "DC_REQUESTED" },
+    data: { docketNumber, status: "DOCKET_ASSIGNED" },
   });
 
   revalidatePath("/dashboard/logistics");

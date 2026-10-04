@@ -40,7 +40,7 @@ export function ReversePickupDocketSection({ requests, canManage }: Props) {
       fd.set("id", requestId);
       fd.set("docketNumber", docketNumber.trim());
       await assignReversePickupDocket(fd);
-      toast({ title: "Docket Assigned", description: "Reverse pickup request advanced to DC request.", variant: "success" });
+      toast({ title: "Docket Assigned", description: "Reverse pickup request advanced to inspection.", variant: "success" });
       setDocketInputs(prev => { const n = { ...prev }; delete n[requestId]; return n; });
       router.refresh();
     } catch (err: any) {

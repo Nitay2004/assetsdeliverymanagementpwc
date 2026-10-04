@@ -206,14 +206,15 @@ Return flow when an asset comes back from a user.
 - Reverse Pickup → **Import** to bulk-register multiple return requests from a file.
 
 **Lifecycle (statuses the team uses)**
-1. `REQUESTED` → partner assigned / docket requested
-2. `INSPECTED` → `PICKED_UP`
-3. `IN_TRANSIT` → `RECEIVED_AT_WAREHOUSE` (received by / received date)
-4. QC: `QC_CLEANED` → `QC_COMPLETED` (Clean + Purge results & remarks)
-5. `DC_REQUESTED` → `DC_GENERATED` (Finance)
-6. `EWAY_BILL_REQUESTED` → `EWAY_BILL_GENERATED`
-7. `BLANCO_CERTIFIED` (Blancco certificate details + document URL)
-8. `COMPLETED`
+1. `REQUESTED` → `PARTNER_ASSIGNED`
+2. `DC_REQUESTED` → `DC_GENERATED` (Finance)
+3. `EWAY_BILL_REQUESTED` → `EWAY_BILL_GENERATED`
+4. `DOCKET_REQUESTED` → `DOCKET_ASSIGNED` (Logistics — docket comes after DC + E-Way bill)
+5. `INSPECTED` → `PICKED_UP`
+6. `IN_TRANSIT` → `RECEIVED_AT_WAREHOUSE` (received by / received date)
+7. QC — two stages: `QC_CLEANED` (Hardware QC) → `QC_COMPLETED` (Software QC)
+8. Blancco — two stages: `BLANCO_CLEARED` (Clear) → `BLANCO_PURGED` (Purge + certificate PDF)
+9. `COMPLETED`
 
 **Special statuses**
 - `PICKUP_CANCELLED`, `DUPLICATE`, `ALREADY_SUBMITTED_TO_PWC_OFFICE`,

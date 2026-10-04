@@ -77,7 +77,7 @@ export default async function DashboardPage(props: {
   const inventoryWhere = createdAt ? { createdAt } : undefined;
   const reverseWhere = createdAt ? { createdAt } : undefined;
 
-  // Fetch all data in parallel — aggregate counts in the DB, no unbounded row loads.
+  // Fetch all data in parallel Ã¢â‚¬â€ aggregate counts in the DB, no unbounded row loads.
   const [orderStatuses, inventoryStatuses, slaMetCount, totalAssets, warrantyPendingCount, stockByWarehouseRows, recentOrders, recentInventory, reversePickupStatuses, reverseSlaMetCount, reverseRemarkCancelCount, deliveredInventoryCount, inTransitInventoryCount, rtoInventoryCount] = await Promise.all([
     prisma.order.groupBy({
       by: ["status"],
@@ -184,11 +184,12 @@ export default async function DashboardPage(props: {
   const reversePickupsDone = reverseStatusCount("PICKED_UP", "COMPLETED");
   const reversePickupsCancelled = reverseStatusCount("PICKUP_CANCELLED") + reverseRemarkCancelCount;
   const reverseInTransit = reverseStatusCount(
-    "IN_TRANSIT", "DOCKET_REQUESTED", "DC_REQUESTED", "DC_GENERATED",
-    "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "INSPECTED", "PICKED_UP"
+    "IN_TRANSIT", "DC_REQUESTED", "DC_GENERATED",
+    "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED",
+    "DOCKET_REQUESTED", "DOCKET_ASSIGNED", "INSPECTED", "PICKED_UP"
   );
   const reverseReceivedInWh = reverseStatusCount("RECEIVED_AT_WAREHOUSE", "COMPLETED");
-  const reverseAlignQc = reverseStatusCount("QC_CLEANED", "QC_COMPLETED", "BLANCO_CERTIFIED");
+  const reverseAlignQc = reverseStatusCount("QC_CLEANED", "QC_COMPLETED", "BLANCO_CLEARED", "BLANCO_PURGED");
   const reverseSlaMet = reverseSlaMetCount;
 
   // Group inventory items by invoicing warehouse
@@ -221,7 +222,7 @@ export default async function DashboardPage(props: {
   const activities = [
     ...recentOrders.map((o) => ({
       id: `order-${o.id}`,
-      message: `Order for ${o.clientName} → ${o.deliveryLocation} (${STATUS_CONFIG[o.status]?.label ?? o.status})`,
+      message: `Order for ${o.clientName} Ã¢â€ â€™ ${o.deliveryLocation} (${STATUS_CONFIG[o.status]?.label ?? o.status})`,
       time: timeAgo(o.updatedAt),
       module: "Orders",
       href: `/dashboard/warehouse?selected=${o.id}`,
@@ -391,7 +392,7 @@ export default async function DashboardPage(props: {
             modalTitle="All Reverse Requests"
             modalIcon={<Target className="size-5 text-blue-600" />}
             modalIconBg="bg-blue-50"
-            statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "INSPECTED", "PICKED_UP", "PICKUP_CANCELLED", "DUPLICATE", "ALREADY_SUBMITTED_TO_PWC_OFFICE", "PENDING", "PWC_CONFIRMATION_AWAITED", "GATEPASS_PENDING", "ALIGN_FOR_PICKUP", "IN_TRANSIT", "ON_HOLD", "RTO_CASE", "LOST_DEVICE", "RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED", "BLANCO_CERTIFIED", "COMPLETED"]}
+            statuses={["REQUESTED", "PARTNER_ASSIGNED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "DOCKET_REQUESTED", "DOCKET_ASSIGNED", "INSPECTED", "PICKED_UP", "PICKUP_CANCELLED", "DUPLICATE", "ALREADY_SUBMITTED_TO_PWC_OFFICE", "PENDING", "PWC_CONFIRMATION_AWAITED", "GATEPASS_PENDING", "ALIGN_FOR_PICKUP", "IN_TRANSIT", "ON_HOLD", "RTO_CASE", "LOST_DEVICE", "RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED", "BLANCO_CLEARED", "BLANCO_PURGED", "BLANCO_CERTIFIED", "COMPLETED"]}
           />
           <ReverseStatCard
             icon={<CheckCircle className="size-5 text-green-600" />}
@@ -423,7 +424,7 @@ export default async function DashboardPage(props: {
             modalTitle="In-Transit Requests"
             modalIcon={<Truck className="size-5 text-cyan-600" />}
             modalIconBg="bg-cyan-50"
-            statuses={["IN_TRANSIT", "PICKED_UP", "DOCKET_REQUESTED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "INSPECTED"]}
+            statuses={["IN_TRANSIT", "PICKED_UP", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "DOCKET_REQUESTED", "DOCKET_ASSIGNED", "INSPECTED"]}
           />
           <ReverseStatCard
             icon={<Warehouse className="size-5 text-emerald-600" />}
@@ -445,7 +446,7 @@ export default async function DashboardPage(props: {
             modalTitle="Align for QC & Blancco"
             modalIcon={<ClipboardCheck className="size-5 text-violet-600" />}
             modalIconBg="bg-violet-50"
-            statuses={["QC_CLEANED", "QC_COMPLETED", "BLANCO_CERTIFIED"]}
+            statuses={["QC_CLEANED", "QC_COMPLETED", "BLANCO_CLEARED", "BLANCO_PURGED", "BLANCO_CERTIFIED"]}
           />
           {!isPwc && (
             <ReverseStatCard
@@ -457,7 +458,7 @@ export default async function DashboardPage(props: {
               modalTitle="SLA Met Requests"
               modalIcon={<CheckCircle className="size-5 text-green-600" />}
               modalIconBg="bg-green-50"
-              statuses={["REQUESTED", "PARTNER_ASSIGNED", "DOCKET_REQUESTED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "INSPECTED", "PICKED_UP", "PICKUP_CANCELLED", "DUPLICATE", "ALREADY_SUBMITTED_TO_PWC_OFFICE", "PENDING", "PWC_CONFIRMATION_AWAITED", "GATEPASS_PENDING", "ALIGN_FOR_PICKUP", "IN_TRANSIT", "ON_HOLD", "RTO_CASE", "LOST_DEVICE", "RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED", "BLANCO_CERTIFIED", "COMPLETED"]}
+              statuses={["REQUESTED", "PARTNER_ASSIGNED", "DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED", "DOCKET_REQUESTED", "DOCKET_ASSIGNED", "INSPECTED", "PICKED_UP", "PICKUP_CANCELLED", "DUPLICATE", "ALREADY_SUBMITTED_TO_PWC_OFFICE", "PENDING", "PWC_CONFIRMATION_AWAITED", "GATEPASS_PENDING", "ALIGN_FOR_PICKUP", "IN_TRANSIT", "ON_HOLD", "RTO_CASE", "LOST_DEVICE", "RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED", "BLANCO_CLEARED", "BLANCO_PURGED", "BLANCO_CERTIFIED", "COMPLETED"]}
             />
           )}
         </div>

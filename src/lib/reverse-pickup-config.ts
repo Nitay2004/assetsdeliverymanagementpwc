@@ -72,6 +72,7 @@ export const STATUS_LABELS: Record<string, string> = {
   REQUESTED: "Requested",
   PARTNER_ASSIGNED: "Partner Assigned",
   DOCKET_REQUESTED: "Docket Requested",
+  DOCKET_ASSIGNED: "Docket Assigned",
   INSPECTED: "Inspected",
   PICKED_UP: "Picked Up",
   PICKUP_CANCELLED: "Pickup Cancelled",
@@ -86,30 +87,37 @@ export const STATUS_LABELS: Record<string, string> = {
   RTO_CASE: "RTO Case",
   LOST_DEVICE: "Lost Device",
   RECEIVED_AT_WAREHOUSE: "At Warehouse",
-  QC_CLEANED: "Clean QC",
-  QC_COMPLETED: "QC Completed",
+  QC_CLEANED: "Hardware QC",
+  QC_COMPLETED: "Software QC",
   DC_REQUESTED: "DC Requested",
   DC_GENERATED: "DC Generated",
   EWAY_BILL_REQUESTED: "E-Way Bill Requested",
   EWAY_BILL_GENERATED: "E-Way Bill Generated",
+  BLANCO_CLEARED: "Blanco Clear",
+  BLANCO_PURGED: "Blanco Purge",
   BLANCO_CERTIFIED: "Blanco Certified",
   COMPLETED: "Completed",
 };
 
 export const STATUS_FLOW: Record<string, { next: string; label: string } | null> = {
   REQUESTED:              { next: "PARTNER_ASSIGNED",      label: "Assign Partner" },
-  PARTNER_ASSIGNED:       { next: "DOCKET_REQUESTED",      label: "Request Docket" },
-  DOCKET_REQUESTED:       null,  // Logistics assigns docket and advances to DC_REQUESTED
+  PARTNER_ASSIGNED:       { next: "DC_REQUESTED",          label: "Request DC" },
   DC_REQUESTED:           null,  // Finance generates DC
   DC_GENERATED:           { next: "EWAY_BILL_REQUESTED",   label: "Request E-Way Bill" },
   EWAY_BILL_REQUESTED:    null,  // Finance generates e-way bill
-  EWAY_BILL_GENERATED:    { next: "INSPECTED",             label: "Record Inspection" },
+  EWAY_BILL_GENERATED:    { next: "DOCKET_REQUESTED",      label: "Request Docket" },
+  DOCKET_REQUESTED:       null,  // Logistics assigns docket and advances to DOCKET_ASSIGNED
+  DOCKET_ASSIGNED:        { next: "INSPECTED",             label: "Record Inspection" },
   INSPECTED:              { next: "PICKED_UP",             label: "Mark Picked Up" },
   PICKED_UP:              { next: "RECEIVED_AT_WAREHOUSE", label: "Receive at Warehouse" },
-  RECEIVED_AT_WAREHOUSE:  { next: "QC_CLEANED",          label: "Record Clean QC" },
-  QC_CLEANED:             { next: "QC_COMPLETED",        label: "Record Purge QC" },
-  QC_COMPLETED:           { next: "BLANCO_CERTIFIED",      label: "Upload Blanco Certificate" },
-  BLANCO_CERTIFIED:       { next: "COMPLETED",             label: "Move to Inventory" },
+  RECEIVED_AT_WAREHOUSE:  { next: "QC_CLEANED",             label: "Record Hardware QC" },
+  QC_CLEANED:             { next: "QC_COMPLETED",          label: "Record Software QC" },
+  QC_COMPLETED:           { next: "BLANCO_CLEARED",         label: "Record Blanco Clear" },
+  BLANCO_CLEARED:         { next: "BLANCO_PURGED",          label: "Record Blanco Purge" },
+  BLANCO_PURGED:          { next: "COMPLETED",              label: "Move to Inventory" },
+  // Legacy terminal state kept so requests certified before the Blancco Clear /
+  // Purge split was introduced can still be closed out.
+  BLANCO_CERTIFIED:       { next: "COMPLETED",              label: "Move to Inventory" },
   COMPLETED:              null,
 };
 

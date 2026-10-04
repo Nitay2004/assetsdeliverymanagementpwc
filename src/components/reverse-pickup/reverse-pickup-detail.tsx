@@ -7,6 +7,7 @@ import { ArrowLeft, Check, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileTe
 import { useToast } from "@/hooks/use-toast";
 import {
   assignPartner,
+  requestDc,
   requestDocket,
   recordInspection,
   markAsPickedUp,
@@ -14,7 +15,8 @@ import {
   recordCleanQc,
   recordPurgeQc,
   requestEwayBill,
-  uploadBlancoCertificate,
+  recordBlancoClear,
+  recordBlancoPurge,
   uploadPodDocument,
   completeReversePickup,
   getReversePickupDropdowns,
@@ -100,6 +102,14 @@ interface RequestData {
   qcPurgeBy: string | null;
   blanccoYesNo: string | null;
   blanccoDate: string | null;
+  blancoClearResult: string | null;
+  blancoClearRemarks: string | null;
+  blancoClearDate: string | null;
+  blancoClearBy: string | null;
+  blancoPurgeResult: string | null;
+  blancoPurgeRemarks: string | null;
+  blancoPurgeDate: string | null;
+  blancoPurgeBy: string | null;
   blancoCertificateUrl: string | null;
   blancoCertificateDate: string | null;
   podDocumentUrl: string | null;
@@ -125,17 +135,19 @@ interface Props {
 const STEPS = [
   { key: "REQUESTED", label: "Requested", icon: Circle },
   { key: "PARTNER_ASSIGNED", label: "Partner Assigned", icon: Truck },
-  { key: "DOCKET_REQUESTED", label: "Docket Req.", icon: FileText },
   { key: "DC_REQUESTED", label: "DC Req.", icon: FileText },
   { key: "DC_GENERATED", label: "DC Gen.", icon: FileText },
   { key: "EWAY_BILL_REQUESTED", label: "E-Way Req.", icon: FileText },
   { key: "EWAY_BILL_GENERATED", label: "E-Way Gen.", icon: FileText },
+  { key: "DOCKET_REQUESTED", label: "Docket Req.", icon: FileText },
+  { key: "DOCKET_ASSIGNED", label: "Docket Assigned", icon: FileText },
   { key: "INSPECTED", label: "Inspected", icon: ClipboardCheck },
   { key: "PICKED_UP", label: "Picked Up", icon: Truck },
   { key: "RECEIVED_AT_WAREHOUSE", label: "At Warehouse", icon: Warehouse },
-  { key: "QC_CLEANED", label: "Clean QC", icon: ShieldCheck },
-  { key: "QC_COMPLETED", label: "QC Completed", icon: ShieldCheck },
-  { key: "BLANCO_CERTIFIED", label: "Blanco Cert", icon: FileText },
+  { key: "QC_CLEANED", label: "Hardware QC", icon: ShieldCheck },
+  { key: "QC_COMPLETED", label: "Software QC", icon: ShieldCheck },
+  { key: "BLANCO_CLEARED", label: "Blanco Clear", icon: ShieldCheck },
+  { key: "BLANCO_PURGED", label: "Blanco Purge", icon: FileText },
   { key: "COMPLETED", label: "Completed", icon: Package },
 ];
 
@@ -205,6 +217,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       formData.append("id", request.id);
       const actionMap: Record<string, (fd: FormData) => Promise<void>> = {
         assignPartner,
+        requestDc,
         requestDocket,
         recordInspection,
         markAsPickedUp,
@@ -212,7 +225,8 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
         recordCleanQc,
         recordPurgeQc,
         requestEwayBill,
-        uploadBlancoCertificate,
+        recordBlancoClear,
+        recordBlancoPurge,
         completeReversePickup,
       };
       await actionMap[actionName](formData);
@@ -228,6 +242,11 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
   const handleUploadBlanco = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    const result = formData.get("blancoPurgeResult") as string | null;
+    if (!result) {
+      toast({ title: "Validation", description: "Blancco Purge result is required.", variant: "error" });
+      return;
+    }
     const file = formData.get("blancoCertificateFile") as File | null;
     const date = formData.get("blancoCertificateDate") as string | null;
 
@@ -241,7 +260,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       return;
     }
 
-    setLoading("uploadBlancoCertificate");
+    setLoading("recordBlancoPurge");
     try {
       const uploadFd = new FormData();
       uploadFd.set("file", file);
@@ -251,9 +270,16 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
 
       const actionFd = new FormData();
       actionFd.set("id", request.id);
+      actionFd.set("blancoPurgeResult", result);
+      const purgeDate = formData.get("blancoPurgeDate") as string | null;
+      if (purgeDate) actionFd.set("blancoPurgeDate", purgeDate);
+      const purgeBy = formData.get("blancoPurgeBy") as string | null;
+      if (purgeBy) actionFd.set("blancoPurgeBy", purgeBy);
+      const purgeRemarks = formData.get("blancoPurgeRemarks") as string | null;
+      if (purgeRemarks) actionFd.set("blancoPurgeRemarks", purgeRemarks);
       actionFd.set("blancoCertificateUrl", data.url);
       actionFd.set("blancoCertificateDate", date ?? "");
-      await uploadBlancoCertificate(actionFd);
+      await recordBlancoPurge(actionFd);
 
       toast({ title: "Action completed successfully", variant: "success" });
       router.refresh();
@@ -339,6 +365,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
     REQUESTED:              { label: "Requested",              color: "bg-yellow-100 text-yellow-700" },
     PARTNER_ASSIGNED:       { label: "Partner Assigned",       color: "bg-blue-100 text-blue-700" },
     DOCKET_REQUESTED:       { label: "Docket Requested",       color: "bg-orange-100 text-orange-700" },
+    DOCKET_ASSIGNED:        { label: "Docket Assigned",        color: "bg-cyan-100 text-cyan-700" },
     INSPECTED:              { label: "Inspected",              color: "bg-indigo-100 text-indigo-700" },
     PICKED_UP:              { label: "Picked Up",              color: "bg-purple-100 text-purple-700" },
     PICKUP_CANCELLED:       { label: "Pickup Cancelled",       color: "bg-red-100 text-red-700" },
@@ -353,12 +380,14 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
     RTO_CASE:               { label: "RTO Case",               color: "bg-rose-100 text-rose-700" },
     LOST_DEVICE:            { label: "Lost Device",            color: "bg-stone-100 text-stone-700" },
     RECEIVED_AT_WAREHOUSE:  { label: "At Warehouse",           color: "bg-cyan-100 text-cyan-700" },
-    QC_CLEANED:             { label: "Clean QC",               color: "bg-lime-100 text-lime-700" },
-    QC_COMPLETED:           { label: "QC Completed",           color: "bg-green-100 text-green-700" },
+    QC_CLEANED:             { label: "Hardware QC",            color: "bg-lime-100 text-lime-700" },
+    QC_COMPLETED:           { label: "Software QC",            color: "bg-green-100 text-green-700" },
     DC_REQUESTED:           { label: "DC Requested",           color: "bg-orange-100 text-orange-700" },
     DC_GENERATED:           { label: "DC Generated",           color: "bg-indigo-100 text-indigo-700" },
     EWAY_BILL_REQUESTED:    { label: "E-Way Bill Requested",   color: "bg-yellow-100 text-yellow-700" },
     EWAY_BILL_GENERATED:    { label: "E-Way Bill Generated",   color: "bg-indigo-100 text-indigo-700" },
+    BLANCO_CLEARED:         { label: "Blanco Clear",           color: "bg-sky-100 text-sky-700" },
+    BLANCO_PURGED:          { label: "Blanco Purge",           color: "bg-teal-100 text-teal-700" },
     BLANCO_CERTIFIED:       { label: "Blanco Certified",       color: "bg-teal-100 text-teal-700" },
     COMPLETED:              { label: "Completed",              color: "bg-emerald-100 text-emerald-700" },
   };
@@ -438,11 +467,11 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Email</span>
-              <span>{request.emailId || "—"}</span>
+              <span>{request.emailId || "â€”"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Mobile</span>
-              <span>{request.mobileNumber || "—"}</span>
+              <span>{request.mobileNumber || "â€”"}</span>
             </div>
           </div>
         </div>
@@ -460,7 +489,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Specs</span>
-              <span>{request.specs || "—"}</span>
+              <span>{request.specs || "â€”"}</span>
             </div>
           </div>
         </div>
@@ -476,7 +505,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
           {request.landmark && <p className="text-sm text-muted-foreground">Landmark: {request.landmark}</p>}
         </div>
 
-        {/* SLA & TAT — all values derived on the server from the email hour, the
+        {/* SLA & TAT â€” all values derived on the server from the email hour, the
             pickup location and the ODA flag. */}
         {(request.emailReceivedHour || request.zone1 || request.tier1 || request.sla) && (
           <div className="rounded-xl glass shadow-sm p-5 space-y-3">
@@ -502,27 +531,27 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Zone</span>
-                <span>{request.zone1 || "—"}</span>
+                <span>{request.zone1 || "â€”"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Tier</span>
-                <span>{request.tier1 || "—"}</span>
+                <span>{request.tier1 || "â€”"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">ODA Location</span>
-                <span>{request.odaLocation || "—"}</span>
+                <span>{request.odaLocation || "â€”"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">TAT</span>
-                <span>{request.tat ? `${request.tat} days` : "—"}</span>
+                <span>{request.tat ? `${request.tat} days` : "â€”"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Expected Pickup Date</span>
-                <span>{request.expectedPickupDate ? new Date(request.expectedPickupDate).toLocaleDateString("en-GB") : "—"}</span>
+                <span>{request.expectedPickupDate ? new Date(request.expectedPickupDate).toLocaleDateString("en-GB") : "â€”"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Actual Pickup Date</span>
-                <span>{request.pickupDate ? new Date(request.pickupDate).toLocaleDateString("en-GB") : "—"}</span>
+                <span>{request.pickupDate ? new Date(request.pickupDate).toLocaleDateString("en-GB") : "â€”"}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">SLA</span>
@@ -535,7 +564,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                         : "bg-gray-100 text-gray-600"
                   }`}>{request.sla}</span>
                 ) : (
-                  <span className="text-muted-foreground italic">—</span>
+                  <span className="text-muted-foreground italic">â€”</span>
                 )}
               </div>
             </div>
@@ -564,7 +593,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
               {request.qcCleanResult && (
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Clean QC</span>
+                  <span className="text-muted-foreground">Hardware QC</span>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                     request.qcCleanResult === "PASS" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                   }`}>{request.qcCleanResult}</span>
@@ -572,7 +601,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
               {request.qcPurgeResult && (
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Purge QC</span>
+                  <span className="text-muted-foreground">Software QC</span>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                     request.qcPurgeResult === "PASS" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                   }`}>{request.qcPurgeResult}</span>
@@ -648,7 +677,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               </div>
             </div>
           )}
-          {(request.caseId || request.blanccoYesNo || request.issueReported) && (
+          {(request.caseId || request.blanccoYesNo || request.issueReported || request.blancoClearResult || request.blancoPurgeResult) && (
             <div className="rounded-xl glass shadow-sm p-5 space-y-2">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Case &amp; Blancco</h3>
               <div className="space-y-1.5 text-sm">
@@ -657,6 +686,34 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                 {request.replacementPart && <div className="flex justify-between"><span className="text-muted-foreground">Replacement</span><span>{request.replacementPart}</span></div>}
                 {request.blanccoYesNo && <div className="flex justify-between"><span className="text-muted-foreground">Blancco</span><span>{request.blanccoYesNo}</span></div>}
                 {request.blanccoDate && <div className="flex justify-between"><span className="text-muted-foreground">Blancco Date</span><span>{new Date(request.blanccoDate).toLocaleDateString("en-GB")}</span></div>}
+                {request.blancoClearResult && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Blancco Clear</span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      request.blancoClearResult === "PASS" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                    }`}>{request.blancoClearResult}</span>
+                  </div>
+                )}
+                {request.blancoClearDate && <div className="flex justify-between"><span className="text-muted-foreground">Clear Date</span><span>{new Date(request.blancoClearDate).toLocaleDateString("en-GB")}</span></div>}
+                {request.blancoClearBy && <div className="flex justify-between"><span className="text-muted-foreground">Clear By</span><span>{request.blancoClearBy}</span></div>}
+                {request.blancoClearRemarks && <div className="flex justify-between"><span className="text-muted-foreground">Clear Remarks</span><span className="text-right max-w-[180px] truncate">{request.blancoClearRemarks}</span></div>}
+                {request.blancoPurgeResult && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Blancco Purge</span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      request.blancoPurgeResult === "PASS" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                    }`}>{request.blancoPurgeResult}</span>
+                  </div>
+                )}
+                {request.blancoPurgeDate && <div className="flex justify-between"><span className="text-muted-foreground">Purge Date</span><span>{new Date(request.blancoPurgeDate).toLocaleDateString("en-GB")}</span></div>}
+                {request.blancoPurgeBy && <div className="flex justify-between"><span className="text-muted-foreground">Purge By</span><span>{request.blancoPurgeBy}</span></div>}
+                {request.blancoPurgeRemarks && <div className="flex justify-between"><span className="text-muted-foreground">Purge Remarks</span><span className="text-right max-w-[180px] truncate">{request.blancoPurgeRemarks}</span></div>}
+                {request.blancoCertificateUrl && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Blanco Certificate</span>
+                    <button onClick={handleViewBlanco} className="text-primary font-semibold hover:underline text-sm">View</button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -755,19 +812,19 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                 </form>
               )}
 
-              {/* Request Docket from Logistics */}
+              {/* Request DC from Finance */}
               {request.status === "PARTNER_ASSIGNED" && (
-                <form action={async (formData) => handleAction("requestDocket", formData)} className="space-y-4">
+                <form action={async (formData) => handleAction("requestDc", formData)} className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    Request a reverse docket number from the Logistics team for this pickup.
+                    Partner assigned. Request a delivery challan from the Finance team for this pickup.
                   </p>
                   <button
                     type="submit"
-                    disabled={isPending("requestDocket")}
+                    disabled={isPending("requestDc")}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
                   >
-                    {isPending("requestDocket") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("requestDocket") ? "Requesting..." : "Request Docket from Logistics"}
+                    {isPending("requestDc") ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {isPending("requestDc") ? "Requesting..." : "Request DC from Finance"}
                   </button>
                 </form>
               )}
@@ -864,13 +921,13 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                 </form>
               )}
 
-              {/* Record Clean QC */}
+              {/* Record Hardware QC */}
               {request.status === "RECEIVED_AT_WAREHOUSE" && (
                 <form action={async (formData) => handleAction("recordCleanQc", formData)} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label htmlFor="qcCleanResult" className="text-sm font-medium text-foreground">
-                        Clean QC Result <span className="text-red-500">*</span>
+                        Hardware QC Result <span className="text-red-500">*</span>
                       </label>
                       <select
                         id="qcCleanResult"
@@ -884,7 +941,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                       </select>
                     </div>
                     <div className="space-y-1.5">
-                      <label htmlFor="qcCleanDate" className="text-sm font-medium text-foreground">Clean QC Date</label>
+                      <label htmlFor="qcCleanDate" className="text-sm font-medium text-foreground">Hardware QC Date</label>
                       <input
                         id="qcCleanDate"
                         name="qcCleanDate"
@@ -903,7 +960,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label htmlFor="qcCleanRemarks" className="text-sm font-medium text-foreground">Clean QC Remarks</label>
+                    <label htmlFor="qcCleanRemarks" className="text-sm font-medium text-foreground">Hardware QC Remarks</label>
                     <textarea
                       id="qcCleanRemarks"
                       name="qcCleanRemarks"
@@ -918,18 +975,18 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                     className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
                   >
                     {isPending("recordCleanQc") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("recordCleanQc") ? "Recording..." : "Record Clean QC"}
+                    {isPending("recordCleanQc") ? "Recording..." : "Record Hardware QC"}
                   </button>
                 </form>
               )}
 
-              {/* Record Purge QC */}
+              {/* Record Software QC */}
               {request.status === "QC_CLEANED" && (
                 <form action={async (formData) => handleAction("recordPurgeQc", formData)} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label htmlFor="qcPurgeResult" className="text-sm font-medium text-foreground">
-                        Purge QC Result <span className="text-red-500">*</span>
+                        Software QC Result <span className="text-red-500">*</span>
                       </label>
                       <select
                         id="qcPurgeResult"
@@ -943,7 +1000,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                       </select>
                     </div>
                     <div className="space-y-1.5">
-                      <label htmlFor="qcPurgeDate" className="text-sm font-medium text-foreground">Purge QC Date</label>
+                      <label htmlFor="qcPurgeDate" className="text-sm font-medium text-foreground">Software QC Date</label>
                       <input
                         id="qcPurgeDate"
                         name="qcPurgeDate"
@@ -962,7 +1019,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label htmlFor="qcPurgeRemarks" className="text-sm font-medium text-foreground">Purge QC Remarks</label>
+                    <label htmlFor="qcPurgeRemarks" className="text-sm font-medium text-foreground">Software QC Remarks</label>
                     <textarea
                       id="qcPurgeRemarks"
                       name="qcPurgeRemarks"
@@ -977,7 +1034,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                     className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
                   >
                     {isPending("recordPurgeQc") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("recordPurgeQc") ? "Recording..." : "Record Purge QC"}
+                    {isPending("recordPurgeQc") ? "Recording..." : "Record Software QC"}
                   </button>
                 </form>
               )}
@@ -999,8 +1056,26 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                 </form>
               )}
 
-              {/* Record Inspection */}
+              {/* Request Docket from Logistics */}
               {request.status === "EWAY_BILL_GENERATED" && (
+                <form action={async (formData) => handleAction("requestDocket", formData)} className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    DC and E-Way bill are ready. Request the reverse docket number from the Logistics team to
+                    schedule the pickup.
+                  </p>
+                  <button
+                    type="submit"
+                    disabled={isPending("requestDocket")}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {isPending("requestDocket") ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {isPending("requestDocket") ? "Requesting..." : "Request Docket from Logistics"}
+                  </button>
+                </form>
+              )}
+
+              {/* Record Inspection */}
+              {request.status === "DOCKET_ASSIGNED" && (
                 <form action={async (formData) => handleAction("recordInspection", formData)} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
@@ -1034,9 +1109,113 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                 </form>
               )}
 
-              {/* Upload Blanco Certificate */}
+              {/* Record Blanco Clear */}
               {request.status === "QC_COMPLETED" && (
+                <form action={async (formData) => handleAction("recordBlancoClear", formData)} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <label htmlFor="blancoClearResult" className="text-sm font-medium text-foreground">
+                        Blancco Clear Result <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="blancoClearResult"
+                        name="blancoClearResult"
+                        required
+                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      >
+                        <option value="">Select result...</option>
+                        <option value="PASS">Pass</option>
+                        <option value="FAIL">Fail</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="blancoClearDate" className="text-sm font-medium text-foreground">Blancco Clear Date</label>
+                      <input
+                        id="blancoClearDate"
+                        name="blancoClearDate"
+                        type="date"
+                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="blancoClearBy" className="text-sm font-medium text-foreground">Performed By</label>
+                      <input
+                        id="blancoClearBy"
+                        name="blancoClearBy"
+                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        placeholder="Blancco engineer name"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="blancoClearRemarks" className="text-sm font-medium text-foreground">Blancco Clear Remarks</label>
+                    <textarea
+                      id="blancoClearRemarks"
+                      name="blancoClearRemarks"
+                      rows={2}
+                      className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                      placeholder="Blancco clear remarks..."
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isPending("recordBlancoClear")}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {isPending("recordBlancoClear") ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {isPending("recordBlancoClear") ? "Recording..." : "Record Blancco Clear"}
+                  </button>
+                </form>
+              )}
+
+              {/* Record Blanco Purge + Certificate */}
+              {request.status === "BLANCO_CLEARED" && (
                 <form onSubmit={handleUploadBlanco} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <label htmlFor="blancoPurgeResult" className="text-sm font-medium text-foreground">
+                        Blancco Purge Result <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="blancoPurgeResult"
+                        name="blancoPurgeResult"
+                        required
+                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      >
+                        <option value="">Select result...</option>
+                        <option value="PASS">Pass</option>
+                        <option value="FAIL">Fail</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="blancoPurgeDate" className="text-sm font-medium text-foreground">Blancco Purge Date</label>
+                      <input
+                        id="blancoPurgeDate"
+                        name="blancoPurgeDate"
+                        type="date"
+                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="blancoPurgeBy" className="text-sm font-medium text-foreground">Performed By</label>
+                      <input
+                        id="blancoPurgeBy"
+                        name="blancoPurgeBy"
+                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                        placeholder="Blancco engineer name"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="blancoPurgeRemarks" className="text-sm font-medium text-foreground">Blancco Purge Remarks</label>
+                    <textarea
+                      id="blancoPurgeRemarks"
+                      name="blancoPurgeRemarks"
+                      rows={2}
+                      className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                      placeholder="Blancco purge remarks..."
+                    />
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label htmlFor="blancoCertificateFile" className="text-sm font-medium text-foreground">
@@ -1064,22 +1243,22 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                   </div>
                   <button
                     type="submit"
-                    disabled={isPending("uploadBlancoCertificate")}
+                    disabled={isPending("recordBlancoPurge")}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
                   >
-                    {isPending("uploadBlancoCertificate") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("uploadBlancoCertificate") ? "Uploading..." : "Upload Blanco Certificate"}
+                    {isPending("recordBlancoPurge") ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {isPending("recordBlancoPurge") ? "Uploading..." : "Record Blancco Purge"}
                   </button>
                 </form>
               )}
 
               {/* Move Back to Inventory */}
-              {request.status === "BLANCO_CERTIFIED" && (
+              {(request.status === "BLANCO_PURGED" || request.status === "BLANCO_CERTIFIED") && (
                 <form action={async (formData) => handleAction("completeReversePickup", formData)} className="space-y-4">
                   <div className="flex items-center gap-3 p-4 rounded-lg bg-teal-50 border border-teal-200">
                     <Package className="size-5 text-teal-600 shrink-0" />
                     <div>
-                      <p className="text-sm font-semibold text-teal-800">Blanco certification complete</p>
+                      <p className="text-sm font-semibold text-teal-800">Blanco purge complete</p>
                       <p className="text-xs text-teal-700 mt-0.5">
                         The laptop will be moved back to inventory and this request will be marked as completed.
                       </p>
@@ -1106,7 +1285,8 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             <div>
               <p className="text-sm font-semibold text-orange-800">Awaiting Logistics</p>
               <p className="text-xs text-orange-700 mt-0.5">
-                Docket number has been requested from Logistics. Once assigned, you can proceed with DC &amp; E-Way bill.
+                Docket number has been requested from Logistics. Once assigned, you can record inspection and
+                mark the asset as picked up.
               </p>
             </div>
           </div>
@@ -1172,7 +1352,23 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             <div>
               <p className="text-sm font-semibold text-indigo-800">E-Way Bill Generated</p>
               <p className="text-xs text-indigo-700 mt-0.5">
-                E-Way bill has been generated. Record inspection to proceed with pickup.
+                E-Way bill has been generated. Request the docket number from Logistics to proceed with pickup.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Docket Assigned */}
+      {request.status === "DOCKET_ASSIGNED" && (
+        <div className="rounded-xl glass shadow-sm p-6 space-y-4">
+          <div className="flex items-center gap-3 p-4 rounded-lg bg-cyan-50 border border-cyan-200">
+            <FileText className="size-5 text-cyan-600 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-cyan-800">Docket Assigned</p>
+              <p className="text-xs text-cyan-700 mt-0.5">
+                Logistics has assigned docket <span className="font-semibold">{request.docketNumber}</span>. Record
+                inspection to proceed with pickup.
               </p>
             </div>
           </div>

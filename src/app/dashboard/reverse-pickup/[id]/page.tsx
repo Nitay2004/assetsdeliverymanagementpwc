@@ -39,6 +39,8 @@ export default async function ReversePickupDetailPage(props: { params: Promise<{
         qcCleanDate: request.qcCleanDate?.toISOString() ?? null,
         qcPurgeDate: request.qcPurgeDate?.toISOString() ?? null,
         blanccoDate: request.blanccoDate?.toISOString() ?? null,
+        blancoClearDate: request.blancoClearDate?.toISOString() ?? null,
+        blancoPurgeDate: request.blancoPurgeDate?.toISOString() ?? null,
         blancoCertificateDate: request.blancoCertificateDate?.toISOString() ?? null,
       }}
       userRole={user.role}

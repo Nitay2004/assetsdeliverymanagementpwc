@@ -196,6 +196,7 @@ DC Generated → Packed & Labelled → Docket Assigned → E-Way Req → E-Way G
 **5.4 Reverse Pickup dockets**
 - Requests with **DOCKET_REQUESTED** appear in the **Reverse Pickup Docket** section —
   assign the courier docket for the return leg.
+- This queue opens only **after** the DC and the E-Way bill are generated.
 
 **5.5 Export** → logistics report.
 
@@ -231,8 +232,10 @@ DC Generated → Packed & Labelled → Docket Assigned → E-Way Req → E-Way G
 The request status moves as the pickup happens. Update it in the request detail:
 
 ```
-Requested → Partner Assigned → Inspected → Picked Up
-   → In Transit → Received at Warehouse
+Requested → Partner Assigned → DC Requested → DC Generated
+   → E-Way Bill Requested → E-Way Bill Generated
+   → Docket Requested → Docket Assigned
+   → Inspected → Picked Up → In Transit → Received at Warehouse
 ```
 
 **Special statuses you may need:**
@@ -242,16 +245,22 @@ Requested → Partner Assigned → Inspected → Picked Up
 
 ### STEP RP-3 — Warehouse receipt & QC
 - On **Received at Warehouse**: record **Received Date**, **Received By**.
-- **QC**: Clean result + Purge result + remarks → `QC_CLEANED` → `QC_COMPLETED`.
-- **Blancco**: record Blancco Yes/No, certificate date, upload **Blancco Certificate PDF** → `BLANCO_CERTIFIED`.
+- **QC** — two stages:
+  - **Hardware QC**: result + remarks + date + performed by → `QC_CLEANED`.
+  - **Software QC**: result + remarks + date + performed by → `QC_COMPLETED`.
+- **Blancco** — two stages:
+  - **Blanco Clear**: result + remarks + date + performed by → `BLANCO_CLEARED`.
+  - **Blanco Purge**: result + remarks + date + performed by + upload the
+    **Blancco Certificate PDF** → `BLANCO_PURGED` → then **Move Back to Inventory**.
 
-### STEP RP-4 — Finance (DC + E-Way) & completion
-1. Request status → `DC_REQUESTED` → appears in **Finance → Reverse Pickup Finance Actions**.
+### STEP RP-4 — Finance (DC + E-Way), Logistics (Docket) & completion
+1. After **Partner Assigned**, click **Request DC from Finance** → status `DC_REQUESTED` →
+   appears in **Finance → Reverse Pickup Finance Actions**.
 2. Finance clicks **Generate DC** (Reverse Pickup DC modal) → DC created, PDF/Cert stored → `DC_GENERATED`.
 3. Status → `EWAY_BILL_REQUESTED` → Finance enters **E-Way #** (+ attachment) → `EWAY_BILL_GENERATED`.
-4. Request → **Completed**. ✔
-
-> The docket for the return leg is handled in **Logistics → Reverse Pickup Docket**.
+4. Click **Request Docket from Logistics** → `DOCKET_REQUESTED` → Logistics enters the docket in
+   **Logistics → Reverse Pickup Docket** → `DOCKET_ASSIGNED`.
+5. Request → **Completed**. ✔
 
 ---
 
@@ -287,10 +296,13 @@ Requested → Partner Assigned → Inspected → Picked Up
 | PICKED_UP | Courier took it |
 | IN_TRANSIT | On the way back |
 | RECEIVED_AT_WAREHOUSE | Received at warehouse |
-| QC_CLEANED / QC_COMPLETED | Clean & Purge done |
+| DOCKET_REQUESTED / DOCKET_ASSIGNED | Docket asked from / given by Logistics |
 | DC_REQUESTED / DC_GENERATED | Challan workflow |
 | EWAY_BILL_REQUESTED / GENERATED | E-Way workflow |
-| BLANCO_CERTIFIED | Blancco passed |
+| QC_CLEANED | Hardware QC done |
+| QC_COMPLETED | Software QC done |
+| BLANCO_CLEARED | Blancco Clear done |
+| BLANCO_PURGED | Blancco Purge done + certificate |
 | COMPLETED | Fully processed |
 
 ---
