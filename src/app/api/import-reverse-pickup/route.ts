@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 import { normalizeOdaLocation } from "@/lib/location-utils";
 import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
+import { nextSequenceNumber } from "@/lib/sequence-number";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
@@ -366,8 +367,14 @@ export async function POST(request: Request) {
 
   const errors: string[] = [];
 
-  const totalExisting = await prisma.reversePickupRequest.count();
-  let requestCounter = totalExisting + 1;
+  // Numbering continues from the highest RPU- number already stored. Counting
+  // rows instead would hand out numbers that were used and later deleted, which
+  // collides on the unique requestNumber column.
+  let requestCounter = await nextSequenceNumber({
+    table: "reverse_pickup_requests",
+    column: "requestNumber",
+    valuePattern: /^RPU-([0-9]+)$/,
+  });
 
   const rows: { data: Record<string, unknown>; rowNum: number }[] = [];
   for (let r = 0; r < records.length; r++) {
