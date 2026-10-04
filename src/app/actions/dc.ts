@@ -5,6 +5,7 @@ import { getSession, requireAuth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
+import { nextSequenceNumber } from "@/lib/sequence-number";
 
 function numberToWords(num: number): string {
   if (num === 0) return "Zero";
@@ -48,17 +49,11 @@ export async function getNextDcNumber(): Promise<string> {
   const nextShortYear = (year + 1) % 100;
   const fy = `${String(shortYear).padStart(2, "0")}-${String(nextShortYear).padStart(2, "0")}`;
 
-  const lastDc = await prisma.deliveryChallan.findFirst({
-    where: { dcNumber: { startsWith: "DC-PDH-" } },
-    orderBy: { dcNumber: "desc" },
+  const nextSeq = await nextSequenceNumber({
+    table: "delivery_challans",
+    column: "dc_number",
+    valuePattern: /^DC-PDH-([0-9]+)-\d{2}-\d{2}$/,
   });
-
-  let nextSeq = 1;
-  if (lastDc) {
-    const parts = lastDc.dcNumber.split("-");
-    const lastSeq = parseInt(parts[2], 10);
-    if (!isNaN(lastSeq)) nextSeq = lastSeq + 1;
-  }
 
   return `DC-PDH-${String(nextSeq).padStart(4, "0")}-${fy}`;
 }

@@ -1,5 +1,6 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
@@ -7,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeOdaLocation } from "@/lib/location-utils";
 import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
+import { nextSequenceNumber } from "@/lib/sequence-number";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -20,21 +22,14 @@ function parseIntValue(value: string | null): number | null {
   return isNaN(n) ? null : n;
 }
 
-async function nextReversePickupRequestNumber(): Promise<string> {
-  const last = await prisma.reversePickupRequest.findFirst({
-    where: { requestNumber: { startsWith: "RPU-" } },
-    orderBy: { requestNumber: "desc" },
-    select: { requestNumber: true },
-  });
+const RPU_NUMBER = /^RPU-([0-9]+)$/;
 
-  let seq = 1;
-  if (last) {
-    const match = last.requestNumber.match(/RPU-(\d+)$/);
-    if (match) {
-      const n = parseInt(match[1], 10);
-      if (!isNaN(n)) seq = n + 1;
-    }
-  }
+async function nextReversePickupRequestNumber(): Promise<string> {
+  const seq = await nextSequenceNumber({
+    table: "reverse_pickup_requests",
+    column: "requestNumber",
+    valuePattern: RPU_NUMBER,
+  });
 
   return `RPU-${String(seq).padStart(4, "0")}`;
 }
@@ -121,8 +116,6 @@ export async function createReversePickupRequest(formData: FormData) {
     throw new Error("Serial number, model, employee name, and pickup address are required.");
   }
 
-  const requestNumber = await nextReversePickupRequestNumber();
-
   const year = formData.get("year") as string;
   const currentYear = year ? parseIntValue(year) : new Date().getFullYear();
 
@@ -148,89 +141,102 @@ export async function createReversePickupRequest(formData: FormData) {
     fallbackStartDate: new Date(),
   });
 
-  await prisma.reversePickupRequest.create({
-    data: {
-      requestNumber,
-      serialNumber,
-      model,
+  const data = {
+    serialNumber,
+    model,
 
-      // Request Info
-      year: currentYear,
-      type: (formData.get("type") as string) || null,
-      srNo: (formData.get("srNo") as string) || null,
-      requestDateHp: parseDate(formData.get("requestDateHp") as string),
-      employeeId: (formData.get("employeeId") as string) || null,
-      alternateId: (formData.get("alternateId") as string) || null,
-      lastWorkingDay: parseDate(formData.get("lastWorkingDay") as string),
+    // Request Info
+    year: currentYear,
+    type: (formData.get("type") as string) || null,
+    srNo: (formData.get("srNo") as string) || null,
+    requestDateHp: parseDate(formData.get("requestDateHp") as string),
+    employeeId: (formData.get("employeeId") as string) || null,
+    alternateId: (formData.get("alternateId") as string) || null,
+    lastWorkingDay: parseDate(formData.get("lastWorkingDay") as string),
 
-      // User Details
-      employeeName,
-      emailId: (formData.get("emailId") as string) || null,
-      mobileNumber: (formData.get("mobileNumber") as string) || null,
-      contact: (formData.get("contact") as string) || null,
+    // User Details
+    employeeName,
+    emailId: (formData.get("emailId") as string) || null,
+    mobileNumber: (formData.get("mobileNumber") as string) || null,
+    contact: (formData.get("contact") as string) || null,
 
-      // Asset
-      entity: (formData.get("entity") as string) || null,
-      imageType: (formData.get("imageType") as string) || null,
-      accessories: (formData.get("accessories") as string) || null,
-      reason: (formData.get("reason") as string) || null,
+    // Asset
+    entity: (formData.get("entity") as string) || null,
+    imageType: (formData.get("imageType") as string) || null,
+    accessories: (formData.get("accessories") as string) || null,
+    reason: (formData.get("reason") as string) || null,
 
-      // Location
-      pickupAddress,
-      landmark: (formData.get("landmark") as string) || null,
-      city,
-      state,
-      pinCode: (formData.get("pinCode") as string) || null,
+    // Location
+    pickupAddress,
+    landmark: (formData.get("landmark") as string) || null,
+    city,
+    state,
+    pinCode: (formData.get("pinCode") as string) || null,
 
-      // Warehouse / Logistics
-      warehouseLocation: (formData.get("warehouseLocation") as string) || null,
-      receiverSerialNo: (formData.get("receiverSerialNo") as string) || null,
-      receiverSnEntity: (formData.get("receiverSnEntity") as string) || null,
-      displayStatus: (formData.get("displayStatus") as string) || null,
-      eta: parseDate(formData.get("eta") as string),
-      futureDatePickup: parseDate(formData.get("futureDatePickup") as string),
-      dependency: (formData.get("dependency") as string) || null,
-      remarks: (formData.get("remarks") as string) || null,
+    // Warehouse / Logistics
+    warehouseLocation: (formData.get("warehouseLocation") as string) || null,
+    receiverSerialNo: (formData.get("receiverSerialNo") as string) || null,
+    receiverSnEntity: (formData.get("receiverSnEntity") as string) || null,
+    displayStatus: (formData.get("displayStatus") as string) || null,
+    eta: parseDate(formData.get("eta") as string),
+    futureDatePickup: parseDate(formData.get("futureDatePickup") as string),
+    dependency: (formData.get("dependency") as string) || null,
+    remarks: (formData.get("remarks") as string) || null,
 
-      // SLA / TAT
-      emailReceivedHour,
-      cutOffStatus: sla.cutOffStatus,
-      slaStartDate: sla.slaStartDate,
-      slaState: (formData.get("slaState") as string) || null,
-      zone1: sla.zone1,
-      tier1: sla.tier1,
-      odaLocation,
-      tat: sla.tat,
-      deliveryTat: sla.deliveryTat,
-      expectedPickupDate: sla.expectedPickupDate,
-      actualDeliveryPodDate: parseDate(formData.get("actualDeliveryPodDate") as string),
-      sla: sla.sla,
-      laptopAcceptanceDate: parseDate(formData.get("laptopAcceptanceDate") as string),
+    // SLA / TAT
+    emailReceivedHour,
+    cutOffStatus: sla.cutOffStatus,
+    slaStartDate: sla.slaStartDate,
+    slaState: (formData.get("slaState") as string) || null,
+    zone1: sla.zone1,
+    tier1: sla.tier1,
+    odaLocation,
+    tat: sla.tat,
+    deliveryTat: sla.deliveryTat,
+    expectedPickupDate: sla.expectedPickupDate,
+    actualDeliveryPodDate: parseDate(formData.get("actualDeliveryPodDate") as string),
+    sla: sla.sla,
+    laptopAcceptanceDate: parseDate(formData.get("laptopAcceptanceDate") as string),
 
-      // Courier / Tracking
-      courierName: (formData.get("courierName") as string) || null,
-      docketNumber: (formData.get("docketNumber") as string) || null,
-      pickupDate,
-      dcNo: (formData.get("dcNo") as string) || null,
-      srnNo: (formData.get("srnNo") as string) || null,
-      eWayBillNo: (formData.get("eWayBillNo") as string) || null,
-      etaForUnitReceived: parseDate(formData.get("etaForUnitReceived") as string),
-      caseAge: (formData.get("caseAge") as string) || null,
+    // Courier / Tracking
+    courierName: (formData.get("courierName") as string) || null,
+    docketNumber: (formData.get("docketNumber") as string) || null,
+    pickupDate,
+    dcNo: (formData.get("dcNo") as string) || null,
+    srnNo: (formData.get("srnNo") as string) || null,
+    eWayBillNo: (formData.get("eWayBillNo") as string) || null,
+    etaForUnitReceived: parseDate(formData.get("etaForUnitReceived") as string),
+    caseAge: (formData.get("caseAge") as string) || null,
 
-      // Blancco
-      blanccoYesNo: (formData.get("blanccoYesNo") as string) || null,
-      blanccoDate: parseDate(formData.get("blanccoDate") as string),
+    // Blancco
+    blanccoYesNo: (formData.get("blanccoYesNo") as string) || null,
+    blanccoDate: parseDate(formData.get("blanccoDate") as string),
 
-      // Case Info
-      caseId: (formData.get("caseId") as string) || null,
-      issueReported: (formData.get("issueReported") as string) || null,
-      replacementPart: (formData.get("replacementPart") as string) || null,
-      exceptionRemarks: (formData.get("exceptionRemarks") as string) || null,
-      remark: (formData.get("remark") as string) || null,
+    // Case Info
+    caseId: (formData.get("caseId") as string) || null,
+    issueReported: (formData.get("issueReported") as string) || null,
+    replacementPart: (formData.get("replacementPart") as string) || null,
+    exceptionRemarks: (formData.get("exceptionRemarks") as string) || null,
+    remark: (formData.get("remark") as string) || null,
 
-      createdBy: user.name || user.email || null,
-    },
-  });
+    createdBy: user.name || user.email || null,
+  };
+
+  // The number is read-then-write, so two engineers submitting at the same
+  // moment can still land on the same value. Re-derive it and retry instead of
+  // surfacing a raw unique-constraint error to the user.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await prisma.reversePickupRequest.create({
+        data: { ...data, requestNumber: await nextReversePickupRequestNumber() },
+      });
+      break;
+    } catch (error) {
+      const requestNumberTaken =
+        error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" && attempt < 2;
+      if (!requestNumberTaken) throw error;
+    }
+  }
 
   revalidatePath("/dashboard/reverse-pickup");
   redirect("/dashboard/reverse-pickup");

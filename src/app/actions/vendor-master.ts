@@ -4,19 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
+import { nextSequenceNumber } from "@/lib/sequence-number";
 
 async function getNextGrnNumber(): Promise<string> {
-  const last = await prisma.vendorMaster.findFirst({
-    where: { grnNumber: { startsWith: "GRN-" } },
-    orderBy: { grnNumber: "desc" },
+  const nextSeq = await nextSequenceNumber({
+    table: "vendor_master",
+    column: "grn_number",
+    valuePattern: /^GRN-([0-9]+)$/,
   });
-
-  let nextSeq = 1;
-  if (last) {
-    const parts = last.grnNumber.split("-");
-    const lastSeq = parseInt(parts[1], 10);
-    if (!isNaN(lastSeq)) nextSeq = lastSeq + 1;
-  }
 
   return `GRN-${String(nextSeq).padStart(4, "0")}`;
 }
