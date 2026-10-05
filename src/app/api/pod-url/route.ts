@@ -3,7 +3,9 @@ import { getSession } from "@/lib/auth";
 import { canViewModule } from "@/lib/permissions";
 import { podFileUrl } from "@/lib/storage";
 
-const POD_VIEW_MODULES = ["logistics", "reverse-pickup", "warehouse"] as const;
+// The POD link lives in the inventory drawer, so inventory view access is what
+// grants it. Anyone who can open the row must be able to open the document.
+const POD_VIEW_MODULES = ["inventory", "logistics", "reverse-pickup", "warehouse"] as const;
 
 export async function GET(req: NextRequest) {
   const user = await getSession();
