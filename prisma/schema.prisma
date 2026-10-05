@@ -257,6 +257,9 @@ model InventoryItem {
   latestDeliveryDate    DateTime?         @map("latest_delivery_date") @db.Date
   // Proof of delivery pulled from the courier (Pafex) on delivery.
   podDocumentUrl        String?           @map("pod_document_url")
+  // When the POD was last asked for. Pafex uploads the image after the delivery
+  // scan, so a delivered docket without one is retried on a later run.
+  podAttemptedAt        DateTime?         @map("pod_attempted_at")
   latestDc              String?           @map("latest_dc")
   inwardDate1           DateTime?         @map("inward_date_1") @db.Date
   outwardDate1          DateTime?         @map("outward_date_1") @db.Date

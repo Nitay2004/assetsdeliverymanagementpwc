@@ -83,6 +83,7 @@ interface InventoryItem {
   trackingStatus: string | null;
   trackingSubStatus: string | null;
   podDocumentUrl: string | null;
+  podAttemptedAt: string | Date | null;
   pickupDate: string | null;
   alternatePhoneNumber: string | null;
   processStatus: string | null;

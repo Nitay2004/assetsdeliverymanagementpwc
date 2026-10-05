@@ -17,6 +17,7 @@ import { calculateSlaStatus } from "@/lib/sla-utils";
 interface InventoryItem {
   id: string;
   podDocumentUrl?: string | null;
+  podAttemptedAt?: string | Date | null;
   serialNumber: string;
   model: string;
   specs: string | null;
@@ -125,7 +126,7 @@ interface HistoryRecord {
   assignedAt: string;
 }
 
-function PodDocumentLink({ path }: { path: string | null }) {
+function PodDocumentLink({ path, attempted }: { path: string | null; attempted: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -152,7 +153,16 @@ function PodDocumentLink({ path }: { path: string | null }) {
     };
   }, [path]);
 
-  if (!path) return <span className="text-sm text-muted-foreground">—</span>;
+  // The courier uploads the document after the delivery scan, so the sync asks
+  // once more later. Once that second try is done and still nothing arrived,
+  // say so plainly instead of leaving a dash.
+  if (!path) {
+    return attempted ? (
+      <span className="text-xs text-muted-foreground">POD not found</span>
+    ) : (
+      <span className="text-sm text-muted-foreground">—</span>
+    );
+  }
   if (loading) return <span className="text-xs text-muted-foreground">Loading…</span>;
   if (error || !url) {
     return <span className="text-xs text-destructive">{error ?? "Unavailable"}</span>;
@@ -782,7 +792,10 @@ export function InventoryDetailDrawer({
                         <span className="text-xs text-muted-foreground w-36 shrink-0 pt-0.5">
                           {field.label}
                         </span>
-                        <PodDocumentLink path={displayItem.podDocumentUrl ?? null} />
+                        <PodDocumentLink
+                          path={displayItem.podDocumentUrl ?? null}
+                          attempted={!!displayItem.podAttemptedAt}
+                        />
                       </div>
                     );
                   }

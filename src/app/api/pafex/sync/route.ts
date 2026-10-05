@@ -29,6 +29,14 @@ const CONCURRENCY = 4;
 const TRACKING_STATUS_DISPATCHED = "Dispatched";
 const TRACKING_STATUS_DELIVERED = "Delivered";
 
+// Pafex uploads the POD image after the delivery scan, so a docket is often
+// delivered before its document exists. The first run stores the document or
+// gives up; this many dockets get one more look on a later run before the sync
+// stops asking, which is enough to catch a late upload without retrying the
+// thousands of dockets that will never have one.
+const POD_RETRY_LIMIT = 25;
+const POD_RETRY_AFTER_MS = 6 * 60 * 60 * 1000;
+
 // Rows with no tracking status yet are the ones that most need a lookup, and a
 // bare `NOT: { trackingStatus: DELIVERED }` drops them: Postgres evaluates the
 // comparison as unknown for a NULL column and never returns the row. The same
@@ -50,6 +58,8 @@ type DocketCandidate = {
   docketNumber: string;
   itemIds: string[];
   hasPod: boolean;
+  /** Delivered already, in the run only to make a second attempt at the POD. */
+  podRetry: boolean;
   docketId: string | null;
   orderId: string | null;
   orderStatus: string | null;
@@ -162,6 +172,14 @@ async function markItemsDelivered(
   return items.length;
 }
 
+async function markPodAttempted(itemIds: string[]): Promise<void> {
+  if (itemIds.length === 0) return;
+  await prisma.inventoryItem.updateMany({
+    where: { id: { in: itemIds } },
+    data: { podAttemptedAt: new Date() },
+  });
+}
+
 async function fetchAndStorePod(
   tracking: PafexTracking,
   itemIds: string[],
@@ -212,6 +230,37 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
     if (item.podDocumentUrl) podSet.add(number);
   }
 
+  // A second pass over dockets that are already delivered but still have no
+  // document, oldest attempt first. podAttemptedAt being null means the first
+  // run never got as far as asking, so those come first; once a retry has run
+  // the timestamp is set and the docket drops out for good.
+  const retryRows = await prisma.inventoryItem.findMany({
+    where: {
+      docketNumber: { not: null },
+      trackingStatus: TRACKING_STATUS_DELIVERED,
+      podDocumentUrl: null,
+      OR: [
+        { podAttemptedAt: null },
+        { podAttemptedAt: { lt: new Date(Date.now() - POD_RETRY_AFTER_MS) } },
+      ],
+    },
+    select: { id: true, docketNumber: true },
+    orderBy: [{ podAttemptedAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
+    take: POD_RETRY_LIMIT * 20,
+  });
+
+  const podRetry = new Set<string>();
+  for (const item of retryRows) {
+    const number = (item.docketNumber as string).trim();
+    if (!number || number === "0") continue;
+    if (podRetry.has(number)) continue;
+    if (podRetry.size >= POD_RETRY_LIMIT) continue;
+    podRetry.add(number);
+    const list = byDocket.get(number);
+    if (list) list.push(item.id);
+    else byDocket.set(number, [item.id]);
+  }
+
   const numbers = [...byDocket.keys()];
 
   // Pull every item on those dockets, not only the ones inside the recency
@@ -253,6 +302,7 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
       docketNumber: number,
       itemIds,
       hasPod,
+      podRetry: podRetry.has(number),
       docketId: docket?.id ?? null,
       orderId: docket?.orderId ?? null,
       orderStatus: docket?.order.status ?? null,
@@ -303,6 +353,20 @@ async function syncDocket(docket: DocketCandidate, dryRun: boolean): Promise<Syn
   if (dryRun) {
     outcome.pod = tracking.pod_image ? "skipped" : "unavailable";
     if (delivered && docket.hasPod) outcome.pod = "already_present";
+    return outcome;
+  }
+
+  // A retry docket is already delivered and already stamped, so leave its status
+  // and dates exactly as they are and only try for the document.
+  if (docket.podRetry) {
+    if (docket.hasPod) {
+      outcome.pod = "already_present";
+      return outcome;
+    }
+    const pod = await fetchAndStorePod(tracking, docket.itemIds, dryRun);
+    outcome.pod = pod.pod;
+    if (pod.podError) outcome.podError = pod.podError;
+    if (pod.pod !== "failed") await markPodAttempted(docket.itemIds);
     return outcome;
   }
 
