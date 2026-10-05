@@ -4,10 +4,18 @@ import { Plus, ArrowLeftRight, Truck, ClipboardCheck, Warehouse, ShieldCheck, Fi
 import Link from "next/link";
 import { ReversePickupTable } from "@/components/reverse-pickup/reverse-pickup-table";
 import { ReversePickupExportButton } from "@/components/reverse-pickup/reverse-pickup-export-button";
-import { parseColumnFilters } from "@/lib/column-filters";
+import { parseColumnFilters, BLANK_TOKEN, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import type { Prisma } from "@prisma/client";
 
 const REVERSE_PICKUP_FILTER_KEYS = ["requestNumber", "employeeName", "serialNumber", "model", "type", "status", "dcNo", "docketNumber", "eWayBillNo", "blancoCertificate", "partnerCourier", "createdAt", "requestDateHp", "pickupDate", "podDocument", "actualDeliveryPodDate", "blancoCertificateDate", "qcResult", "zone1", "tier1", "tat", "sla", "cutOffStatus", "expectedPickupDate"];
+
+// Date columns offered as day buckets in the filter dropdown. Kept in one place so
+// the where-clause, the group-by and the client dropdown can never drift apart.
+const DATE_FILTER_FIELDS = ["requestDateHp", "pickupDate", "expectedPickupDate", "actualDeliveryPodDate", "blancoCertificateDate"] as const;
+
+// SLA columns derived at creation time (see lib/reverse-pickup-sla.ts). They are
+// plain text, so they filter with a plain `in` list.
+const SLA_FILTER_FIELDS = ["zone1", "tier1", "tat", "cutOffStatus", "sla"] as const;
 
 const STATUS_STYLES: Record<string, { label: string; color: string }> = {
   REQUESTED:              { label: "Requested",              color: "bg-yellow-100 text-yellow-700" },
@@ -150,14 +158,48 @@ export default async function ReversePickupPage({
   const where = { ...searchFilter } as Prisma.ReversePickupRequestWhereInput;
 
   const columnFilters = parseColumnFilters(params as Record<string, string | string[] | undefined>, REVERSE_PICKUP_FILTER_KEYS);
+  // Required columns: a plain `in` list is enough because they can never be blank.
   const filterableFields: Record<string, string> = {
     requestNumber: "requestNumber", employeeName: "employeeName", serialNumber: "serialNumber",
-    model: "model", type: "type", status: "status", dcNo: "dcNo", docketNumber: "docketNumber",
-    eWayBillNo: "eWayBillNo", qcResult: "qcResult",
+    model: "model", status: "status",
   };
-  if (columnFilters.partnerCourier) where.partnerName = { in: columnFilters.partnerCourier };
-  if (columnFilters.blancoCertificate) where.blancoCertificateUrl = { not: null };
-  if (columnFilters.podDocument) where.podDocumentUrl = { not: null };
+  // Nullable columns: "(Blank)" has to become an explicit null / empty-string match.
+  const blankableFields: Record<string, string> = {
+    type: "type", dcNo: "dcNo", docketNumber: "docketNumber",
+    eWayBillNo: "eWayBillNo", qcResult: "qcResult",
+    ...Object.fromEntries(SLA_FILTER_FIELDS.map(field => [field, field])),
+  };
+  andFilterConditions(where, [
+    ...collectBlankTokenConditions(columnFilters, blankableFields),
+    // The dropdown shows "courier or partner", so both columns have to match.
+    ...(columnFilters.partnerCourier
+      ? [{
+          OR: [
+            ...blankTokenConditions("courierName", columnFilters.partnerCourier),
+            ...blankTokenConditions("partnerName", columnFilters.partnerCourier),
+          ],
+        }]
+      : []),
+  ]);
+  // Document columns offer "Has Certificate" / "Has POD" alongside "(Blank)".
+  const documentGroups: Record<string, unknown>[] = [];
+  if (columnFilters.blancoCertificate) {
+    documentGroups.push({
+      OR: [
+        ...(columnFilters.blancoCertificate.includes("Has Certificate") ? [{ blancoCertificateUrl: { not: null } }] : []),
+        ...(columnFilters.blancoCertificate.includes(BLANK_TOKEN) ? [{ blancoCertificateUrl: null }] : []),
+      ],
+    });
+  }
+  if (columnFilters.podDocument) {
+    documentGroups.push({
+      OR: [
+        ...(columnFilters.podDocument.includes("Has POD") ? [{ podDocumentUrl: { not: null } }] : []),
+        ...(columnFilters.podDocument.includes(BLANK_TOKEN) ? [{ podDocumentUrl: null }] : []),
+      ],
+    });
+  }
+  andFilterConditions(where, documentGroups);
   if (columnFilters.createdAt) {
     const parts = columnFilters.createdAt[0].split("/").map(Number);
     if (parts.length === 3 && parts.every(p => !isNaN(p))) {
@@ -172,26 +214,20 @@ export default async function ReversePickupPage({
     if (columnFilters[key]) (where as Record<string, unknown>)[field] = { in: columnFilters[key] };
   }
   const dateRangeFilters: Prisma.ReversePickupRequestWhereInput[] = [];
-  for (const key of ["requestDateHp", "pickupDate", "actualDeliveryPodDate", "blancoCertificateDate"] as const) {
+  for (const key of DATE_FILTER_FIELDS) {
     const vals = columnFilters[key];
     if (!vals?.length) continue;
-    dateRangeFilters.push({
-      OR: vals.map(v => {
-        const parts = v.split("/").map(Number);
-        if (parts.length !== 3 || parts.some(p => isNaN(p))) return {} as Prisma.ReversePickupRequestWhereInput;
-        const from = new Date(parts[2], parts[1] - 1, parts[0]);
-        if (isNaN(from.getTime())) return {} as Prisma.ReversePickupRequestWhereInput;
-        const to = new Date(parts[2], parts[1] - 1, parts[0] + 1);
-        return { [key]: { gte: from, lt: to } };
-      }),
-    });
+    const days = vals.filter(v => v !== BLANK_TOKEN).map(v => {
+      const parts = v.split("/").map(Number);
+      if (parts.length !== 3 || parts.some(p => isNaN(p))) return null;
+      const from = new Date(parts[2], parts[1] - 1, parts[0]);
+      if (isNaN(from.getTime())) return null;
+      return { [key]: { gte: from, lt: new Date(parts[2], parts[1] - 1, parts[0] + 1) } } as Prisma.ReversePickupRequestWhereInput;
+    }).filter((c): c is Prisma.ReversePickupRequestWhereInput => c !== null);
+    if (vals.includes(BLANK_TOKEN)) days.push({ [key]: null } as Prisma.ReversePickupRequestWhereInput);
+    if (days.length > 0) dateRangeFilters.push({ OR: days });
   }
-  if (dateRangeFilters.length > 0) {
-    (where as Record<string, unknown>).AND = [
-      ...(((where as Record<string, unknown>).AND as unknown[]) ?? []),
-      ...dateRangeFilters,
-    ];
-  }
+  andFilterConditions(where, dateRangeFilters);
 
   const [requests, totalCount] = await Promise.all([
     prisma.reversePickupRequest.findMany({
@@ -208,7 +244,7 @@ export default async function ReversePickupPage({
 
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
-  const scalarFields = ["requestNumber", "employeeName", "serialNumber", "model", "type", "status", "dcNo", "docketNumber", "eWayBillNo", "qcResult"] as const;
+  const scalarFields = ["requestNumber", "employeeName", "serialNumber", "model", "type", "status", "dcNo", "docketNumber", "eWayBillNo", "qcResult", ...SLA_FILTER_FIELDS] as const;
 
   const [statusGroups, scalarGroups, blancoGroups, partnerGroups, createdGroups, podGroups, dateGroups] = await Promise.all([
     prisma.reversePickupRequest.groupBy({ by: ["status"], _count: { _all: true } }),
@@ -243,7 +279,7 @@ export default async function ReversePickupPage({
       _count: { _all: true },
     }),
     Promise.all(
-      (["requestDateHp", "pickupDate", "actualDeliveryPodDate", "blancoCertificateDate"] as const).map(field =>
+      DATE_FILTER_FIELDS.map(field =>
         prisma.reversePickupRequest
           .groupBy({ by: [field], where, _count: { _all: true } })
           .then(rows => rows.map(r => {
@@ -293,7 +329,7 @@ export default async function ReversePickupPage({
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => a.value.localeCompare(b.value));
 
-  const dateFieldKeys = ["requestDateHp", "pickupDate", "actualDeliveryPodDate", "blancoCertificateDate"] as const;
+  const dateFieldKeys = DATE_FILTER_FIELDS;
   dateGroups.forEach((rows, i) => {
     columnFilterValues[dateFieldKeys[i]] = rows
       .map(r => ({ value: r.value, count: r.count }))

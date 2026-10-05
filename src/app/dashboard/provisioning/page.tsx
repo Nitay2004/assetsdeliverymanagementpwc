@@ -9,7 +9,7 @@ import { ProvisioningExportButton } from "@/components/provisioning/provisioning
 import { QcWorkTable } from "@/components/provisioning/qc-work-table";
 import { ProvisioningTabs } from "@/components/provisioning/provisioning-tabs";
 import type { QcItem } from "@/components/qc/qc-panel";
-import { parseColumnFilters, computeDistinctValues } from "@/lib/column-filters";
+import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions, computeDistinctValues } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES, ACTIVE_PROVISIONING_STATUSES, HANDED_OVER_STATUSES } from "@/lib/order-status";
 import type { Prisma } from "@prisma/client";
 
@@ -67,14 +67,19 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const assetFilters: Prisma.AssetWhereInput[] = [];
   if (columnFilters.serialNumber) assetFilters.push({ inventoryItem: { serialNumber: { in: columnFilters.serialNumber } } });
   if (columnFilters.model) assetFilters.push({ inventoryItem: { model: { in: columnFilters.model } } });
-  if (columnFilters.imageType) assetFilters.push({ inventoryItem: { imageType: { in: columnFilters.imageType } } });
-  if (columnFilters.stickerColour) assetFilters.push({ inventoryItem: { stickerColour: { in: columnFilters.stickerColour } } });
+  const nestedBlank = (field: string, selected: string[]) => ({
+    OR: blankTokenConditions(field, selected).map(condition => ({ inventoryItem: condition })),
+  });
+  if (columnFilters.imageType) assetFilters.push(nestedBlank("imageType", columnFilters.imageType));
+  if (columnFilters.stickerColour) assetFilters.push(nestedBlank("stickerColour", columnFilters.stickerColour));
   if (columnFilters.assetStatus) assetFilters.push({ status: { in: columnFilters.assetStatus } });
   if (assetFilters.length) where.assets = { some: { AND: assetFilters } };
   if (columnFilters.clientName) where.clientName = { in: columnFilters.clientName };
-  if (columnFilters.engineerName) where.engineerName = { in: columnFilters.engineerName };
-  if (columnFilters.warehouseLocation) where.warehouseLocation = { in: columnFilters.warehouseLocation };
-  if (columnFilters.provisioningLocation) where.provisioningLocation = { in: columnFilters.provisioningLocation };
+  andFilterConditions(where, collectBlankTokenConditions(columnFilters, {
+    engineerName: "engineerName",
+    warehouseLocation: "warehouseLocation",
+    provisioningLocation: "provisioningLocation",
+  }));
 
   const [totalCount, orders] = await Promise.all([
     prisma.order.count({ where }),

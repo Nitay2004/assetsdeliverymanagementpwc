@@ -8,7 +8,7 @@ import { ReversePickupFinanceSection } from "@/components/finance/reverse-pickup
 import { FinanceExportButton } from "@/components/finance/finance-export-button";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
-import { parseColumnFilters } from "@/lib/column-filters";
+import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
 import type { Prisma, OrderStatus } from "@prisma/client";
 
@@ -48,13 +48,13 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
   const columnFilters = parseColumnFilters(searchParams, FINANCE_FILTER_KEYS);
   if (columnFilters.serialNumber) where.assets = { some: { inventoryItem: { serialNumber: { in: columnFilters.serialNumber } } } };
   const ewayFilters: Prisma.DocketWhereInput[] = [];
-  if (columnFilters.ewayBill) ewayFilters.push({ ewayBillNumber: { in: columnFilters.ewayBill } });
+  if (columnFilters.ewayBill) ewayFilters.push({ OR: blankTokenConditions("ewayBillNumber", columnFilters.ewayBill) });
   if (ewayFilters.length && !where.dockets) where.dockets = { some: { AND: ewayFilters } };
   if (columnFilters.clientName) where.clientName = { in: columnFilters.clientName };
   if (columnFilters.deliveryLocation) where.deliveryLocation = { in: columnFilters.deliveryLocation };
-  if (columnFilters.dcNumber) where.dcNumber = { in: columnFilters.dcNumber };
   if (columnFilters.status) where.status = { in: columnFilters.status as OrderStatus[] };
   if (columnFilters.totalQuantity) where.totalQuantity = { in: columnFilters.totalQuantity.map(Number) };
+  andFilterConditions(where, collectBlankTokenConditions(columnFilters, { dcNumber: "dcNumber" }));
 
   const totalCount = await prisma.order.count({ where });
   const rawOrders = await prisma.order.findMany({

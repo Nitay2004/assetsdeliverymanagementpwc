@@ -101,7 +101,19 @@ export function useColumnFilters<T>(config: ColumnFilterConfig<T>[], rows: T[], 
     return map;
   }, [config, rows]);
 
-  const distinctValues = options?.distinctValues ?? localDistinct;
+  // Server-paginated tables only send values for the columns the page knows
+  // about. Fall back per column so a filter added to the table without a matching
+  // group-by still lists the values on the current page instead of showing an
+  // empty dropdown.
+  const distinctValues = useMemo<Record<string, ColumnFilterValue[]>>(() => {
+    const server = options?.distinctValues;
+    if (!server) return localDistinct;
+    const merged: Record<string, ColumnFilterValue[]> = {};
+    for (const col of config) {
+      merged[col.key] = server[col.key] ?? localDistinct[col.key] ?? [];
+    }
+    return merged;
+  }, [config, localDistinct, options?.distinctValues]);
 
   const activeFilterCount = Object.keys(filters).length;
 

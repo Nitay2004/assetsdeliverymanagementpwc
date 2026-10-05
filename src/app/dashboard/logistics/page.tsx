@@ -9,7 +9,7 @@ import { PodExportButton } from "@/components/logistics/pod-export-button";
 import { getWarehouses } from "@/app/actions/dc";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { getCorrectOrderPage } from "@/lib/order-page";
-import { parseColumnFilters } from "@/lib/column-filters";
+import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
 import type { Prisma, OrderStatus } from "@prisma/client";
 
@@ -49,15 +49,15 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
   const assetFilters: Prisma.AssetWhereInput[] = [];
   if (columnFilters.serialNumber) assetFilters.push({ inventoryItem: { serialNumber: { in: columnFilters.serialNumber } } });
   const docketFilters: Prisma.DocketWhereInput[] = [];
-  if (columnFilters.dockets) docketFilters.push({ docketNumber: { in: columnFilters.dockets } });
-  if (columnFilters.ewayBill) docketFilters.push({ ewayBillNumber: { in: columnFilters.ewayBill } });
+  if (columnFilters.dockets) docketFilters.push({ OR: blankTokenConditions("docketNumber", columnFilters.dockets) });
+  if (columnFilters.ewayBill) docketFilters.push({ OR: blankTokenConditions("ewayBillNumber", columnFilters.ewayBill) });
   if (assetFilters.length) where.assets = { some: { AND: assetFilters } };
   if (docketFilters.length) where.dockets = { some: { AND: docketFilters } };
   if (columnFilters.clientName) where.clientName = { in: columnFilters.clientName };
   if (columnFilters.deliveryLocation) where.deliveryLocation = { in: columnFilters.deliveryLocation };
-  if (columnFilters.dcNumber) where.dcNumber = { in: columnFilters.dcNumber };
   if (columnFilters.status) where.status = { in: columnFilters.status as OrderStatus[] };
   if (columnFilters.totalQuantity) where.totalQuantity = { in: columnFilters.totalQuantity.map(Number) };
+  andFilterConditions(where, collectBlankTokenConditions(columnFilters, { dcNumber: "dcNumber" }));
 
   const totalCount = await prisma.order.count({ where });
   const rawOrders = await prisma.order.findMany({

@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { InventoryTable } from "@/components/inventory/inventory-table";
 import { InventoryHeader } from "@/components/inventory/inventory-header";
 import { InventoryStatCards } from "@/components/inventory/inventory-stat-cards";
-import { parseColumnFilters } from "@/lib/column-filters";
+import { parseColumnFilters, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import type { Prisma, InventoryStatus } from "@prisma/client";
 
 const INVENTORY_FILTER_KEYS = ["serialNumber", "model", "status", "invoicingWarehouse", "employeeName", "trackingStatus"];
@@ -42,9 +42,11 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
   if (columnFilters.serialNumber) where.serialNumber = { in: columnFilters.serialNumber };
   if (columnFilters.model) where.model = { in: columnFilters.model };
   if (columnFilters.status) where.status = { in: columnFilters.status as InventoryStatus[] };
-  if (columnFilters.invoicingWarehouse) where.invoicingWarehouse = { in: columnFilters.invoicingWarehouse };
-  if (columnFilters.employeeName) where.employeeName = { in: columnFilters.employeeName };
-  if (columnFilters.trackingStatus) where.trackingStatus = { in: columnFilters.trackingStatus };
+  andFilterConditions(where, collectBlankTokenConditions(columnFilters, {
+    invoicingWarehouse: "invoicingWarehouse",
+    employeeName: "employeeName",
+    trackingStatus: "trackingStatus",
+  }));
 
   const [inventoryItems, totalCount, newCount, availableCount, allocatedCount, qcPendingCount] = await Promise.all([
     prisma.inventoryItem.findMany({

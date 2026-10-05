@@ -7,7 +7,7 @@ import { AllocatedAssetsTable } from "@/components/warehouse/allocated-assets-ta
 import { QcPendingTable } from "@/components/warehouse/qc-pending-table";
 import { WarehouseExportButton } from "@/components/warehouse/warehouse-export-button";
 import { WarehouseTabs } from "@/components/warehouse/warehouse-tabs";
-import { parseColumnFilters } from "@/lib/column-filters";
+import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import type { Prisma, OrderStatus } from "@prisma/client";
 
 const ALLOCATED_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity", "serialNumbers", "docketNumber", "dcNumber", "ewayBill", "status"];
@@ -41,14 +41,14 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
   const columnFilters = parseColumnFilters(searchParams, ALLOCATED_FILTER_KEYS);
   if (columnFilters.serialNumbers) allocatedWhere.assets = { some: { inventoryItem: { serialNumber: { in: columnFilters.serialNumbers } } } };
   const docketFilters: Prisma.DocketWhereInput[] = [];
-  if (columnFilters.docketNumber) docketFilters.push({ docketNumber: { in: columnFilters.docketNumber } });
-  if (columnFilters.ewayBill) docketFilters.push({ ewayBillNumber: { in: columnFilters.ewayBill } });
+  if (columnFilters.docketNumber) docketFilters.push({ OR: blankTokenConditions("docketNumber", columnFilters.docketNumber) });
+  if (columnFilters.ewayBill) docketFilters.push({ OR: blankTokenConditions("ewayBillNumber", columnFilters.ewayBill) });
   if (docketFilters.length) allocatedWhere.dockets = { some: { AND: docketFilters } };
   if (columnFilters.clientName) allocatedWhere.clientName = { in: columnFilters.clientName };
   if (columnFilters.deliveryLocation) allocatedWhere.deliveryLocation = { in: columnFilters.deliveryLocation };
-  if (columnFilters.dcNumber) allocatedWhere.dcNumber = { in: columnFilters.dcNumber };
   if (columnFilters.status) allocatedWhere.status = { in: columnFilters.status as OrderStatus[] };
   if (columnFilters.totalQuantity) allocatedWhere.totalQuantity = { in: columnFilters.totalQuantity.map(Number) };
+  andFilterConditions(allocatedWhere, collectBlankTokenConditions(columnFilters, { dcNumber: "dcNumber" }));
 
   const [pendingOrders, totalAllocated, allocatedOrders, availableInventory, qcPendingItems] = await Promise.all([
     prisma.order.findMany({

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Users, Laptop, MapPin } from "lucide-react";
 import { AssignedAssetsTable } from "@/components/assigned-assets/assigned-assets-table";
 import { AssignedAssetsExportButton } from "@/components/assigned-assets/assigned-assets-export-button";
-import { parseColumnFilters } from "@/lib/column-filters";
+import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import type { Prisma } from "@prisma/client";
 
 const ASSIGNED_FILTER_KEYS = ["serialNumber", "model", "employeeName", "emailId", "purpose", "trackingStatus", "location"];
@@ -51,17 +51,24 @@ export default async function AssignedAssetsPage(props: {
   const columnFilters = parseColumnFilters(searchParams, ASSIGNED_FILTER_KEYS);
   if (columnFilters.serialNumber) where.serialNumber = { in: columnFilters.serialNumber };
   if (columnFilters.model) where.model = { in: columnFilters.model };
-  if (columnFilters.employeeName) where.employeeName = { in: columnFilters.employeeName };
-  if (columnFilters.emailId) where.emailId = { in: columnFilters.emailId };
-  if (columnFilters.purpose) where.purpose = { in: columnFilters.purpose };
-  if (columnFilters.trackingStatus) where.trackingStatus = { in: columnFilters.trackingStatus };
-
-  if (columnFilters.location) {
-    where.OR = [
-      { city: { in: columnFilters.location } },
-      { state: { in: columnFilters.location } },
-    ];
-  }
+  andFilterConditions(where, [
+    ...collectBlankTokenConditions(columnFilters, {
+      employeeName: "employeeName",
+      emailId: "emailId",
+      purpose: "purpose",
+      trackingStatus: "trackingStatus",
+    }),
+    // The Location dropdown matches either column, so both are OR-ed inside a
+    // single group: "city matches OR state matches".
+    ...(columnFilters.location
+      ? [{
+          OR: [
+            ...blankTokenConditions("city", columnFilters.location),
+            ...blankTokenConditions("state", columnFilters.location),
+          ],
+        }]
+      : []),
+  ]);
 
   const [items, totalCount, uniqueEmployees, modelBreakdown] =
     await Promise.all([
