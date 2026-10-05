@@ -76,16 +76,22 @@ export default async function AssignedAssetsPage(props: {
   // sync, reverse pickup and DC updates all bump updatedAt, which pushed rows
   // that were never assigned to a person (DC dockets, and items with no employee
   // details) to the top of the list and left the first page looking empty.
-  const assignmentPage = await prisma.assignmentRecord.groupBy({
+  //
+  // The grouping runs unpaginated and the page is cut in JS: Prisma applies
+  // skip/take before aggregating here, so an item with several assignment
+  // records could otherwise land on two pages at once.
+  const assignmentRows = await prisma.assignmentRecord.groupBy({
     by: ["inventoryItemId"],
     where: { inventoryItem: where },
     _max: { assignedAt: true },
     orderBy: { _max: { assignedAt: "desc" } },
-    skip,
-    take: pageSize,
   });
 
-  const assignmentOrder = new Map(assignmentPage.map((r, idx) => [r.inventoryItemId, idx]));
+  const assignmentOrder = new Map(
+    assignmentRows
+      .slice(skip, skip + pageSize)
+      .map((r, idx) => [r.inventoryItemId, idx])
+  );
 
   const items = (
     await prisma.inventoryItem.findMany({
