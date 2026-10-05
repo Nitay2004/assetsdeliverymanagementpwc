@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { normalizeOdaLocation } from "@/lib/location-utils";
 import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
 import { nextSequenceNumber } from "@/lib/sequence-number";
+import { toDenseRow, toDenseRows } from "@/lib/sheet-cells";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
@@ -254,7 +255,7 @@ function buildPrismaData(
 ): Record<string, unknown> {
   const data: Record<string, unknown> = {};
   for (let i = 0; i < headers.length; i++) {
-    const header = headers[i].trim();
+    const header = (headers[i] ?? "").trim();
     const column = resolvedMap.get(i);
     if (!column) {
       unknownHeaders.push(header);
@@ -280,7 +281,10 @@ async function parseFile(file: File): Promise<{ headers: string[]; records: stri
     if (parsed.length < 2) {
       throw new Error("File must have a header row and at least one data row.");
     }
-    return { headers: parsed[0], records: parsed.slice(1) };
+    return {
+      headers: toDenseRow(parsed[0]),
+      records: toDenseRows(parsed.slice(1)),
+    };
   }
 
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
@@ -294,10 +298,8 @@ async function parseFile(file: File): Promise<{ headers: string[]; records: stri
       throw new Error("File must have a header row and at least one data row.");
     }
 
-    const headers = (json[0] as string[]).map(h => String(h ?? ""));
-    const records = json.slice(1).map((row: any) =>
-      (row as any[]).map((cell: any) => cell?.toString() ?? "")
-    );
+    const headers = toDenseRow(json[0]);
+    const records = toDenseRows(json.slice(1));
     return { headers, records };
   }
 
@@ -354,7 +356,7 @@ export async function POST(request: Request) {
   const unknownHeaders: string[] = [];
 
   for (let i = 0; i < headers.length; i++) {
-    const header = headers[i].trim();
+    const header = (headers[i] ?? "").trim();
     const column = resolveColumn(header);
     if (column) {
       resolvedMap.set(i, column);
@@ -379,7 +381,7 @@ export async function POST(request: Request) {
   const rows: { data: Record<string, unknown>; rowNum: number }[] = [];
   for (let r = 0; r < records.length; r++) {
     const row = records[r];
-    if (row.length === 0 || row.every(c => c.trim() === "")) continue;
+    if (row.length === 0 || row.every(c => (c ?? "").trim() === "")) continue;
 
     const data = buildPrismaData(headers, row, unknownHeaders, resolvedMap);
 

@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { parse } from "csv-parse/sync";
 import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
+import { toDenseRow, toDenseRows } from "@/lib/sheet-cells";
 import { normalizeOdaLocation } from "@/lib/location-utils";
 import { calculateSlaStatus } from "@/lib/sla-utils";
 
@@ -710,7 +711,7 @@ function buildPrismaData(
 ): Record<string, unknown> {
   const data: Record<string, unknown> = {};
   for (let i = 0; i < headers.length; i++) {
-    const header = headers[i].trim();
+    const header = (headers[i] ?? "").trim();
     const column = resolvedMap.get(i);
     if (!column) {
       unknownHeaders.push(header);
@@ -741,7 +742,13 @@ async function parseFile(file: File): Promise<ParsedSheet[]> {
     if (parsed.length < 2) {
       throw new Error("File must have a header row and at least one data row.");
     }
-    return [{ name: "Sheet1", headers: parsed[0], records: parsed.slice(1) }];
+    return [
+      {
+        name: "Sheet1",
+        headers: toDenseRow(parsed[0]),
+        records: toDenseRows(parsed.slice(1)),
+      },
+    ];
   }
 
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
@@ -759,10 +766,8 @@ async function parseFile(file: File): Promise<ParsedSheet[]> {
         sheets.push({ name: sheetName, headers: [], records: [] });
         continue;
       }
-      const headers = (json[0] as string[]).map(h => String(h ?? ""));
-      const records = json.slice(1).map((row: any) =>
-        (row as any[]).map((cell: any) => cell?.toString() ?? "")
-      );
+      const headers = toDenseRow(json[0]);
+      const records = toDenseRows(json.slice(1));
       sheets.push({ name: sheetName, headers, records });
       // Free memory for this sheet as soon as it is converted
       delete workbook.Sheets[sheetName];
@@ -873,8 +878,8 @@ export async function POST(request: Request) {
     const seenUnknown = new Set<string>();
     for (const sheet of dataSheets) {
       for (const h of sheet.headers) {
-        if (!intelligentResolve(h.trim())) {
-          const trimmed = h.trim();
+        if (!intelligentResolve((h ?? "").trim())) {
+          const trimmed = (h ?? "").trim();
           if (!seenUnknown.has(trimmed)) {
             seenUnknown.add(trimmed);
             unknownHeaders.push(trimmed);
@@ -892,7 +897,7 @@ export async function POST(request: Request) {
       })),
       rowCount: first.records.length,
       mapping: first.headers.map((h, i) => ({
-        header: h.trim(),
+        header: (h ?? "").trim(),
         field: resolvedMap.get(i) ?? null,
         sample: (sample[i] ?? "").trim(),
       })),
@@ -922,7 +927,7 @@ export async function POST(request: Request) {
     const unknownHeaders: string[] = [];
 
     for (let i = 0; i < sheet.headers.length; i++) {
-      const header = sheet.headers[i].trim();
+      const header = (sheet.headers[i] ?? "").trim();
       const column = resolvedMap.get(i);
       if (column) {
         sheetMapping.push({ header, field: column });
@@ -947,7 +952,7 @@ export async function POST(request: Request) {
     const rows: { data: Record<string, unknown>; rowNum: number }[] = [];
     for (let r = 0; r < sheet.records.length; r++) {
       const row = sheet.records[r];
-      if (row.length === 0 || row.every(c => c.trim() === "")) continue;
+      if (row.length === 0 || row.every(c => (c ?? "").trim() === "")) continue;
 
       const data = buildPrismaData(sheet.headers, row, unknownHeaders, resolvedMap);
 

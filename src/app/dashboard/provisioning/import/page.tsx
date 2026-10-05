@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Upload, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { readImportResponse } from "@/lib/import-response";
 
 export default function ImportProvisioningPage() {
   const router = useRouter();
@@ -33,7 +34,7 @@ export default function ImportProvisioningPage() {
         method: "POST",
         body: fd,
       });
-      const data = await res.json();
+      const data = await readImportResponse(res);
       setResult(data);
     } catch {
       setResult({ success: false, error: "Network error. Please try again." });

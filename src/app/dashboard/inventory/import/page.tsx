@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Upload, AlertCircle, CheckCircle2, Loader2, Database, RefreshCw, FileSearch, XCircle, Check } from "lucide-react";
+import { readImportResponse } from "@/lib/import-response";
 
 type Mode = "upload" | "update";
 
@@ -48,8 +49,8 @@ export default function ImportInventoryPage() {
     fd.set("mode", "preview");
     try {
       const res = await fetch("/api/import-csv", { method: "POST", body: fd });
-      const data = await res.json();
-      if (data.preview) setPreview(data);
+      const data = await readImportResponse(res);
+      if (data.preview) setPreview(data as unknown as Preview);
       else setResult(data);
     } catch {
       setResult({ success: false, error: "Network error. Please try again." });
@@ -74,7 +75,7 @@ export default function ImportInventoryPage() {
         method: "POST",
         body: fd,
       });
-      const data = await res.json();
+      const data = await readImportResponse(res);
       setResult(data);
     } catch {
       setResult({ success: false, error: "Network error. Please try again." });
