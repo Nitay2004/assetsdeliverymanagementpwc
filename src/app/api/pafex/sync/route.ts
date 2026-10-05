@@ -334,6 +334,10 @@ async function syncDocket(docket: DocketCandidate, dryRun: boolean): Promise<Syn
 
   if (!tracking) {
     outcome.pod = "skipped";
+    // Pafex has never heard of this docket, so no document is ever going to
+    // arrive for it. Count the attempt, otherwise the same oldest rows are asked
+    // about on every run and the rest of the queue never gets reached.
+    if (docket.podRetry && !dryRun) await markPodAttempted(docket.itemIds);
     return outcome;
   }
 
