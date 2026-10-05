@@ -70,21 +70,41 @@ export default async function AssignedAssetsPage(props: {
       : []),
   ]);
 
-  const [items, totalCount, uniqueEmployees, modelBreakdown] =
-    await Promise.all([
-      prisma.inventoryItem.findMany({
-        where,
-        include: {
-          assignmentRecords: {
-            orderBy: { assignedAt: "desc" },
-            take: 1,
-          },
+  const totalCount = await prisma.inventoryItem.count({ where });
+
+  // Ordered by when each item was assigned rather than by updatedAt. Tracking
+  // sync, reverse pickup and DC updates all bump updatedAt, which pushed rows
+  // that were never assigned to a person (DC dockets, and items with no employee
+  // details) to the top of the list and left the first page looking empty.
+  const assignmentPage = await prisma.assignmentRecord.groupBy({
+    by: ["inventoryItemId"],
+    where: { inventoryItem: where },
+    _max: { assignedAt: true },
+    orderBy: { _max: { assignedAt: "desc" } },
+    skip,
+    take: pageSize,
+  });
+
+  const assignmentOrder = new Map(assignmentPage.map((r, idx) => [r.inventoryItemId, idx]));
+
+  const items = (
+    await prisma.inventoryItem.findMany({
+      where: { id: { in: [...assignmentOrder.keys()] } },
+      include: {
+        assignmentRecords: {
+          orderBy: { assignedAt: "desc" },
+          take: 1,
         },
-        orderBy: { updatedAt: "desc" },
-        skip,
-        take: pageSize,
-      }),
-      prisma.inventoryItem.count({ where }),
+      },
+    })
+  ).sort(
+    (a, b) =>
+      (assignmentOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+      (assignmentOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+  );
+
+  const [uniqueEmployees, modelBreakdown] =
+    await Promise.all([
       prisma.inventoryItem.findMany({
         where: { status: "ALLOCATED" },
         select: { employeeName: true },
