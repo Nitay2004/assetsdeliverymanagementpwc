@@ -360,8 +360,8 @@ async function syncDocket(docket: DocketCandidate, dryRun: boolean): Promise<Syn
     return outcome;
   }
 
-  // A retry docket is already delivered and already stamped, so leave its status
-  // and dates exactly as they are and only try for the document.
+  // A retry docket is already delivered and its status is already correct, so
+  // leave that and its dates alone and spend the run on the document only.
   if (docket.podRetry) {
     if (docket.hasPod) {
       outcome.pod = "already_present";
