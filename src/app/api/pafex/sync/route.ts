@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { canViewModule } from "@/lib/permissions";
@@ -27,6 +28,15 @@ const MAX_LIMIT = 500;
 const CONCURRENCY = 4;
 const TRACKING_STATUS_DISPATCHED = "Dispatched";
 const TRACKING_STATUS_DELIVERED = "Delivered";
+
+// Rows with no tracking status yet are the ones that most need a lookup, and a
+// bare `NOT: { trackingStatus: DELIVERED }` drops them: Postgres evaluates the
+// comparison as unknown for a NULL column and never returns the row. The same
+// guard keeps an in-transit event from dragging an already delivered item back
+// to Dispatched when only some items on a docket were caught earlier.
+const NOT_YET_DELIVERED: Prisma.InventoryItemWhereInput = {
+  OR: [{ trackingStatus: null }, { trackingStatus: { not: TRACKING_STATUS_DELIVERED } }],
+};
 
 // Every docket on the inventory is checked, whatever courier name it carries.
 // Names arrive from CSV imports in mixed case and spacing, and some rows have
@@ -93,7 +103,7 @@ async function runWithConcurrency<T, R>(
 async function markItemsInTransit(itemIds: string[]): Promise<number> {
   if (itemIds.length === 0) return 0;
   const result = await prisma.inventoryItem.updateMany({
-    where: { id: { in: itemIds } },
+    where: { id: { in: itemIds }, AND: [NOT_YET_DELIVERED] },
     data: {
       trackingStatus: TRACKING_STATUS_DISPATCHED,
       trackingSubStatus: labelForState("in_transit"),
@@ -183,7 +193,7 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
   const recent = await prisma.inventoryItem.findMany({
     where: {
       docketNumber: { not: null },
-      NOT: { trackingStatus: TRACKING_STATUS_DELIVERED },
+      AND: [NOT_YET_DELIVERED],
     },
     select: { id: true, docketNumber: true, podDocumentUrl: true },
     orderBy: { updatedAt: "desc" },
