@@ -18,6 +18,7 @@ services:
       # never reaches the container.
       - PAFEX_API_COMPANY_ID=${PAFEX_API_COMPANY_ID:-}
       - PAFEX_CUSTOMER_CODE=${PAFEX_CUSTOMER_CODE:-}
+      - PAFEX_COURIER_NAMES=${PAFEX_COURIER_NAMES:-}
       - PAFEX_SYNC_API_KEY=${PAFEX_SYNC_API_KEY:-}
     volumes:
       - uploads:/app/uploads

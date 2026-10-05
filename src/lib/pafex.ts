@@ -141,7 +141,22 @@ export async function fetchTracking(trackingNo: string): Promise<PafexTracking |
 
 /** Pafex returns events newest-first, but sort defensively so we never trust order. */
 export function latestEvent(tracking: PafexTracking): PafexEvent | null {
-  const events = (tracking.docket_events ?? []).filter(Boolean);
+  return newestOf((tracking.docket_events ?? []).filter(Boolean));
+}
+
+/**
+ * Newest event that reports a delivery, if there is one.
+ *
+ * The newest event is not enough: Pafex keeps pushing "PODDC IMAGE" as in_transit
+ * after the delivery scan, so a delivered docket can end with an in_transit event
+ * that is hours newer than the actual delivery. A docket counts as delivered
+ * when any event says so.
+ */
+export function latestDeliveredEvent(tracking: PafexTracking): PafexEvent | null {
+  return newestOf((tracking.docket_events ?? []).filter(e => isDeliveredState(e?.event_state)));
+}
+
+function newestOf(events: PafexEvent[]): PafexEvent | null {
   if (events.length === 0) return null;
 
   let best = events[0];
@@ -167,7 +182,12 @@ function parseEventDate(value: string | null): Date | null {
 export function deliveredAt(tracking: PafexTracking): Date | null {
   const info = tracking.docket_info ?? [];
   const entry = info.find(([label]) => label.trim().toLowerCase() === "delivery date and time");
-  return parseEventDate(entry?.[1] ?? null) ?? parseEventDate(latestEvent(tracking)?.event_at ?? null);
+  const delivered = latestDeliveredEvent(tracking);
+  return (
+    parseEventDate(entry?.[1] ?? null) ??
+    parseEventDate(delivered?.event_at ?? null) ??
+    parseEventDate(latestEvent(tracking)?.event_at ?? null)
+  );
 }
 
 function detectExtension(buffer: Buffer, contentType: string | null): PafexPod["extension"] | null {

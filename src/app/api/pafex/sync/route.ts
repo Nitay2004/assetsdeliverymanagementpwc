@@ -9,8 +9,8 @@ import {
   fetchTracking,
   downloadPod,
   latestEvent,
+  latestDeliveredEvent,
   deliveredAt,
-  isDeliveredState,
   isInTransitState,
   labelForState,
   pafexConfigured,
@@ -23,6 +23,20 @@ const MAX_LIMIT = 200;
 const CONCURRENCY = 4;
 const TRACKING_STATUS_DISPATCHED = "Dispatched";
 const TRACKING_STATUS_DELIVERED = "Delivered";
+
+// Pafex only carries the couriers we hand it, so only dockets booked through
+// that account are worth a lookup. Configurable in .env because the courier mix
+// changes as more shippers move onto Pafex.
+const DEFAULT_COURIER_NAMES = "Blue Dart";
+
+function courierFilter(): { in: string[] } | null {
+  const raw = process.env.PAFEX_COURIER_NAMES ?? DEFAULT_COURIER_NAMES;
+  const names = raw
+    .split(",")
+    .map(n => n.trim())
+    .filter(Boolean);
+  return names.length > 0 ? { in: names } : null;
+}
 
 // The sync walks the docket numbers that sit on the inventory items, because
 // that is where a serial number actually lives. Orders are advanced as a side
@@ -171,10 +185,13 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
   // whose items are already delivered. Reading the rows newest-first and folding
   // them here keeps the window moving forward, instead of re-checking the same
   // alphabetical slice on every run.
+  const couriers = courierFilter();
+
   const recent = await prisma.inventoryItem.findMany({
     where: {
       docketNumber: { not: null },
       NOT: { trackingStatus: TRACKING_STATUS_DELIVERED },
+      ...(couriers ? { latestCourierName: couriers } : {}),
     },
     select: { id: true, docketNumber: true, podDocumentUrl: true },
     orderBy: { updatedAt: "desc" },
@@ -198,7 +215,10 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
   // Pull every item on those dockets, not only the ones inside the recency
   // window, so a whole docket moves to delivered together.
   const allItems = await prisma.inventoryItem.findMany({
-    where: { docketNumber: { in: numbers } },
+    where: {
+      docketNumber: { in: numbers },
+      ...(couriers ? { latestCourierName: couriers } : {}),
+    },
     select: { id: true, docketNumber: true, podDocumentUrl: true },
   });
   for (const item of allItems) {
@@ -269,9 +289,13 @@ async function syncDocket(docket: DocketCandidate, dryRun: boolean): Promise<Syn
 
   outcome.found = true;
 
-  const event = latestEvent(tracking);
+  // A docket counts as delivered when any event says so. Pafex appends in_transit
+  // "PODDC IMAGE" scans after the delivery scan, so the newest event alone would
+  // report a delivered shipment as still moving.
+  const deliveredEvent = latestDeliveredEvent(tracking);
+  const event = deliveredEvent ?? latestEvent(tracking);
+  const delivered = !!deliveredEvent;
   const state = event?.event_state ?? null;
-  const delivered = isDeliveredState(state);
 
   outcome.pafexStatus = state;
   outcome.pafexDescription = event?.event_description ?? null;
