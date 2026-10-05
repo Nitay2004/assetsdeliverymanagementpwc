@@ -255,6 +255,8 @@ model InventoryItem {
   latestTrackingStatus  String?           @map("latest_tracking_status")
   latestEwayBill        String?           @map("latest_eway_bill")
   latestDeliveryDate    DateTime?         @map("latest_delivery_date") @db.Date
+  // Proof of delivery pulled from the courier (Pafex) on delivery.
+  podDocumentUrl        String?           @map("pod_document_url")
   latestDc              String?           @map("latest_dc")
   inwardDate1           DateTime?         @map("inward_date_1") @db.Date
   outwardDate1          DateTime?         @map("outward_date_1") @db.Date

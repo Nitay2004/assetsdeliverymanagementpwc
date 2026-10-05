@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
-import type { OrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { canViewModule } from "@/lib/permissions";
@@ -25,34 +24,24 @@ const CONCURRENCY = 4;
 const TRACKING_STATUS_DISPATCHED = "Dispatched";
 const TRACKING_STATUS_DELIVERED = "Delivered";
 
-const TERMINAL_ORDER_STATUSES: OrderStatus[] = [
-  "DELIVERED",
-  "DELIVERY_CONFIRMED",
-  "INVOICED",
-  "WARRANTY_UPDATED",
-  "CANCELLED",
-  "RTO",
-  "RTO_DC_REQUESTED",
-  "RTO_DC_GENERATED",
-  "RTO_EWAY_BILL_REQUESTED",
-  "RTO_EWAY_BILL_GENERATED",
-  "RTO_IN_TRANSIT",
-  "RTO_DELIVERED_TO_WAREHOUSE",
-];
-
+// The sync walks the docket numbers that sit on the inventory items, because
+// that is where a serial number actually lives. Orders are advanced as a side
+// effect only when a Docket row happens to exist for that docket number.
 type DocketCandidate = {
-  id: string;
   docketNumber: string;
-  podDocumentUrl: string | null;
-  orderId: string;
-  orderStatus: OrderStatus;
+  itemIds: string[];
+  hasPod: boolean;
+  docketId: string | null;
+  orderId: string | null;
+  orderStatus: string | null;
 };
 
 type SyncOutcome = {
   docketNumber: string;
-  docketId: string;
-  orderId: string;
-  orderStatus: string;
+  docketId: string | null;
+  orderId: string | null;
+  orderStatus: string | null;
+  found: boolean;
   pafexStatus: string | null;
   pafexDescription: string | null;
   orderStatusChanged: string | null;
@@ -92,14 +81,6 @@ async function runWithConcurrency<T, R>(
   return results;
 }
 
-async function itemIdsForOrder(orderId: string): Promise<string[]> {
-  const assets = await prisma.asset.findMany({
-    where: { orderId, inventoryItemId: { not: null } },
-    select: { inventoryItemId: true },
-  });
-  return assets.map(a => a.inventoryItemId).filter(Boolean) as string[];
-}
-
 async function markItemsInTransit(itemIds: string[]): Promise<number> {
   if (itemIds.length === 0) return 0;
   const result = await prisma.inventoryItem.updateMany({
@@ -112,7 +93,11 @@ async function markItemsInTransit(itemIds: string[]): Promise<number> {
   return result.count;
 }
 
-async function markItemsDelivered(itemIds: string[], deliveredOn: Date): Promise<number> {
+async function markItemsDelivered(
+  itemIds: string[],
+  deliveredOn: Date,
+  docketNumber: string
+): Promise<number> {
   if (itemIds.length === 0) return 0;
 
   const items = await prisma.inventoryItem.findMany({
@@ -133,6 +118,7 @@ async function markItemsDelivered(itemIds: string[], deliveredOn: Date): Promise
     const dates: Record<string, Date> = {
       deliveryDate: deliveredOn,
       actualDeliveryDate: deliveredOn,
+      latestDeliveryDate: deliveredOn,
     };
     if (!item.outwardDate1) dates.outwardDate1 = deliveredOn;
     else if (!item.outwardDate2) dates.outwardDate2 = deliveredOn;
@@ -146,6 +132,8 @@ async function markItemsDelivered(itemIds: string[], deliveredOn: Date): Promise
       data: {
         trackingStatus: TRACKING_STATUS_DELIVERED,
         trackingSubStatus: labelForState("delivered"),
+        latestDocketNumber: docketNumber,
+        latestTrackingStatus: TRACKING_STATUS_DELIVERED,
         ...dates,
         slaStatus: calculateSlaStatus(dates.actualDeliveryDate, item.expectedDeliveryDate),
       },
@@ -157,7 +145,7 @@ async function markItemsDelivered(itemIds: string[], deliveredOn: Date): Promise
 
 async function fetchAndStorePod(
   tracking: PafexTracking,
-  docketId: string,
+  itemIds: string[],
   dryRun: boolean
 ): Promise<{ pod: SyncOutcome["pod"]; podError?: string }> {
   if (!tracking.pod_image) return { pod: "unavailable" };
@@ -167,7 +155,10 @@ async function fetchAndStorePod(
     const file = await downloadPod(tracking.pod_image);
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${file.extension}`;
     const filePath = await saveFile(`${POD_BUCKET}/${fileName}`, file.buffer);
-    await prisma.docket.update({ where: { id: docketId }, data: { podDocumentUrl: filePath } });
+    await prisma.inventoryItem.updateMany({
+      where: { id: { in: itemIds } },
+      data: { podDocumentUrl: filePath },
+    });
     return { pod: "fetched" };
   } catch (err) {
     const message = err instanceof Error ? err.message : "POD download failed";
@@ -175,12 +166,83 @@ async function fetchAndStorePod(
   }
 }
 
+async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
+  // Distinct docket numbers straight off the inventory items, skipping the ones
+  // whose items are already delivered and carrying a POD. groupBy keeps this to
+  // one row per docket instead of pulling every serial number into memory.
+  const grouped = await prisma.inventoryItem.groupBy({
+    by: ["docketNumber"],
+    where: {
+      docketNumber: { not: null },
+      NOT: { trackingStatus: TRACKING_STATUS_DELIVERED },
+    },
+    _count: { _all: true },
+    orderBy: { docketNumber: "asc" },
+    take: limit * 4,
+  });
+
+  const numbers = grouped
+    .map(g => (g.docketNumber as string).trim())
+    .filter((n): n is string => !!n);
+
+  const items = await prisma.inventoryItem.findMany({
+    where: { docketNumber: { in: numbers } },
+    select: {
+      id: true,
+      docketNumber: true,
+      podDocumentUrl: true,
+    },
+  });
+
+  const byDocket = new Map<string, string[]>();
+  const podSet = new Set<string>();
+  for (const item of items) {
+    const number = (item.docketNumber as string).trim();
+    const list = byDocket.get(number);
+    if (list) list.push(item.id);
+    else byDocket.set(number, [item.id]);
+    if (item.podDocumentUrl) podSet.add(number);
+  }
+
+  // A Docket row is optional: the inventory is the source of truth, and office
+  // has no docket rows at all. When one exists we keep its tracking fields and
+  // advance the parent order too.
+  const dockets = await prisma.docket.findMany({
+    where: { docketNumber: { in: numbers } },
+    select: {
+      id: true,
+      docketNumber: true,
+      podDocumentUrl: true,
+      orderId: true,
+      order: { select: { status: true } },
+    },
+  });
+  const docketByNumber = new Map(
+    dockets.map(d => [(d.docketNumber as string).trim(), d])
+  );
+
+  return numbers.map(number => {
+    const itemIds = byDocket.get(number) ?? [];
+    const docket = docketByNumber.get(number);
+    const hasPod = podSet.has(number) || !!docket?.podDocumentUrl;
+    return {
+      docketNumber: number,
+      itemIds,
+      hasPod,
+      docketId: docket?.id ?? null,
+      orderId: docket?.orderId ?? null,
+      orderStatus: docket?.order.status ?? null,
+    };
+  });
+}
+
 async function syncDocket(docket: DocketCandidate, dryRun: boolean): Promise<SyncOutcome> {
   const outcome: SyncOutcome = {
     docketNumber: docket.docketNumber,
-    docketId: docket.id,
+    docketId: docket.docketId,
     orderId: docket.orderId,
     orderStatus: docket.orderStatus,
+    found: false,
     pafexStatus: null,
     pafexDescription: null,
     orderStatusChanged: null,
@@ -197,15 +259,11 @@ async function syncDocket(docket: DocketCandidate, dryRun: boolean): Promise<Syn
   }
 
   if (!tracking) {
-    if (!dryRun) {
-      await prisma.docket.update({
-        where: { id: docket.id },
-        data: { pafexTrackingFound: false, lastTrackingSyncAt: new Date() },
-      });
-    }
     outcome.pod = "skipped";
     return outcome;
   }
+
+  outcome.found = true;
 
   const event = latestEvent(tracking);
   const state = event?.event_state ?? null;
@@ -216,36 +274,33 @@ async function syncDocket(docket: DocketCandidate, dryRun: boolean): Promise<Syn
 
   if (dryRun) {
     outcome.pod = tracking.pod_image ? "skipped" : "unavailable";
-    if (delivered && docket.podDocumentUrl) outcome.pod = "already_present";
+    if (delivered && docket.hasPod) outcome.pod = "already_present";
     return outcome;
   }
 
-  await prisma.docket.update({
-    where: { id: docket.id },
-    data: {
-      pafexTrackingFound: true,
-      courierTrackingStatus: state,
-      courierTrackingDescription: event?.event_description ?? null,
-      lastTrackingEventAt: event?.event_at ? new Date(event.event_at.replace(" ", "T")) : null,
-      lastTrackingSyncAt: new Date(),
-    },
-  });
+  if (docket.docketId) {
+    await prisma.docket.update({
+      where: { id: docket.docketId },
+      data: {
+        pafexTrackingFound: true,
+        courierTrackingStatus: state,
+        courierTrackingDescription: event?.event_description ?? null,
+        lastTrackingEventAt: event?.event_at
+          ? new Date(event.event_at.replace(" ", "T"))
+          : null,
+        lastTrackingSyncAt: new Date(),
+      },
+    });
+  }
 
   if (delivered) {
-    const itemIds = await itemIdsForOrder(docket.orderId);
     const on = deliveredAt(tracking) ?? new Date();
+    outcome.itemsUpdated = await markItemsDelivered(docket.itemIds, on, docket.docketNumber);
 
-    if (!TERMINAL_ORDER_STATUSES.includes(docket.orderStatus)) {
-      await prisma.order.update({ where: { id: docket.orderId }, data: { status: "DELIVERED" } });
-      outcome.orderStatusChanged = "DELIVERED";
-    }
-
-    outcome.itemsUpdated = await markItemsDelivered(itemIds, on);
-
-    if (docket.podDocumentUrl) {
+    if (docket.hasPod) {
       outcome.pod = "already_present";
     } else {
-      const pod = await fetchAndStorePod(tracking, docket.id, dryRun);
+      const pod = await fetchAndStorePod(tracking, docket.itemIds, dryRun);
       outcome.pod = pod.pod;
       if (pod.podError) outcome.podError = pod.podError;
     }
@@ -253,11 +308,7 @@ async function syncDocket(docket: DocketCandidate, dryRun: boolean): Promise<Syn
   }
 
   if (isInTransitState(state)) {
-    if (docket.orderStatus === "PACKED_AND_LABELLED") {
-      await prisma.order.update({ where: { id: docket.orderId }, data: { status: "DISPATCHED" } });
-      outcome.orderStatusChanged = "DISPATCHED";
-    }
-    outcome.itemsUpdated = await markItemsInTransit(await itemIdsForOrder(docket.orderId));
+    outcome.itemsUpdated = await markItemsInTransit(docket.itemIds);
   }
 
   return outcome;
@@ -292,40 +343,13 @@ export async function POST(req: NextRequest) {
       Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.floor(requestedLimit) : DEFAULT_LIMIT
     );
 
-    const candidates = await prisma.docket.findMany({
-      where: {
-        docketNumber: { not: null },
-        OR: [
-          { podDocumentUrl: null },
-          { order: { status: { notIn: TERMINAL_ORDER_STATUSES } } },
-        ],
-      },
-      select: {
-        id: true,
-        docketNumber: true,
-        podDocumentUrl: true,
-        orderId: true,
-        order: { select: { status: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: limit,
-    });
-
-    const dockets: DocketCandidate[] = candidates.map(d => ({
-      id: d.id,
-      docketNumber: d.docketNumber as string,
-      podDocumentUrl: d.podDocumentUrl,
-      orderId: d.orderId,
-      orderStatus: d.order.status,
-    }));
+    const dockets = await loadCandidates(limit);
 
     const results = await runWithConcurrency(dockets, CONCURRENCY, docket =>
       syncDocket(docket, dryRun)
     );
 
-    const notFoundDockets = results
-      .filter(r => !r.error && r.pafexStatus === null)
-      .map(r => r.docketNumber);
+    const notFoundDockets = results.filter(r => !r.error && !r.found).map(r => r.docketNumber);
     const failed = results.filter(r => r.error);
 
     return NextResponse.json({
@@ -339,7 +363,7 @@ export async function POST(req: NextRequest) {
       errors: failed.map(f => ({ docketNumber: f.docketNumber, error: f.error })),
       delivered: results.filter(r => r.pafexStatus === "delivered").length,
       podsFetched: results.filter(r => r.pod === "fetched").length,
-      ordersAdvanced: results.filter(r => r.orderStatusChanged).length,
+      itemsUpdated: results.reduce((sum, r) => sum + r.itemsUpdated, 0),
       results,
     });
   } catch (err) {

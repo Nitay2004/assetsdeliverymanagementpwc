@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, Pencil, RotateCcw, ArrowRight, History, User, ChevronDown, ChevronRight } from "lucide-react";
+import { X, Pencil, RotateCcw, ArrowRight, History, User, ChevronDown, ChevronRight, FileText } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +16,7 @@ import { calculateSlaStatus } from "@/lib/sla-utils";
 
 interface InventoryItem {
   id: string;
+  podDocumentUrl?: string | null;
   serialNumber: string;
   model: string;
   specs: string | null;
@@ -122,6 +123,51 @@ interface HistoryRecord {
   docketNumber: string | null;
   deliveryDate: string | null;
   assignedAt: string;
+}
+
+function PodDocumentLink({ path }: { path: string | null }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!path) {
+      setUrl(null);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    setError(null);
+    fetch(`/api/pod-url?path=${encodeURIComponent(path)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!active) return;
+        if (d.url) setUrl(d.url);
+        else setError("Could not open");
+      })
+      .catch(() => active && setError("Could not open"))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [path]);
+
+  if (!path) return <span className="text-sm text-muted-foreground">—</span>;
+  if (loading) return <span className="text-xs text-muted-foreground">Loading…</span>;
+  if (error || !url) {
+    return <span className="text-xs text-destructive">{error ?? "Unavailable"}</span>;
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+    >
+      <FileText className="h-4 w-4" />
+      View POD
+    </a>
+  );
 }
 
 function statusColor(value: string): string {
@@ -730,6 +776,16 @@ export function InventoryDetailDrawer({
                   const fieldName = toFieldName(field.label);
                   const value = getValue(displayItem, fieldName);
                   const isStatus = fieldName === "status" || fieldName === "trackingStatus";
+                  if (fieldName === "podDocumentUrl") {
+                    return (
+                      <div key={fieldName} className="flex items-start gap-3">
+                        <span className="text-xs text-muted-foreground w-36 shrink-0 pt-0.5">
+                          {field.label}
+                        </span>
+                        <PodDocumentLink path={displayItem.podDocumentUrl ?? null} />
+                      </div>
+                    );
+                  }
                   return (
                     <div key={fieldName} className="flex items-start gap-3">
                       <span className="text-xs text-muted-foreground w-36 shrink-0 pt-0.5">

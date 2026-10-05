@@ -62,6 +62,7 @@ export const fields: Record<string, { label: string; type: string; required?: bo
     { label: "Docket Number", type: "text" },
     { label: "Tracking Status", type: "text" },
     { label: "Tracking Sub Status", type: "text" },
+    { label: "POD Document", type: "text" },
     { label: "Pickup Date", type: "date" },
     { label: "Process Status", type: "text" },
   ],
