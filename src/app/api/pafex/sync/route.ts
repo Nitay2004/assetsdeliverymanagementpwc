@@ -31,12 +31,16 @@ const TRACKING_STATUS_DISPATCHED = "Dispatched";
 const TRACKING_STATUS_DELIVERED = "Delivered";
 
 // Pafex uploads the POD image after the delivery scan, so a docket is often
-// delivered before its document exists. The first run stores the document or
-// gives up; this many dockets get one more look on a later run before the sync
-// stops asking, which is enough to catch a late upload without retrying the
-// thousands of dockets that will never have one.
+// delivered before its document exists. The delivery run stores the document or
+// gives up; this many dockets get one extra look on a later run, after which the
+// docket is stamped and never asked about again. Enough to catch a late upload
+// without retrying the thousands of dockets that will never have one.
 const POD_RETRY_LIMIT = 25;
-const POD_RETRY_AFTER_MS = 6 * 60 * 60 * 1000;
+
+// Only a docket with no stamp is retried. Re-selecting anything older than a
+// window as well made every stamp expire and the retry repeat for ever, so the
+// thousands of dockets that will never have a POD were asked about on every run.
+const NOT_FOUND_AFTER_MS = 6 * 60 * 60 * 1000;
 
 // Rows with no tracking status yet are the ones that most need a lookup, and a
 // bare `NOT: { trackingStatus: DELIVERED }` drops them: Postgres evaluates the
@@ -205,6 +209,21 @@ async function fetchAndStorePod(
 }
 
 async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
+  // Most dockets here were booked with other couriers, so Pafex answers notFound
+  // for nearly every one of them on every run. Re-asking changes nothing and
+  // costs a request each time, so a docket is left alone for a cool-off window
+  // once Pafex has not heard of it. A docket Pafex does know is asked about on
+  // every run, and so is any docket it has never seen, which is what makes a
+  // newly booked shipment appear immediately.
+  const coolingDown = new Set(
+    (
+      await prisma.pafexDocketCheck.findMany({
+        where: { lastFound: false, checkedAt: { gte: new Date(Date.now() - NOT_FOUND_AFTER_MS) } },
+        select: { docketNumber: true },
+      })
+    ).map(row => row.docketNumber.trim())
+  );
+
   // Distinct docket numbers straight off the inventory items, skipping the ones
   // whose items are already delivered. Reading the rows newest-first and folding
   // them here keeps the window moving forward, instead of re-checking the same
@@ -224,6 +243,7 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
   for (const item of recent) {
     const number = (item.docketNumber as string).trim();
     if (!number || number === "0") continue;
+    if (coolingDown.has(number)) continue;
     if (!byDocket.has(number) && byDocket.size >= limit) continue;
     const list = byDocket.get(number);
     if (list) list.push(item.id);
@@ -232,18 +252,15 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
   }
 
   // A second pass over dockets that are already delivered but still have no
-  // document, oldest attempt first. podAttemptedAt being null means the first
-  // run never got as far as asking, so those come first; once a retry has run
-  // the timestamp is set and the docket drops out for good.
+  // document. podAttemptedAt null means the docket has never been retried, so
+  // those come first and oldest first within them. A stamped docket has already
+  // had its one retry and is left alone for good.
   const retryRows = await prisma.inventoryItem.findMany({
     where: {
       docketNumber: { not: null },
       trackingStatus: TRACKING_STATUS_DELIVERED,
       podDocumentUrl: null,
-      OR: [
-        { podAttemptedAt: null },
-        { podAttemptedAt: { lt: new Date(Date.now() - POD_RETRY_AFTER_MS) } },
-      ],
+      podAttemptedAt: null,
     },
     select: { id: true, docketNumber: true },
     orderBy: [{ podAttemptedAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
@@ -329,8 +346,20 @@ async function syncDocket(docket: DocketCandidate, dryRun: boolean): Promise<Syn
   try {
     tracking = await fetchTracking(docket.docketNumber);
   } catch (err) {
+    // A request that failed is not an answer, so nothing is recorded and the
+    // docket is asked about again on the next run.
     outcome.error = err instanceof Error ? err.message : "Tracking request failed";
     return outcome;
+  }
+
+  // A dry run must leave no trace, or the docket it probed would sit out its
+  // cool-off and the next real run would skip it for no reason.
+  if (!dryRun) {
+    await prisma.pafexDocketCheck.upsert({
+      where: { docketNumber: docket.docketNumber },
+      create: { docketNumber: docket.docketNumber, lastFound: !!tracking },
+      update: { lastFound: !!tracking, checkedAt: new Date() },
+    });
   }
 
   if (!tracking) {
@@ -449,13 +478,18 @@ export async function POST(req: NextRequest) {
     const notFoundDockets = results.filter(r => !r.error && !r.found).map(r => r.docketNumber);
     const failed = results.filter(r => r.error);
 
-    return NextResponse.json({
+    const cooling = await prisma.pafexDocketCheck.count({
+    where: { lastFound: false, checkedAt: { gte: new Date(Date.now() - NOT_FOUND_AFTER_MS) } },
+  });
+
+  return NextResponse.json({
       success: true,
       dryRun,
       checked: results.length,
       found: results.length - notFoundDockets.length - failed.length,
       notFound: notFoundDockets.length,
       notFoundDockets,
+      coolingDown: cooling,
       failed: failed.length,
       errors: failed.map(f => ({ docketNumber: f.docketNumber, error: f.error })),
       delivered: results.filter(r => r.pafexStatus === "delivered").length,

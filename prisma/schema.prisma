@@ -626,6 +626,21 @@ model Docket {
   @@map("dockets")
 }
 
+// One row per docket the sync has already asked Pafex about. Most dockets on the
+// inventory were booked with other couriers, so Pafex reports notFound for them
+// on every single run and each answer costs a request for no new information.
+// Recording the check lets the sync leave those alone for a cool-off window
+// while still asking about brand new dockets, and about any docket Pafex does
+// know, on every run.
+model PafexDocketCheck {
+  docketNumber String   @id @map("docket_number")
+  lastFound    Boolean  @default(false) @map("last_found")
+  checkedAt    DateTime @default(now()) @map("checked_at")
+
+  @@index([checkedAt])
+  @@map("pafex_docket_checks")
+}
+
 model Warehouse {
   id        String   @id @default(uuid()) @db.Uuid
   name      String   @unique
