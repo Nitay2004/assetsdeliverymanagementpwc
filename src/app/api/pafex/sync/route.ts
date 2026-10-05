@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { canViewModule } from "@/lib/permissions";
@@ -29,13 +30,24 @@ const TRACKING_STATUS_DELIVERED = "Delivered";
 // changes as more shippers move onto Pafex.
 const DEFAULT_COURIER_NAMES = "Blue Dart";
 
-function courierFilter(): { in: string[] } | null {
+/**
+ * Courier names come from CSV imports in whatever shape the courier typed them,
+ * so "Blue Dart", "BLUEDART", "BlueDart" and " blue dart " are all one courier.
+ * Both sides are reduced to lowercase without spaces, because an ORM equality
+ * cannot ignore either.
+ */
+const COURIER_MATCH_SQL = Prisma.sql`regexp_replace(lower(btrim(latest_courier_name)), '\s+', '', 'g')`;
+
+function courierKeys(): string[] {
   const raw = process.env.PAFEX_COURIER_NAMES ?? DEFAULT_COURIER_NAMES;
-  const names = raw
-    .split(",")
-    .map(n => n.trim())
-    .filter(Boolean);
-  return names.length > 0 ? { in: names } : null;
+  return [
+    ...new Set(
+      raw
+        .split(",")
+        .map(n => n.trim().toLowerCase().replace(/\s+/g, ""))
+        .filter(Boolean)
+    ),
+  ];
 }
 
 // The sync walks the docket numbers that sit on the inventory items, because
@@ -185,18 +197,28 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
   // whose items are already delivered. Reading the rows newest-first and folding
   // them here keeps the window moving forward, instead of re-checking the same
   // alphabetical slice on every run.
-  const couriers = courierFilter();
+  const couriers = courierKeys();
 
-  const recent = await prisma.inventoryItem.findMany({
-    where: {
-      docketNumber: { not: null },
-      NOT: { trackingStatus: TRACKING_STATUS_DELIVERED },
-      ...(couriers ? { latestCourierName: couriers } : {}),
-    },
-    select: { id: true, docketNumber: true, podDocumentUrl: true },
-    orderBy: { updatedAt: "desc" },
-    take: limit * 20,
-  });
+  const recent = couriers.length
+    ? await prisma.$queryRaw<Array<{ id: string; docketNumber: string; podDocumentUrl: string | null }>>(Prisma.sql`
+        SELECT id,
+               docket_number AS "docketNumber",
+               pod_document_url AS "podDocumentUrl"
+        FROM inventory_items
+        WHERE docket_number IS NOT NULL
+          AND tracking_status IS DISTINCT FROM ${TRACKING_STATUS_DELIVERED}
+          AND ${COURIER_MATCH_SQL} = ANY(${couriers}::text[])
+        ORDER BY updated_at DESC
+        LIMIT ${limit * 20}`)
+    : await prisma.inventoryItem.findMany({
+        where: {
+          docketNumber: { not: null },
+          NOT: { trackingStatus: TRACKING_STATUS_DELIVERED },
+        },
+        select: { id: true, docketNumber: true, podDocumentUrl: true },
+        orderBy: { updatedAt: "desc" },
+        take: limit * 20,
+      });
 
   const byDocket = new Map<string, string[]>();
   const podSet = new Set<string>();
@@ -213,12 +235,10 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
   const numbers = [...byDocket.keys()];
 
   // Pull every item on those dockets, not only the ones inside the recency
-  // window, so a whole docket moves to delivered together.
+  // window, so a whole docket moves to delivered together. No courier filter
+  // here: the docket is the unit, whatever its items happen to be labelled.
   const allItems = await prisma.inventoryItem.findMany({
-    where: {
-      docketNumber: { in: numbers },
-      ...(couriers ? { latestCourierName: couriers } : {}),
-    },
+    where: { docketNumber: { in: numbers } },
     select: { id: true, docketNumber: true, podDocumentUrl: true },
   });
   for (const item of allItems) {
