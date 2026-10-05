@@ -36,7 +36,9 @@ const DEFAULT_COURIER_NAMES = "Blue Dart";
  * Both sides are reduced to lowercase without spaces, because an ORM equality
  * cannot ignore either.
  */
-const COURIER_MATCH_SQL = Prisma.sql`regexp_replace(lower(btrim(latest_courier_name)), '\s+', '', 'g')`;
+// "\\s" needs doubling: a plain "\s" in a template literal collapses to "s",
+// which would make Postgres strip every "s" from the courier name instead.
+const COURIER_MATCH_SQL = Prisma.sql`regexp_replace(lower(btrim(latest_courier_name)), '\\s+', '', 'g')`;
 
 function courierKeys(): string[] {
   const raw = process.env.PAFEX_COURIER_NAMES ?? DEFAULT_COURIER_NAMES;
