@@ -168,39 +168,43 @@ async function fetchAndStorePod(
 
 async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
   // Distinct docket numbers straight off the inventory items, skipping the ones
-  // whose items are already delivered and carrying a POD. groupBy keeps this to
-  // one row per docket instead of pulling every serial number into memory.
-  const grouped = await prisma.inventoryItem.groupBy({
-    by: ["docketNumber"],
+  // whose items are already delivered. Reading the rows newest-first and folding
+  // them here keeps the window moving forward, instead of re-checking the same
+  // alphabetical slice on every run.
+  const recent = await prisma.inventoryItem.findMany({
     where: {
       docketNumber: { not: null },
       NOT: { trackingStatus: TRACKING_STATUS_DELIVERED },
     },
-    _count: { _all: true },
-    orderBy: { docketNumber: "asc" },
-    take: limit * 4,
-  });
-
-  const numbers = grouped
-    .map(g => (g.docketNumber as string).trim())
-    .filter((n): n is string => !!n);
-
-  const items = await prisma.inventoryItem.findMany({
-    where: { docketNumber: { in: numbers } },
-    select: {
-      id: true,
-      docketNumber: true,
-      podDocumentUrl: true,
-    },
+    select: { id: true, docketNumber: true, podDocumentUrl: true },
+    orderBy: { updatedAt: "desc" },
+    take: limit * 20,
   });
 
   const byDocket = new Map<string, string[]>();
   const podSet = new Set<string>();
-  for (const item of items) {
+  for (const item of recent) {
     const number = (item.docketNumber as string).trim();
+    if (!number || number === "0") continue;
+    if (!byDocket.has(number) && byDocket.size >= limit) continue;
     const list = byDocket.get(number);
     if (list) list.push(item.id);
     else byDocket.set(number, [item.id]);
+    if (item.podDocumentUrl) podSet.add(number);
+  }
+
+  const numbers = [...byDocket.keys()];
+
+  // Pull every item on those dockets, not only the ones inside the recency
+  // window, so a whole docket moves to delivered together.
+  const allItems = await prisma.inventoryItem.findMany({
+    where: { docketNumber: { in: numbers } },
+    select: { id: true, docketNumber: true, podDocumentUrl: true },
+  });
+  for (const item of allItems) {
+    const number = (item.docketNumber as string).trim();
+    if (!byDocket.has(number)) continue;
+    byDocket.get(number)!.push(item.id);
     if (item.podDocumentUrl) podSet.add(number);
   }
 
