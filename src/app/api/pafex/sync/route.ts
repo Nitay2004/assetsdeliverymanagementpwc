@@ -19,7 +19,11 @@ import {
 } from "@/lib/pafex";
 
 const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
+// Every undelivered docket has to fit in one run. The cap used to be 200 while
+// 279 dockets were pending, and since a docket that Pafex does not know keeps
+// its old updated_at, the same 200 were rechecked forever and the rest never
+// got a look in.
+const MAX_LIMIT = 500;
 const CONCURRENCY = 4;
 const TRACKING_STATUS_DISPATCHED = "Dispatched";
 const TRACKING_STATUS_DELIVERED = "Delivered";
