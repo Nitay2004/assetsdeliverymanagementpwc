@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { canViewModule } from "@/lib/permissions";
@@ -25,36 +24,14 @@ const CONCURRENCY = 4;
 const TRACKING_STATUS_DISPATCHED = "Dispatched";
 const TRACKING_STATUS_DELIVERED = "Delivered";
 
-// Pafex only carries the couriers we hand it, so only dockets booked through
-// that account are worth a lookup. Configurable in .env because the courier mix
-// changes as more shippers move onto Pafex.
-const DEFAULT_COURIER_NAMES = "Blue Dart";
-
-/**
- * Courier names come from CSV imports in whatever shape the courier typed them,
- * so "Blue Dart", "BLUEDART", "BlueDart" and " blue dart " are all one courier.
- * Both sides are reduced to lowercase without spaces, because an ORM equality
- * cannot ignore either.
- */
-// "\\s" needs doubling: a plain "\s" in a template literal collapses to "s",
-// which would make Postgres strip every "s" from the courier name instead.
-const COURIER_MATCH_SQL = Prisma.sql`regexp_replace(lower(btrim(latest_courier_name)), '\\s+', '', 'g')`;
-
-function courierKeys(): string[] {
-  const raw = process.env.PAFEX_COURIER_NAMES ?? DEFAULT_COURIER_NAMES;
-  return [
-    ...new Set(
-      raw
-        .split(",")
-        .map(n => n.trim().toLowerCase().replace(/\s+/g, ""))
-        .filter(Boolean)
-    ),
-  ];
-}
+// Every docket on the inventory is checked, whatever courier name it carries.
+// Names arrive from CSV imports in mixed case and spacing, and some rows have
+// none at all, so narrowing by courier used to skip dockets Pafex does know,
+// which left them stuck on a stale status.
 
 // The sync walks the docket numbers that sit on the inventory items, because
-// that is where a serial number actually lives. Orders are advanced as a side
-// effect only when a Docket row happens to exist for that docket number.
+// that is where a serial number actually lives. A Docket row, when one happens
+// to exist, is kept in step with the items.
 type DocketCandidate = {
   docketNumber: string;
   itemIds: string[];
@@ -199,28 +176,15 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
   // whose items are already delivered. Reading the rows newest-first and folding
   // them here keeps the window moving forward, instead of re-checking the same
   // alphabetical slice on every run.
-  const couriers = courierKeys();
-
-  const recent = couriers.length
-    ? await prisma.$queryRaw<Array<{ id: string; docketNumber: string; podDocumentUrl: string | null }>>(Prisma.sql`
-        SELECT id,
-               docket_number AS "docketNumber",
-               pod_document_url AS "podDocumentUrl"
-        FROM inventory_items
-        WHERE docket_number IS NOT NULL
-          AND tracking_status IS DISTINCT FROM ${TRACKING_STATUS_DELIVERED}
-          AND ${COURIER_MATCH_SQL} = ANY(${couriers}::text[])
-        ORDER BY updated_at DESC
-        LIMIT ${limit * 20}`)
-    : await prisma.inventoryItem.findMany({
-        where: {
-          docketNumber: { not: null },
-          NOT: { trackingStatus: TRACKING_STATUS_DELIVERED },
-        },
-        select: { id: true, docketNumber: true, podDocumentUrl: true },
-        orderBy: { updatedAt: "desc" },
-        take: limit * 20,
-      });
+  const recent = await prisma.inventoryItem.findMany({
+    where: {
+      docketNumber: { not: null },
+      NOT: { trackingStatus: TRACKING_STATUS_DELIVERED },
+    },
+    select: { id: true, docketNumber: true, podDocumentUrl: true },
+    orderBy: { updatedAt: "desc" },
+    take: limit * 20,
+  });
 
   const byDocket = new Map<string, string[]>();
   const podSet = new Set<string>();
