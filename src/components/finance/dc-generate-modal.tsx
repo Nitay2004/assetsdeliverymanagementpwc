@@ -5,6 +5,7 @@ import { X, Plus, Trash2, Loader2, FileText, ChevronDown } from "lucide-react";
 import { generateDC, getWarehouses, createWarehouse, deleteWarehouse, getNextDcNumber, getOrderForDc, getBillToLocationOptions, addBillToLocationOption, deleteBillToLocationOption, getDispatchedThroughOptions, addDispatchedThroughOption, deleteDispatchedThroughOption } from "@/app/actions/dc";
 import { DropdownField } from "@/components/shared/dropdown-field";
 import { useToast } from "@/hooks/use-toast";
+import { focusSavedRow } from "@/lib/row-focus";
 import { useRouter } from "next/navigation";
 
 interface DcGenerateModalProps {
@@ -166,7 +167,7 @@ export function DcGenerateModal({ orderId, open, onClose }: DcGenerateModalProps
       const pdfUrl = `/api/dc/${result.id}/pdf`;
       window.open(pdfUrl, "_blank");
 
-      router.refresh();
+      focusSavedRow(router, orderId);
       onClose();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });

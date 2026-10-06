@@ -7,6 +7,7 @@ import { ScrollToItem } from "@/components/shared/scroll-to-item";
 import { ReversePickupFinanceSection } from "@/components/finance/reverse-pickup-finance-section";
 import { FinanceExportButton } from "@/components/finance/finance-export-button";
 import { PaginationBar } from "@/components/shared/pagination-bar";
+import { ForwardReverseTabs } from "@/components/shared/forward-reverse-tabs";
 import { getCorrectOrderPage } from "@/lib/order-page";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
@@ -69,7 +70,7 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
         include: { inventoryItem: true },
       },
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: { createdAt: "desc" },
     skip: (page - 1) * limit,
     take: limit,
   });
@@ -136,8 +137,10 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
 
   const pendingDC = rawOrders.filter(o => o.status === "IN_PROVISIONING" || o.status === "DC_REQUESTED" || o.status === "RTO_DC_REQUESTED").length;
 
+  // Reverse pickups stay visible after they are generated — otherwise the row
+  // vanishes from this table the moment finance hits "save".
   const rpRequests = await prisma.reversePickupRequest.findMany({
-    where: { status: { in: ["DC_REQUESTED", "EWAY_BILL_REQUESTED"] } },
+    where: { status: { in: ["DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED"] } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -150,11 +153,14 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
       .map(dc => [dc.reversePickupRequestId, dc.id])
   );
 
-  const rpDcRequests = rpRequests.filter(r => r.status === "DC_REQUESTED");
-  const rpEwayRequests = rpRequests.filter(r => r.status === "EWAY_BILL_REQUESTED");
+  const rpDcRequests = rpRequests.filter(r => r.status === "DC_REQUESTED" || r.status === "DC_GENERATED");
+  const rpEwayRequests = rpRequests.filter(r => r.status === "EWAY_BILL_REQUESTED" || r.status === "EWAY_BILL_GENERATED");
 
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
   const safePage = Math.min(page, totalPages);
+  const activeTab = searchParams.tab === "reverse" ? "reverse" : "forward";
+  // Badge = cases still waiting on finance, not every case shown in the tab.
+  const reversePending = rpRequests.filter(r => r.status === "DC_REQUESTED" || r.status === "EWAY_BILL_REQUESTED").length;
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -167,6 +173,8 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
         </div>
         <FinanceExportButton />
       </div>
+
+      <ForwardReverseTabs reverseCount={reversePending} />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
@@ -189,23 +197,32 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
         </div>
       </div>
 
-      {orders.length === 0 ? (
-        <div className="p-8 rounded-xl glass text-center text-muted-foreground">
-          No orders ready for finance processing.
-        </div>
+      {activeTab === "forward" ? (
+        orders.length === 0 ? (
+          <div className="p-8 rounded-xl glass text-center text-muted-foreground">
+            No orders ready for finance processing.
+          </div>
+        ) : (
+          <>
+            <FinanceOrderTable orders={orders} canManage={canManage} selectedId={selectedId} columnFilterValues={columnFilterValues} />
+            <PaginationBar basePath="/dashboard/finance" currentPage={safePage} totalPages={totalPages} totalCount={totalCount} limit={limit} />
+          </>
+        )
       ) : (
         <>
-          <FinanceOrderTable orders={orders} canManage={canManage} selectedId={selectedId} columnFilterValues={columnFilterValues} />
-          <PaginationBar basePath="/dashboard/finance" currentPage={safePage} totalPages={totalPages} totalCount={totalCount} limit={limit} />
+          <ReversePickupFinanceSection
+            dcRequests={rpDcRequests}
+            ewayRequests={rpEwayRequests}
+            canManage={canManage}
+            dcIdMap={rpDcMap}
+          />
+          {rpDcRequests.length === 0 && rpEwayRequests.length === 0 && (
+            <div className="p-8 rounded-xl glass text-center text-muted-foreground">
+              No reverse pickup cases waiting for finance.
+            </div>
+          )}
         </>
       )}
-
-      <ReversePickupFinanceSection
-        dcRequests={rpDcRequests}
-        ewayRequests={rpEwayRequests}
-        canManage={canManage}
-        dcIdMap={rpDcMap}
-      />
     </div>
   );
 }

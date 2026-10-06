@@ -8,6 +8,7 @@ import { LogisticsExportButton } from "@/components/logistics/logistics-export-b
 import { PodExportButton } from "@/components/logistics/pod-export-button";
 import { getWarehouses } from "@/app/actions/dc";
 import { PaginationBar } from "@/components/shared/pagination-bar";
+import { ForwardReverseTabs } from "@/components/shared/forward-reverse-tabs";
 import { getCorrectOrderPage } from "@/lib/order-page";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
@@ -71,7 +72,7 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
       },
       rtoRecords: true,
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: { createdAt: "desc" },
     skip: (page - 1) * limit,
     take: limit,
   });
@@ -152,7 +153,9 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
   const warehouses = await getWarehouses();
 
   const rpDocketRequests = await prisma.reversePickupRequest.findMany({
-    where: { status: "DOCKET_REQUESTED" },
+    // Stays in the list once the docket is assigned so the row does not vanish
+    // right after logistics hits save.
+    where: { status: { in: ["DOCKET_REQUESTED", "DOCKET_ASSIGNED"] } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -178,6 +181,9 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
 
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
   const safePage = Math.min(page, totalPages);
+  const activeTab = searchParams.tab === "reverse" ? "reverse" : "forward";
+  // Badge = docket still to assign, not the ones already assigned.
+  const reversePending = serializedRp.filter(r => r.status === "DOCKET_REQUESTED").length;
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -193,6 +199,8 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
           <LogisticsExportButton />
         </div>
       </div>
+
+      <ForwardReverseTabs reverseCount={reversePending} />
 
       <div className="grid gap-4 sm:grid-cols-5">
         <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
@@ -242,12 +250,18 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
         </div>
       </div>
 
-      <LogisticsTable orders={serialized} canManage={canManage} warehouses={warehouses} selectedId={selectedId} columnFilterValues={columnFilterValues} />
+      {activeTab === "forward" ? (
+        <>
+          <LogisticsTable orders={serialized} canManage={canManage} warehouses={warehouses} selectedId={selectedId} columnFilterValues={columnFilterValues} />
 
-      <PaginationBar basePath="/dashboard/logistics" currentPage={safePage} totalPages={totalPages} totalCount={totalCount} limit={limit} />
-
-      {serializedRp.length > 0 && (
+          <PaginationBar basePath="/dashboard/logistics" currentPage={safePage} totalPages={totalPages} totalCount={totalCount} limit={limit} />
+        </>
+      ) : serializedRp.length > 0 ? (
         <ReversePickupDocketSection requests={serializedRp} canManage={canManage} />
+      ) : (
+        <div className="p-8 rounded-xl glass text-center text-muted-foreground">
+          No reverse pickup cases waiting for a docket.
+        </div>
       )}
     </div>
   );

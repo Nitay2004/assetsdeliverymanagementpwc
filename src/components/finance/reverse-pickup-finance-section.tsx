@@ -26,6 +26,8 @@ interface Props {
   dcIdMap: Map<string, string>;
 }
 
+const HEADERS = ["Request #", "Serial #", "Model", "Employee", "Status", "DC No", "E-Way Bill", "Action"];
+
 export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManage, dcIdMap }: Props) {
   const { toast } = useToast();
   const router = useRouter();
@@ -90,128 +92,171 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
 
   return (
     <>
-      <div className="rounded-xl glass shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b bg-orange-50 flex items-center gap-2">
-          <ArrowUpRight className="size-4 text-orange-600" />
-          <h2 className="text-sm font-semibold text-orange-800">Reverse Pickup — Finance Actions</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-muted-foreground uppercase bg-muted/40">
-              <tr>
-                <th className="px-6 py-4 font-semibold">Request #</th>
-                <th className="px-6 py-4 font-semibold">Serial #</th>
-                <th className="px-6 py-4 font-semibold">Model</th>
-                <th className="px-6 py-4 font-semibold">Employee</th>
-                <th className="px-6 py-4 font-semibold">Status</th>
-                <th className="px-6 py-4 font-semibold">DC No</th>
-                <th className="px-6 py-4 font-semibold">E-Way Bill</th>
-                {canManage && <th className="px-6 py-4 font-semibold">Action</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {/* DC Requests */}
-              {dcRequests.map(r => (
-                <tr key={r.id} className="hover:bg-muted/10 transition-colors">
-                  <td className="px-6 py-4 font-mono text-xs font-semibold text-indigo-600">{r.requestNumber}</td>
-                  <td className="px-6 py-4 font-mono text-xs">{r.serialNumber}</td>
-                  <td className="px-6 py-4">{r.model}</td>
-                  <td className="px-6 py-4">{r.employeeName}</td>
-                  <td className="px-6 py-4">
-                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">
-                      DC Requested
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 font-mono text-xs">{r.dcNo || <span className="text-muted-foreground italic">—</span>}</td>
-                  <td className="px-6 py-4 font-mono text-xs">{r.eWayBillNo || <span className="text-muted-foreground italic">—</span>}</td>
-                  {canManage && (
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => setDcModalId(r.id)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-                      >
-                        <FileText className="size-3" />
-                        Generate DC
-                      </button>
-                    </td>
-                  )}
+      {dcRequests.length > 0 && (
+        <div className="rounded-xl glass shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b bg-orange-50 flex items-center gap-2">
+            <ArrowUpRight className="size-4 text-orange-600" />
+            <h2 className="text-sm font-semibold text-orange-800">Reverse Pickup — Delivery Challan</h2>
+            <span className="ml-auto text-xs text-orange-600 font-medium">{dcRequests.length} cases</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-muted-foreground uppercase bg-muted/40">
+                <tr>
+                  {HEADERS.map(h => (
+                    <th key={h} className="px-6 py-4 font-semibold">{h}</th>
+                  ))}
                 </tr>
-              ))}
-
-              {/* E-Way Bill Requests */}
-              {ewayRequests.map(r => (
-                <tr key={r.id} className="hover:bg-muted/10 transition-colors">
-                  <td className="px-6 py-4 font-mono text-xs font-semibold text-indigo-600">{r.requestNumber}</td>
-                  <td className="px-6 py-4 font-mono text-xs">{r.serialNumber}</td>
-                  <td className="px-6 py-4">{r.model}</td>
-                  <td className="px-6 py-4">{r.employeeName}</td>
-                  <td className="px-6 py-4">
-                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
-                      E-Way Bill Req.
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 font-mono text-xs">
-                    {r.dcNo ? (
-                      <span className="inline-flex items-center gap-1">
-                        {r.dcNo}
-                        {dcIdMap.get(r.id) && (
-                          <a href={`/api/dc/${dcIdMap.get(r.id)}/pdf`} target="_blank" className="text-primary font-semibold hover:underline ml-1">View</a>
-                        )}
+              </thead>
+              <tbody className="divide-y">
+                {dcRequests.map(r => {
+                  const dcDone = r.status === "DC_GENERATED";
+                  return (
+                  <tr key={r.id} className="hover:bg-muted/10 transition-colors">
+                    <td className="px-6 py-4 font-mono text-xs font-semibold text-indigo-600">{r.requestNumber}</td>
+                    <td className="px-6 py-4 font-mono text-xs">{r.serialNumber}</td>
+                    <td className="px-6 py-4">{r.model}</td>
+                    <td className="px-6 py-4">{r.employeeName}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${dcDone ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                        {dcDone ? "DC Generated" : "DC Requested"}
                       </span>
-                    ) : <span className="text-muted-foreground italic">—</span>}
-                  </td>
-                  <td className="px-6 py-4 font-mono text-xs">
-                    {r.eWayBillNo ? (
-                      <span className="inline-flex items-center gap-1">
-                        {r.eWayBillNo}
-                        {r.eWayBillDocumentUrl && (
+                    </td>
+                    <td className="px-6 py-4 font-mono text-xs">
+                      {r.dcNo ? (
+                        <span className="inline-flex items-center gap-1">
+                          {r.dcNo}
+                          {dcIdMap.get(r.id) && (
+                            <a href={`/api/dc/${dcIdMap.get(r.id)}/pdf`} target="_blank" className="text-primary font-semibold hover:underline ml-1">View</a>
+                          )}
+                        </span>
+                      ) : <span className="text-muted-foreground italic">—</span>}
+                    </td>
+                    <td className="px-6 py-4 font-mono text-xs">{r.eWayBillNo || <span className="text-muted-foreground italic">—</span>}</td>
+                    {canManage && (
+                      <td className="px-6 py-4">
+                        {dcDone ? (
+                          <span className="text-xs text-muted-foreground">No action needed</span>
+                        ) : (
                           <button
-                            type="button"
-                            onClick={() => { if (r.eWayBillDocumentUrl) handleViewFile(r.eWayBillDocumentUrl); }}
-                            className="p-0.5 text-muted-foreground hover:text-orange-600 transition-colors"
-                            title="View E-Way Bill attachment"
+                            onClick={() => setDcModalId(r.id)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
                           >
-                            <Download className="size-3.5" />
+                            <FileText className="size-3" />
+                            Generate DC
                           </button>
                         )}
-                      </span>
-                    ) : <span className="text-muted-foreground italic">—</span>}
-                  </td>
-                  {canManage && (
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <input
-                          value={ewayInputs[r.id] ?? ""}
-                          onChange={e => setEwayInputs(prev => ({ ...prev, [r.id]: e.target.value }))}
-                          className="w-28 rounded border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                          placeholder="E-Way #"
-                        />
-                        <button
-                          onClick={() => handleGenerateEway(r.id)}
-                          disabled={saving === r.id}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
-                        >
-                          {saving === r.id ? <Loader2 className="size-3 animate-spin" /> : null}
-                          {saving === r.id ? "Saving..." : "Generate"}
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2 mt-2">
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={e => { const f = e.target.files?.[0] ?? null; if (f) setEwayFiles(prev => ({ ...prev, [r.id]: f })); }}
-                          className="text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
-                        />
-                        {ewayFiles[r.id] && <span className="text-xs text-muted-foreground truncate max-w-[100px]">{ewayFiles[r.id].name}</span>}
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      </td>
+                    )}
+                  </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
+
+      {ewayRequests.length > 0 && (
+        <div className="rounded-xl glass shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b bg-orange-50 flex items-center gap-2">
+            <ArrowUpRight className="size-4 text-orange-600" />
+            <h2 className="text-sm font-semibold text-orange-800">Reverse Pickup — E-Way Bill</h2>
+            <span className="ml-auto text-xs text-orange-600 font-medium">{ewayRequests.length} cases</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-muted-foreground uppercase bg-muted/40">
+                <tr>
+                  {HEADERS.map(h => (
+                    <th key={h} className="px-6 py-4 font-semibold">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {ewayRequests.map(r => {
+                  const ewayDone = r.status === "EWAY_BILL_GENERATED";
+                  return (
+                  <tr key={r.id} className="hover:bg-muted/10 transition-colors">
+                    <td className="px-6 py-4 font-mono text-xs font-semibold text-indigo-600">{r.requestNumber}</td>
+                    <td className="px-6 py-4 font-mono text-xs">{r.serialNumber}</td>
+                    <td className="px-6 py-4">{r.model}</td>
+                    <td className="px-6 py-4">{r.employeeName}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${ewayDone ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                        {ewayDone ? "E-Way Generated" : "E-Way Bill Req."}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-mono text-xs">
+                      {r.dcNo ? (
+                        <span className="inline-flex items-center gap-1">
+                          {r.dcNo}
+                          {dcIdMap.get(r.id) && (
+                            <a href={`/api/dc/${dcIdMap.get(r.id)}/pdf`} target="_blank" className="text-primary font-semibold hover:underline ml-1">View</a>
+                          )}
+                        </span>
+                      ) : <span className="text-muted-foreground italic">—</span>}
+                    </td>
+                    <td className="px-6 py-4 font-mono text-xs">
+                      {r.eWayBillNo ? (
+                        <span className="inline-flex items-center gap-1">
+                          {r.eWayBillNo}
+                          {r.eWayBillDocumentUrl && (
+                            <button
+                              type="button"
+                              onClick={() => { if (r.eWayBillDocumentUrl) handleViewFile(r.eWayBillDocumentUrl); }}
+                              className="p-0.5 text-muted-foreground hover:text-orange-600 transition-colors"
+                              title="View E-Way Bill attachment"
+                            >
+                              <Download className="size-3.5" />
+                            </button>
+                          )}
+                        </span>
+                      ) : <span className="text-muted-foreground italic">—</span>}
+                    </td>
+                    {canManage && (
+                      <td className="px-6 py-4">
+                        {ewayDone ? (
+                          <span className="text-xs text-muted-foreground">No action needed</span>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <input
+                                value={ewayInputs[r.id] ?? ""}
+                                onChange={e => setEwayInputs(prev => ({ ...prev, [r.id]: e.target.value }))}
+                                className="w-28 rounded border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                placeholder="E-Way #"
+                              />
+                              <button
+                                onClick={() => handleGenerateEway(r.id)}
+                                disabled={saving === r.id}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                              >
+                                {saving === r.id ? <Loader2 className="size-3 animate-spin" /> : null}
+                                {saving === r.id ? "Saving..." : "Generate"}
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-2 mt-2">
+                              <input
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                onChange={e => { const f = e.target.files?.[0] ?? null; if (f) setEwayFiles(prev => ({ ...prev, [r.id]: f })); }}
+                                className="text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+                              />
+                              {ewayFiles[r.id] && <span className="text-xs text-muted-foreground truncate max-w-[100px]">{ewayFiles[r.id].name}</span>}
+                            </div>
+                          </>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {dcModalId && (
         <ReversePickupDcModal

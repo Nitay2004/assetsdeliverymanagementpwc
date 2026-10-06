@@ -7,6 +7,7 @@ import { addDocket, updateDocket, updateDocketPod, deleteDocket, advanceOrderSta
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { useRouter } from "next/navigation";
+import { focusSavedRow } from "@/lib/row-focus";
 import { ScrollToItem } from "@/components/shared/scroll-to-item";
 import { DataTableFilter, filterRows, UrlDataTableFilter } from "@/components/shared/data-table-filter";
 import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
@@ -197,7 +198,7 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId, colu
     try {
       await advanceOrderStatus(orderId, targetStatus);
       toast({ title: "Updated", description: `Order moved to ${STATUS_LABELS[targetStatus]?.label ?? targetStatus}.`, variant: "success" });
-      router.refresh();
+      focusSavedRow(router, orderId);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });
     } finally { setSaving(false); }
@@ -215,7 +216,7 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId, colu
       toast({ title: "RTO Marked", description: "Order marked as Return to Origin.", variant: "success" });
       setRtoModal(null);
       setRtoForm({ warehouseId: "", receivedBy: "", rtoDocketNumber: "" });
-      router.refresh();
+      focusSavedRow(router, rtoModal.orderId);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });
     } finally { setSaving(false); }
@@ -241,7 +242,7 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId, colu
       await addDocket(fd);
       toast({ title: "Added", description: "Docket added.", variant: "success" });
       setDocketForm(null);
-      router.refresh();
+      focusSavedRow(router, docketForm.orderId);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });
     } finally { setSaving(false); }
@@ -262,7 +263,7 @@ export function LogisticsTable({ orders, canManage, warehouses, selectedId, colu
       toast({ title: "Updated", description: "Docket updated.", variant: "success" });
       setDocketForm(null);
       setEditingDocketId(null);
-      router.refresh();
+      focusSavedRow(router, docketForm.orderId);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });
     } finally { setSaving(false); }

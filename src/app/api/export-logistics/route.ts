@@ -65,7 +65,7 @@ export async function GET() {
       orderBy: { updatedAt: "desc" },
     }),
     prisma.reversePickupRequest.findMany({
-      where: { status: "DOCKET_REQUESTED" },
+      where: { status: { in: ["DOCKET_REQUESTED", "DOCKET_ASSIGNED"] } },
       orderBy: { createdAt: "desc" },
     }),
   ]);

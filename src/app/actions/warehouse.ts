@@ -29,8 +29,11 @@ const orderStatusTrackingMap: Record<string, string> = {
 };
 
 export async function syncOrderTrackingStatus(orderId: string, orderStatus: string) {
-  const user = await getSession();
-  requirePermission(user, "warehouse", "canEdit");
+  // Intentionally no permission gate here. Every caller has already checked the
+  // permission for the operation that produced this status, so gating this
+  // mirror-write on warehouse:canEdit made finance/logistics saves throw
+  // *after* the order row was committed — the write landed but the action
+  // failed, so the UI never refreshed and the save looked broken.
   const assets = await prisma.asset.findMany({
     where: { orderId, inventoryItemId: { not: null } },
     select: { inventoryItemId: true },

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { addDocket, deleteDocket, advanceOrderStatus } from "@/app/actions/logistics";
+import { focusSavedRow } from "@/lib/row-focus";
 import { useRouter } from "next/navigation";
 
 interface DocketData {
@@ -69,7 +70,7 @@ export function LogisticsOrderCard({ order, canManage }: { order: OrderData; can
     try {
       await advanceOrderStatus(order.id, nextStatus);
       toast({ title: "Advanced", description: `Order moved to ${STATUS_LABELS[nextStatus]?.label ?? nextStatus}.`, variant: "success" });
-      router.refresh();
+      focusSavedRow(router, order.id);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });
     } finally {
@@ -94,7 +95,7 @@ export function LogisticsOrderCard({ order, canManage }: { order: OrderData; can
       setDocketNumber("");
       setEwayBillNumber("");
       setShowDocketForm(false);
-      router.refresh();
+      focusSavedRow(router, order.id);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });
     } finally {

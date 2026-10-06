@@ -7,6 +7,7 @@ import { useAlert } from "@/hooks/use-alert";
 import { updateOrderFinance, deleteOrder, generateEwayBill } from "@/app/actions/finance";
 import { updateDcDocket } from "@/app/actions/dc";
 import { DcGenerateModal } from "@/components/finance/dc-generate-modal";
+import { focusSavedRow } from "@/lib/row-focus";
 import { useRouter } from "next/navigation";
 import { Download, FileText, ChevronDown, ChevronRight, Trash2, Save, X, Pencil } from "lucide-react";
 
@@ -129,7 +130,7 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
       });
       toast({ title: "Saved", description: "Order updated successfully.", variant: "success" });
       setEditMode(false);
-      router.refresh();
+      focusSavedRow(router, order.id);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });
     } finally { setSaving(false); }
@@ -178,7 +179,7 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
       toast({ title: "E-Way Bill Generated", description: "E-Way bill number has been saved.", variant: "success" });
       setEwayBillInput("");
       setEwayFile(null);
-      router.refresh();
+      focusSavedRow(router, order.id);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });
     } finally { setSaving(false); }
@@ -215,7 +216,7 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
       toast({ title: "Updated", description: "Docket number updated. It will reflect in the DC PDF.", variant: "success" });
       setEditDocketId(null);
       setDocketInput("");
-      router.refresh();
+      focusSavedRow(router, order.id);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "error" });
     } finally { setSaving(false); }
