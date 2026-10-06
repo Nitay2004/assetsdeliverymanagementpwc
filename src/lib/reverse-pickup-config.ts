@@ -89,6 +89,7 @@ export const STATUS_LABELS: Record<string, string> = {
   RECEIVED_AT_WAREHOUSE: "At Warehouse",
   QC_CLEANED: "Hardware QC",
   QC_COMPLETED: "Software QC",
+  CASE_LOGGED_WITH_HP: "Case Logged with HP",
   DC_REQUESTED: "DC Requested",
   DC_GENERATED: "DC Generated",
   EWAY_BILL_REQUESTED: "E-Way Bill Requested",
@@ -113,6 +114,10 @@ export const STATUS_FLOW: Record<string, { next: string; label: string } | null>
   RECEIVED_AT_WAREHOUSE:  { next: "QC_CLEANED",             label: "Record Hardware QC" },
   QC_CLEANED:             { next: "QC_COMPLETED",          label: "Record Software QC" },
   QC_COMPLETED:           { next: "BLANCO_CLEARED",         label: "Record Blanco Clear" },
+  // Set by logHpCase once a QC stage has failed. It has no next step: the
+  // request only leaves here when provisioning marks the HP case resolved,
+  // which puts it back at RECEIVED_AT_WAREHOUSE for a fresh QC run.
+  CASE_LOGGED_WITH_HP:    null,
   BLANCO_CLEARED:         { next: "BLANCO_PURGED",          label: "Record Blanco Purge" },
   BLANCO_PURGED:          { next: "COMPLETED",              label: "Move to Inventory" },
   // Legacy terminal state kept so requests certified before the Blancco Clear /
@@ -132,6 +137,7 @@ const WAREHOUSE_REACHED_STATUSES = new Set([
   "RECEIVED_AT_WAREHOUSE",
   "QC_CLEANED",
   "QC_COMPLETED",
+  "CASE_LOGGED_WITH_HP",
   "BLANCO_CLEARED",
   "BLANCO_PURGED",
   "BLANCO_CERTIFIED",

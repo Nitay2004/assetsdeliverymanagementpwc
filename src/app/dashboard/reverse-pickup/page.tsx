@@ -118,6 +118,7 @@ const STATUS_LABELS: Record<string, string> = {
   RECEIVED_AT_WAREHOUSE: "received at warehouse",
   QC_CLEANED: "hardware qc",
   QC_COMPLETED: "software qc",
+  CASE_LOGGED_WITH_HP: "case logged with hp",
   DC_REQUESTED: "dc requested",
   DC_GENERATED: "dc generated",
   EWAY_BILL_REQUESTED: "eway bill requested",

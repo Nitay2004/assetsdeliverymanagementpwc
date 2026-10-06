@@ -63,6 +63,9 @@ enum ReversePickupStatus {
   RECEIVED_AT_WAREHOUSE
   QC_CLEANED
   QC_COMPLETED
+  // Parking state: QC failed and a case is open with HP. Holds the request here
+  // so it cannot advance to Blancco until provisioning confirms the repair.
+  CASE_LOGGED_WITH_HP
   DC_REQUESTED
   DC_GENERATED
   EWAY_BILL_REQUESTED
@@ -550,6 +553,15 @@ model ReversePickupRequest {
   replacementPart       String?              @map("replacement_part")
   exceptionRemarks      String?              @map("exception_remarks")
   remark                String?
+
+  // ── HP Case (raised when QC fails) ──
+  hpCaseNumber          String?              @map("hp_case_number")
+  hpCaseLoggedAt        DateTime?            @map("hp_case_logged_at") @db.Date
+  hpCaseLoggedBy        String?              @map("hp_case_logged_by")
+  hpCaseRemarks         String?              @map("hp_case_remarks")
+  hpCaseResolvedAt      DateTime?            @map("hp_case_resolved_at") @db.Date
+  hpCaseResolvedBy      String?              @map("hp_case_resolved_by")
+  hpCaseResolvedRemarks String?              @map("hp_case_resolved_remarks")
 
   // ── Provisioning ──
   provisioningStatus    String?              @map("provisioning_status") // DD: Yes/No

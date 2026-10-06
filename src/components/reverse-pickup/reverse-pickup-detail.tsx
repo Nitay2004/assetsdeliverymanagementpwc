@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileText, Package, Circle, Loader2 } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Check, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileText, Package, Circle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   assignPartner,
@@ -14,6 +14,7 @@ import {
   receiveAtWarehouse,
   recordCleanQc,
   recordPurgeQc,
+  logHpCase,
   requestEwayBill,
   recordBlancoClear,
   recordBlancoPurge,
@@ -118,6 +119,13 @@ interface RequestData {
   replacementPart: string | null;
   exceptionRemarks: string | null;
   remark: string | null;
+  hpCaseNumber: string | null;
+  hpCaseLoggedAt: string | null;
+  hpCaseLoggedBy: string | null;
+  hpCaseRemarks: string | null;
+  hpCaseResolvedAt: string | null;
+  hpCaseResolvedBy: string | null;
+  hpCaseResolvedRemarks: string | null;
   status: string;
   finalDisposition: string | null;
   inventoryItemId: string | null;
@@ -205,11 +213,17 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
   let effectiveStatus = request.status;
   if (INITIAL_STAGE_STATUSES.includes(request.status)) effectiveStatus = "REQUESTED";
   else if (PICKED_UP_EQUIVALENT.includes(request.status)) effectiveStatus = "PICKED_UP";
+  // A request parked on an HP case still sits at whichever QC stage it stopped
+  // at, so the stepper shows real progress rather than an unknown state with
+  // nothing done yet. No next step is offered while it is parked: it only moves
+  // again once provisioning sends it back for a fresh QC run.
+  const hpParked = request.status === "CASE_LOGGED_WITH_HP";
+  if (hpParked) effectiveStatus = request.qcCleanResult === "FAIL" ? "QC_CLEANED" : "QC_COMPLETED";
 
   const isReadOnly = NON_EDITABLE_STATUSES.includes(request.status);
   const stepStatus = effectiveStatus;
   const currentStepIndex = STEPS.findIndex(s => s.key === stepStatus);
-  const nextAction = getNextStatus(stepStatus);
+  const nextAction = hpParked ? null : getNextStatus(stepStatus);
 
   const handleAction = async (actionName: string, formData: FormData) => {
     setLoading(actionName);
@@ -224,6 +238,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
         receiveAtWarehouse,
         recordCleanQc,
         recordPurgeQc,
+        logHpCase,
         requestEwayBill,
         recordBlancoClear,
         recordBlancoPurge,
@@ -768,6 +783,114 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             </form>
           </div>
           )}
+
+          {/* QC failed and no HP case logged yet */}
+          {request.qcResult === "FAIL" && !hpParked && (request.status === "QC_CLEANED" || request.status === "QC_COMPLETED") && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 shadow-sm p-6 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-amber-100 shrink-0">
+                  <AlertTriangle className="size-5 text-amber-700" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">QC failed — log a case with HP</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Blancco Clear stays blocked while QC reads FAIL. Logging a case parks the asset here
+                    so it stops at QC. Provisioning sends it back for a fresh Hardware QC once HP has
+                    fixed it.
+                  </p>
+                </div>
+              </div>
+              <form action={async (formData) => handleAction("logHpCase", formData)} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label htmlFor="hpCaseNumber" className="text-sm font-medium text-foreground">
+                      HP Case Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="hpCaseNumber"
+                      name="hpCaseNumber"
+                      required
+                      className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      placeholder="HP case reference"
+                    />
+                  </div>
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label htmlFor="hpCaseRemarks" className="text-sm font-medium text-foreground">
+                      Remarks
+                    </label>
+                    <textarea
+                      id="hpCaseRemarks"
+                      name="hpCaseRemarks"
+                      rows={2}
+                      className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                      placeholder="What failed, what HP said..."
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isPending("logHpCase")}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {isPending("logHpCase") ? <Loader2 className="size-4 animate-spin" /> : <AlertTriangle className="size-4" />}
+                  {isPending("logHpCase") ? "Logging..." : "Log Case with HP"}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* QC failed and already parked waiting on HP */}
+          {hpParked && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 shadow-sm p-6 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-amber-100 shrink-0">
+                  <AlertTriangle className="size-5 text-amber-700" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Case Logged with HP</h2>
+                  <p className="text-sm text-muted-foreground">
+                    The asset is parked here and will not advance to Blancco. Once HP confirms the
+                    repair, provisioning releases it from the HP Cases tab back to Hardware QC.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">HP Case No</p>
+                  <p className="font-semibold">{request.hpCaseNumber || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Logged On</p>
+                  <p className="font-semibold">
+                    {request.hpCaseLoggedAt ? new Date(request.hpCaseLoggedAt).toLocaleDateString("en-GB") : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Logged By</p>
+                  <p className="font-semibold">{request.hpCaseLoggedBy || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Failed Stage</p>
+                  <p className="font-semibold">
+                    {request.qcCleanResult === "FAIL" ? "Hardware QC" : "Software QC"}
+                  </p>
+                </div>
+              </div>
+              {request.hpCaseRemarks && (
+                <div className="text-sm">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Remarks</p>
+                  <p>{request.hpCaseRemarks}</p>
+                </div>
+              )}
+              {request.hpCaseResolvedRemarks && (
+                <div className="text-sm">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Resolution</p>
+                  <p>{request.hpCaseResolvedRemarks}</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {nextAction && (
             <div className="rounded-xl glass shadow-sm p-6 space-y-4">
               <h2 className="text-lg font-semibold text-foreground">

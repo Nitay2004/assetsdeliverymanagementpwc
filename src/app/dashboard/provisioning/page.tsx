@@ -7,6 +7,7 @@ import { ProvisioningTable } from "@/components/provisioning/provisioning-table"
 import { ProvisioningPagination } from "@/components/provisioning/provisioning-pagination";
 import { ProvisioningExportButton } from "@/components/provisioning/provisioning-export-button";
 import { QcWorkTable } from "@/components/provisioning/qc-work-table";
+import { HpCasesTable, type HpCaseItem } from "@/components/provisioning/hp-cases-table";
 import { ProvisioningTabs } from "@/components/provisioning/provisioning-tabs";
 import type { QcItem } from "@/components/qc/qc-panel";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions, computeDistinctValues } from "@/lib/column-filters";
@@ -29,7 +30,9 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
   const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
   const selectedEngineer = typeof searchParams.engineer === "string" ? searchParams.engineer : "";
-  const activeTab = typeof searchParams.tab === "string" && searchParams.tab === "qc" ? "qc" : "provisioning";
+  const activeTab = typeof searchParams.tab === "string" && (searchParams.tab === "qc" || searchParams.tab === "hp")
+    ? searchParams.tab
+    : "provisioning";
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "PROVISIONING"));
 
@@ -221,6 +224,35 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     qcPurgeResult: r => r.qcPurgeResult,
   });
 
+  // Reverse-pickup laptops parked here after a QC stage failed, waiting for HP.
+  const hpTotalCount = await prisma.reversePickupRequest.count({
+    where: { status: "CASE_LOGGED_WITH_HP" },
+  });
+
+  const hpRows = activeTab === "hp"
+    ? await prisma.reversePickupRequest.findMany({
+        where: { status: "CASE_LOGGED_WITH_HP" },
+        orderBy: { hpCaseLoggedAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      })
+    : [];
+
+  const serializedHp: HpCaseItem[] = hpRows.map(r => ({
+    id: r.id,
+    requestNumber: r.requestNumber,
+    serialNumber: r.serialNumber,
+    model: r.model,
+    employeeName: r.employeeName,
+    warehouseLocation: r.warehouseLocation,
+    qcCleanResult: r.qcCleanResult,
+    qcPurgeResult: r.qcPurgeResult,
+    hpCaseNumber: r.hpCaseNumber ?? "",
+    hpCaseLoggedAt: safeISO(r.hpCaseLoggedAt),
+    hpCaseLoggedBy: r.hpCaseLoggedBy,
+    hpCaseRemarks: r.hpCaseRemarks,
+  }));
+
   // Split orders into: active (needs provisioning work), handed over to logistics,
   // and later stages (packing, dispatch, delivery, RTO, etc). All stay visible.
   const activeOrders = orders.filter(o => ACTIVE_PROVISIONING_STATUSES.includes(o.status));
@@ -292,10 +324,22 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
         </div>
       </div>
 
-      <ProvisioningTabs qcCount={myQcItems.filter(i => !i.qcCompletedAt).length} />
+      <ProvisioningTabs qcCount={myQcItems.filter(i => !i.qcCompletedAt).length} hpCount={hpTotalCount} />
 
       {activeTab === "qc" ? (
         <QcWorkTable items={myQcItems} columnFilterValues={qcColumnFilterValues} />
+      ) : activeTab === "hp" ? (
+        <>
+          <HpCasesTable items={serializedHp} />
+          {hpTotalCount > 0 && (
+            <ProvisioningPagination
+              totalCount={hpTotalCount}
+              currentPage={page}
+              pageSize={limit}
+              extraParams={{ tab: "hp" }}
+            />
+          )}
+        </>
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-3">

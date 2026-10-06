@@ -7,18 +7,27 @@ export function ProvisioningPagination({
   totalCount,
   currentPage,
   pageSize,
+  extraParams,
 }: {
   totalCount: number;
   currentPage: number;
   pageSize: number;
+  extraParams?: Record<string, string>;
 }) {
   const router = useRouter();
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(currentPage, totalPages);
 
+  function buildUrl(page: number, size: number) {
+    const p = new URLSearchParams(extraParams);
+    p.set("page", String(page));
+    p.set("limit", String(size));
+    return `/dashboard/provisioning?${p.toString()}`;
+  }
+
   function goToPage(page: number) {
-    router.push(`/dashboard/provisioning?page=${page}&limit=${pageSize}`);
+    router.push(buildUrl(page, pageSize));
   }
 
   return (
@@ -27,7 +36,7 @@ export function ProvisioningPagination({
         <span>Rows per page:</span>
         <select
           value={pageSize}
-          onChange={(e) => { router.push(`/dashboard/provisioning?page=1&limit=${e.target.value}`); }}
+          onChange={(e) => { router.push(buildUrl(1, Number(e.target.value))); }}
           className="rounded-md border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         >
           {[10, 25, 50, 100].map(n => (

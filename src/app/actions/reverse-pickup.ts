@@ -3,7 +3,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, canModuleAction } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { normalizeOdaLocation } from "@/lib/location-utils";
@@ -461,6 +461,98 @@ export async function recordPurgeQc(formData: FormData) {
   });
 
   revalidatePath("/dashboard/reverse-pickup");
+}
+
+// Raised when a QC stage failed. The request parks here rather than advancing,
+// because Blancco Clear refuses to run until both QC stages pass — without this
+// state the asset just sat at QC with nothing recording why it could not move.
+export async function logHpCase(formData: FormData) {
+  const user = await getSession();
+  if (!user) throw new Error("Unauthorized");
+  requirePermission(user, "reverse-pickup", "canEdit");
+
+  const id = formData.get("id") as string;
+  const hpCaseNumber = ((formData.get("hpCaseNumber") as string) || "").trim();
+  const hpCaseRemarks = (formData.get("hpCaseRemarks") as string) || null;
+
+  if (!id) throw new Error("Request ID is required.");
+  if (!hpCaseNumber) throw new Error("HP case number is required.");
+
+  const existing = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: { qcCleanResult: true, qcPurgeResult: true },
+  });
+  if (!existing) throw new Error("Request not found.");
+
+  if (deriveQcResult(existing.qcCleanResult, existing.qcPurgeResult) !== "FAIL") {
+    throw new Error("A case can only be logged with HP after a QC stage has failed.");
+  }
+
+  await prisma.reversePickupRequest.update({
+    where: { id },
+    data: {
+      status: "CASE_LOGGED_WITH_HP",
+      hpCaseNumber,
+      hpCaseLoggedAt: new Date(),
+      hpCaseLoggedBy: user.name || null,
+      hpCaseRemarks,
+      // Wiped in case an earlier case on this same row was already resolved.
+      hpCaseResolvedAt: null,
+      hpCaseResolvedBy: null,
+      hpCaseResolvedRemarks: null,
+    },
+  });
+
+  revalidatePath("/dashboard/reverse-pickup");
+  revalidatePath("/dashboard/provisioning");
+}
+
+// Called from the provisioning HP Cases tab once the laptop is back from HP.
+// Every field the failed QC run recorded is cleared so the request restarts
+// cleanly at Hardware QC; deriveQcResult would otherwise keep reading FAIL and
+// leave Blancco blocked.
+export async function resolveHpCase(formData: FormData) {
+  const user = await getSession();
+  if (!user) throw new Error("Unauthorized");
+  const canProvisioning = canModuleAction(user.permissions, user.role, "provisioning", "canEdit");
+  const canReversePickup = canModuleAction(user.permissions, user.role, "reverse-pickup", "canEdit");
+  if (!canProvisioning && !canReversePickup) throw new Error("Permission denied");
+
+  const id = formData.get("id") as string;
+  const hpCaseResolvedRemarks = (formData.get("hpCaseResolvedRemarks") as string) || null;
+
+  if (!id) throw new Error("Request ID is required.");
+
+  const existing = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: { status: true, hpCaseNumber: true },
+  });
+  if (!existing) throw new Error("Request not found.");
+  if (existing.status !== "CASE_LOGGED_WITH_HP") {
+    throw new Error("Only a request with an open HP case can be sent back to QC.");
+  }
+
+  await prisma.reversePickupRequest.update({
+    where: { id },
+    data: {
+      status: "RECEIVED_AT_WAREHOUSE",
+      qcResult: null,
+      qcCleanResult: null,
+      qcCleanRemarks: null,
+      qcCleanDate: null,
+      qcCleanBy: null,
+      qcPurgeResult: null,
+      qcPurgeRemarks: null,
+      qcPurgeDate: null,
+      qcPurgeBy: null,
+      hpCaseResolvedAt: new Date(),
+      hpCaseResolvedBy: user.name || null,
+      hpCaseResolvedRemarks,
+    },
+  });
+
+  revalidatePath("/dashboard/reverse-pickup");
+  revalidatePath("/dashboard/provisioning");
 }
 
 export async function recordBlancoClear(formData: FormData) {

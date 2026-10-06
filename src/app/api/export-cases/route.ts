@@ -37,6 +37,7 @@ const REVERSE_STATUS_LABELS: Record<string, string> = {
   RECEIVED_AT_WAREHOUSE: "Received at Warehouse",
   QC_CLEANED: "Hardware QC",
   QC_COMPLETED: "Software QC",
+  CASE_LOGGED_WITH_HP: "Case Logged with HP",
   DC_REQUESTED: "DC Requested",
   DC_GENERATED: "DC Generated",
   EWAY_BILL_REQUESTED: "E-way Bill Requested",

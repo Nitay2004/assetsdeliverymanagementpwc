@@ -42,6 +42,8 @@ export default async function ReversePickupDetailPage(props: { params: Promise<{
         blancoClearDate: request.blancoClearDate?.toISOString() ?? null,
         blancoPurgeDate: request.blancoPurgeDate?.toISOString() ?? null,
         blancoCertificateDate: request.blancoCertificateDate?.toISOString() ?? null,
+        hpCaseLoggedAt: request.hpCaseLoggedAt?.toISOString() ?? null,
+        hpCaseResolvedAt: request.hpCaseResolvedAt?.toISOString() ?? null,
       }}
       userRole={user.role}
     />
