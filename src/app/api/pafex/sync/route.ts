@@ -215,13 +215,16 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
   // once Pafex has not heard of it. A docket Pafex does know is asked about on
   // every run, and so is any docket it has never seen, which is what makes a
   // newly booked shipment appear immediately.
+  const cutoff = new Date(Date.now() - NOT_FOUND_AFTER_MS);
+  const unknownToPafex = (
+    await prisma.pafexDocketCheck.findMany({
+      where: { lastFound: false },
+      select: { docketNumber: true, checkedAt: true },
+    })
+  ).map(row => ({ number: row.docketNumber.trim(), at: row.checkedAt }));
+  const unknownNumbers = new Set(unknownToPafex.map(row => row.number));
   const coolingDown = new Set(
-    (
-      await prisma.pafexDocketCheck.findMany({
-        where: { lastFound: false, checkedAt: { gte: new Date(Date.now() - NOT_FOUND_AFTER_MS) } },
-        select: { docketNumber: true },
-      })
-    ).map(row => row.docketNumber.trim())
+    unknownToPafex.filter(row => row.at >= cutoff).map(row => row.number)
   );
 
   // Distinct docket numbers straight off the inventory items, skipping the ones
@@ -255,6 +258,11 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
   // document. podAttemptedAt null means the docket has never been retried, so
   // those come first and oldest first within them. A stamped docket has already
   // had its one retry and is left alone for good.
+  //
+  // A docket Pafex has never heard of is left out entirely: there is no POD for
+  // it to upload, so asking spends a request to learn the same thing again. If
+  // the docket is ever booked with Pafex after all, the pending pass above finds
+  // it and the check it records puts it back in this queue.
   const retryRows = await prisma.inventoryItem.findMany({
     where: {
       docketNumber: { not: null },
@@ -271,6 +279,7 @@ async function loadCandidates(limit: number): Promise<DocketCandidate[]> {
   for (const item of retryRows) {
     const number = (item.docketNumber as string).trim();
     if (!number || number === "0") continue;
+    if (unknownNumbers.has(number)) continue;
     if (podRetry.has(number)) continue;
     if (podRetry.size >= POD_RETRY_LIMIT) continue;
     podRetry.add(number);
