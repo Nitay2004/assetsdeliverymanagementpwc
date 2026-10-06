@@ -1,18 +1,32 @@
 services:
+  # Applies pending migrations, then exits. `migrate deploy` is a no-op when the
+  # database is already at the latest migration, so running it on every `up` is
+  # safe. The app waits for it to exit 0, so a migration that fails leaves the
+  # currently running container untouched instead of taking the deploy down.
+  migrate:
+    build:
+      context: .
+      target: migrator
+    container_name: asset-delivery-migrate
+    restart: "no"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-}
+      - DIRECT_URL=${DIRECT_URL:-}
+
   app:
     build:
       context: .
-      args:
-        DATABASE_URL: postgresql://assetdelivery:assetdelivery@10.199.206.99:5433/assetdelivery
-        DIRECT_URL: postgresql://assetdelivery:assetdelivery@10.199.206.99:5433/assetdelivery
     container_name: asset-delivery
     restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "8001:3000"
     environment:
       - PORT=3000
-      - DATABASE_URL=postgresql://assetdelivery:assetdelivery@10.199.206.99:5433/assetdelivery
-      - DIRECT_URL=postgresql://assetdelivery:assetdelivery@10.199.206.99:5433/assetdelivery
+      - DATABASE_URL=${DATABASE_URL:-}
+      - DIRECT_URL=${DIRECT_URL:-}
       # Compose interpolates these from the .env next to this file. The compose
       # file sets `environment` explicitly, so without listing a variable here it
       # never reaches the container.
