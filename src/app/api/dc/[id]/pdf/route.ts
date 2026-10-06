@@ -48,7 +48,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       dcNumber: dc.dcNumber,
       dcDate: dc.dcDate.toISOString(),
       documentTitle: isReversePickup ? "REVERSE PICKUP DELIVERY CHALLAN" : "DELIVERY CHALLAN",
-      includeModeOfPayment: !isReversePickup,
+      // Delivery challans no longer carry a payment term on either leg, forward
+      // or reverse, so the row is always dropped.
+      includeModeOfPayment: false,
       warehouseName: dc.warehouse?.name,
       shipToLocation: dc.shipToLocation,
       billToLocation: dc.billToLocation,

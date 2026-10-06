@@ -39,7 +39,6 @@ export function DcGenerateModal({ orderId, open, onClose }: DcGenerateModalProps
   const [warehouseId, setWarehouseId] = useState("");
   const [shipToLocation, setShipToLocation] = useState("");
   const [billToLocation, setBillToLocation] = useState("");
-  const [modeOfPayment, setModeOfPayment] = useState("");
   const [referenceNo, setReferenceNo] = useState("");
   const [referenceDate, setReferenceDate] = useState("");
   const [otherReferences, setOtherReferences] = useState("");
@@ -67,6 +66,9 @@ export function DcGenerateModal({ orderId, open, onClose }: DcGenerateModalProps
     if (orderData) {
       setShipToLocation(orderData.fullAddress || orderData.deliveryLocation || "");
       setDispatchDocNo(orderData.docketNumber || "");
+      // The challan leaves through the courier picked at docket time, so the
+      // dropdown is pre-filled with it but stays editable.
+      setDispatchedThrough(orderData.dispatchCourier || "");
       if (orderData.items.length > 0) {
         setItems(orderData.items);
       }
@@ -83,7 +85,6 @@ export function DcGenerateModal({ orderId, open, onClose }: DcGenerateModalProps
       setWarehouseId("");
       setShipToLocation("");
       setBillToLocation("");
-      setModeOfPayment("");
       setReferenceNo("");
       setReferenceDate("");
       setOtherReferences("");
@@ -144,7 +145,7 @@ export function DcGenerateModal({ orderId, open, onClose }: DcGenerateModalProps
         warehouseId: warehouseId || undefined,
         shipToLocation: shipToLocation.trim(),
         billToLocation: billToLocation.trim(),
-        modeOfPayment,
+        modeOfPayment: "",
         referenceNo,
         referenceDate: referenceDate || undefined,
         otherReferences,
@@ -230,15 +231,6 @@ export function DcGenerateModal({ orderId, open, onClose }: DcGenerateModalProps
           <div className="border-t pt-4">
             <h3 className="text-sm font-semibold text-foreground mb-3">Reference Details</h3>
             <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">Mode / Terms of Payment</label>
-                <input
-                  value={modeOfPayment}
-                  onChange={e => setModeOfPayment(e.target.value)}
-                  placeholder="e.g. Bank Transfer"
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-foreground">Reference No.</label>
                 <input

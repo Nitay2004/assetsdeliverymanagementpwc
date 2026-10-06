@@ -111,7 +111,14 @@ export async function generateDC(orderId: string, data: DcFormData) {
   const user = await getSession();
   requirePermission(user, "finance", "canCreate");
 
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      assets: {
+        include: { inventoryItem: true },
+      },
+    },
+  });
   if (!order) throw new Error("Order not found");
 
   const isRto = order.status === "RTO_DC_REQUESTED";
@@ -121,10 +128,26 @@ export async function generateDC(orderId: string, data: DcFormData) {
   const dcNumber = await getNextDcNumber();
   const dcDate = new Date();
 
+  // Product Master stays the source of truth for the HSN: whatever the browser
+  // sent only fills in when the product has no HSN on file.
+  const hsnByModel: Record<string, string> = {};
+  for (const a of order.assets) {
+    if (!a.inventoryItem) continue;
+    const modelKey = (a.inventoryItem.model || "").trim().toLowerCase();
+    if (modelKey && hsnByModel[modelKey] === undefined) {
+      hsnByModel[modelKey] = (await lookupProductHsn(a.inventoryItem.partNo, a.inventoryItem.model)) ?? "";
+    }
+  }
+
   const items = data.items.map((item) => {
     const amount = item.quantity * item.rate;
     const taxableValue = amount;
-    return { ...item, amount, taxableValue };
+    return {
+      ...item,
+      hsnSac: item.hsnSac || hsnByModel[(item.description || "").trim().toLowerCase()] || "",
+      amount,
+      taxableValue,
+    };
   });
 
   const totalAmount = items.reduce((sum, i) => sum + i.amount, 0);
@@ -143,7 +166,7 @@ export async function generateDC(orderId: string, data: DcFormData) {
       warehouseId: data.warehouseId || null,
       shipToLocation: data.shipToLocation,
       billToLocation: data.billToLocation,
-      modeOfPayment: data.modeOfPayment,
+      modeOfPayment: data.modeOfPayment || null,
       referenceNo: data.referenceNo,
       referenceDate: data.referenceDate ? new Date(data.referenceDate) : null,
       otherReferences: data.otherReferences,
@@ -251,41 +274,40 @@ export async function getDCsByOrder(orderId: string) {
 
 // ─── Reverse Pickup DC ───
 
-// A reverse pickup request only stores a serial number and a model name, while
-// the HSN code lives in Product Master. The serial is resolved against
-// inventory first because the inventory row carries the part number that
-// Product Master is keyed on; the model name is the fallback for requests whose
-// asset never made it into inventory.
-async function resolveProductHsn(serialNumber: string | null, model: string | null): Promise<string | null> {
-  const lookup = async (partNo?: string | null, modelName?: string | null) => {
-    if (partNo) {
-      const byPartNo = await prisma.productMaster.findFirst({
-        where: { partNo: { equals: partNo, mode: "insensitive" } },
-        select: { hsnCode: true },
-      });
-      if (byPartNo?.hsnCode) return byPartNo.hsnCode;
-    }
-    if (modelName) {
-      const byModel = await prisma.productMaster.findFirst({
-        where: { model: { equals: modelName, mode: "insensitive" } },
-        select: { hsnCode: true },
-      });
-      if (byModel?.hsnCode) return byModel.hsnCode;
-    }
-    return null;
-  };
+// A delivery challan line only carries a model name, while the HSN code lives
+// in Product Master. Forward DCs are keyed on the inventory part number; a
+// reverse pickup request only stores a serial and a model name, so its serial
+// is resolved against inventory first with the model name as fallback.
+async function lookupProductHsn(partNo?: string | null, modelName?: string | null): Promise<string | null> {
+  if (partNo) {
+    const byPartNo = await prisma.productMaster.findFirst({
+      where: { partNo: { equals: partNo, mode: "insensitive" } },
+      select: { hsnCode: true },
+    });
+    if (byPartNo?.hsnCode) return byPartNo.hsnCode;
+  }
+  if (modelName) {
+    const byModel = await prisma.productMaster.findFirst({
+      where: { model: { equals: modelName, mode: "insensitive" } },
+      select: { hsnCode: true },
+    });
+    if (byModel?.hsnCode) return byModel.hsnCode;
+  }
+  return null;
+}
 
+async function resolveProductHsn(serialNumber: string | null, model: string | null): Promise<string | null> {
   const serial = serialNumber?.trim();
   if (serial) {
     const item = await prisma.inventoryItem.findUnique({
       where: { serialNumber: serial },
       select: { partNo: true, model: true },
     });
-    const hsn = await lookup(item?.partNo, item?.model);
+    const hsn = await lookupProductHsn(item?.partNo, item?.model);
     if (hsn) return hsn;
   }
 
-  return lookup(null, model?.trim());
+  return lookupProductHsn(null, model?.trim());
 }
 
 export async function getReversePickupForDc(rpId: string) {
@@ -508,14 +530,16 @@ export async function getOrderForDc(orderId: string) {
   });
   if (!order) return null;
 
-  const productItems = order.assets
-    .filter(a => a.inventoryItem)
-    .map(a => ({
-      description: a.inventoryItem!.model || "",
-      hsnSac: "",
-      quantity: 1,
-      rate: 0,
-    }));
+  const productItems = await Promise.all(
+    order.assets
+      .filter(a => a.inventoryItem)
+      .map(async a => ({
+        description: a.inventoryItem!.model || "",
+        hsnSac: (await lookupProductHsn(a.inventoryItem!.partNo, a.inventoryItem!.model)) ?? "",
+        quantity: 1,
+        rate: 0,
+      }))
+  );
 
   const warehouse = order.warehouseLocation || "";
 
@@ -526,6 +550,7 @@ export async function getOrderForDc(orderId: string) {
     : order.deliveryLocation;
 
   const docketNumber = order.dockets[0]?.docketNumber || "";
+  const dispatchCourier = order.dockets[0]?.courierName || "";
 
   return {
     id: order.id,
@@ -535,6 +560,7 @@ export async function getOrderForDc(orderId: string) {
     fullAddress,
     warehouseLocation: warehouse,
     docketNumber,
+    dispatchCourier,
     items: productItems.length > 0 ? productItems : [{ description: "", hsnSac: "", quantity: 1, rate: 0 }],
   };
 }
