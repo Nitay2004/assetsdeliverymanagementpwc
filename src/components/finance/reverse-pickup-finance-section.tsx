@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ArrowUpRight, Loader2, FileText, Download } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { generateReversePickupEwayBill } from "@/app/actions/reverse-pickup";
 import { ReversePickupDcModal } from "@/components/finance/reverse-pickup-dc-modal";
@@ -24,13 +24,15 @@ interface Props {
   ewayRequests: RpRequest[];
   canManage: boolean;
   dcIdMap: Map<string, string>;
+  reverseSubTab?: string;
 }
 
 const HEADERS = ["Request #", "Serial #", "Model", "Employee", "Status", "DC No", "E-Way Bill", "Action"];
 
-export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManage, dcIdMap }: Props) {
+export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManage, dcIdMap, reverseSubTab = "dc" }: Props) {
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [saving, setSaving] = useState<string | null>(null);
   const [dcModalId, setDcModalId] = useState<string | null>(null);
   const [ewayInputs, setEwayInputs] = useState<Record<string, string>>({});
@@ -88,15 +90,45 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
     } finally { setSaving(null); }
   }
 
-  if (dcRequests.length === 0 && ewayRequests.length === 0) return null;
+  const requestsToShow = reverseSubTab === "eway" ? ewayRequests : dcRequests;
+  const emptyMessage = reverseSubTab === "eway" ? "No E-Way Bill requests to process." : "No DC requests to process.";
 
   return (
-    <>
-      {dcRequests.length > 0 && (
+    <div className="space-y-4">
+      <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+        <button
+          onClick={() => {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("rtab", "dc");
+            params.delete("page");
+            router.push(`${window.location.pathname}?${params.toString()}`);
+          }}
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${reverseSubTab === "dc" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          DC
+        </button>
+        <button
+          onClick={() => {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("rtab", "eway");
+            params.delete("page");
+            router.push(`${window.location.pathname}?${params.toString()}`);
+          }}
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${reverseSubTab === "eway" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          E-Way Bill
+        </button>
+      </div>
+
+      {requestsToShow.length === 0 ? (
+        <div className="p-8 rounded-xl glass text-center text-muted-foreground">
+          {emptyMessage}
+        </div>
+      ) : reverseSubTab === "dc" ? (
         <div className="rounded-xl glass shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b bg-orange-50 flex items-center gap-2">
             <ArrowUpRight className="size-4 text-orange-600" />
-            <h2 className="text-sm font-semibold text-orange-800">Reverse Pickup — Delivery Challan</h2>
+            <h2 className="text-sm font-semibold text-orange-800">Reverse Pickup - DC</h2>
             <span className="ml-auto text-xs text-orange-600 font-medium">{dcRequests.length} cases</span>
           </div>
           <div className="overflow-x-auto">
@@ -155,13 +187,11 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
             </table>
           </div>
         </div>
-      )}
-
-      {ewayRequests.length > 0 && (
+      ) : (
         <div className="rounded-xl glass shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b bg-orange-50 flex items-center gap-2">
             <ArrowUpRight className="size-4 text-orange-600" />
-            <h2 className="text-sm font-semibold text-orange-800">Reverse Pickup — E-Way Bill</h2>
+            <h2 className="text-sm font-semibold text-orange-800">Reverse Pickup - E-Way Bill</h2>
             <span className="ml-auto text-xs text-orange-600 font-medium">{ewayRequests.length} cases</span>
           </div>
           <div className="overflow-x-auto">
@@ -265,6 +295,6 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
           onClose={() => setDcModalId(null)}
         />
       )}
-    </>
+    </div>
   );
 }

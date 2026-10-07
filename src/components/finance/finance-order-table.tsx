@@ -67,6 +67,7 @@ interface Props {
   canManage: boolean;
   selectedId?: string;
   columnFilterValues?: Record<string, ColumnFilterValue[]>;
+  financeSubTab?: string;
 }
 
 const FINANCE_COLUMNS: ColumnFilterConfig<OrderData>[] = [
@@ -79,7 +80,7 @@ const FINANCE_COLUMNS: ColumnFilterConfig<OrderData>[] = [
   { key: "status", getValue: r => r.status },
 ];
 
-export function FinanceOrderTable({ orders, canManage, selectedId, columnFilterValues }: Props) {
+export function FinanceOrderTable({ orders, canManage, selectedId, columnFilterValues, financeSubTab = "dc" }: Props) {
   const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(FINANCE_COLUMNS, orders, { distinctValues: columnFilterValues });
   const filteredOrders = columnFiltered;
 
@@ -140,12 +141,12 @@ export function FinanceOrderTable({ orders, canManage, selectedId, columnFilterV
           <tbody className="divide-y">
             <ScrollToItem selectedId={selectedId} prefix="finance" />
             {filteredOrders.map((order) => (
-              <FinanceOrderRow key={order.id} order={order} canManage={canManage} elementId={`finance-${order.id}`} />
+              <FinanceOrderRow key={order.id} order={order} canManage={canManage} elementId={`finance-${order.id}`} financeSubTab={financeSubTab} />
             ))}
             {filteredOrders.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">
-                  {filteredOrders.length === 0 ? "No results match your search." : "No orders found."}
+                  No results match your search.
                 </td>
               </tr>
             )}

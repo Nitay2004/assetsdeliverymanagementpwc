@@ -22,6 +22,7 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
   const limit = Math.min(100, Math.max(1, parseInt(typeof searchParams.limit === "string" ? searchParams.limit : "10", 10) || 10));
   const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
   const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
+  const financeSubTab = typeof searchParams.ftab === "string" ? searchParams.ftab : (typeof searchParams.financeTab === "string" ? searchParams.financeTab : "dc");
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "FINANCE"));
 
@@ -135,7 +136,46 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
     .map(r => ({ value: r.ewayBillNumber ?? "(Blank)", count: r._count._all }))
     .sort((a, b) => a.value.localeCompare(b.value));
 
-  const pendingDC = rawOrders.filter(o => o.status === "IN_PROVISIONING" || o.status === "DC_REQUESTED" || o.status === "RTO_DC_REQUESTED").length;
+  const dcForwardRaw = rawOrders.filter(o => o.status === "IN_PROVISIONING" || o.status === "DC_REQUESTED" || o.status === "RTO_DC_REQUESTED");
+  const ewayForwardRaw = rawOrders.filter(o => o.status === "EWAY_BILL_REQUESTED" || o.status === "RTO_EWAY_BILL_REQUESTED");
+  const dcForwardOrders = dcForwardRaw.map(o => ({
+    ...o,
+    deliveryChallans: o.deliveryChallans.map(dc => ({
+      ...dc,
+      dcDate: dc.dcDate.toISOString(),
+      taxableValue: dc.taxableValue ? Number(dc.taxableValue) : null,
+      igst: dc.igst ? Number(dc.igst) : null,
+      totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null,
+      items: dc.items.map(i => ({
+        ...i,
+        rate: Number(i.rate),
+        amount: Number(i.amount),
+        taxableValue: i.taxableValue ? Number(i.taxableValue) : null,
+        igstRate: i.igstRate ? Number(i.igstRate) : null,
+        igstAmount: i.igstAmount ? Number(i.igstAmount) : null,
+      })),
+    })),
+  }));
+  const ewayForwardOrders = ewayForwardRaw.map(o => ({
+    ...o,
+    deliveryChallans: o.deliveryChallans.map(dc => ({
+      ...dc,
+      dcDate: dc.dcDate.toISOString(),
+      taxableValue: dc.taxableValue ? Number(dc.taxableValue) : null,
+      igst: dc.igst ? Number(dc.igst) : null,
+      totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null,
+      items: dc.items.map(i => ({
+        ...i,
+        rate: Number(i.rate),
+        amount: Number(i.amount),
+        taxableValue: i.taxableValue ? Number(i.taxableValue) : null,
+        igstRate: i.igstRate ? Number(i.igstRate) : null,
+        igstAmount: i.igstAmount ? Number(i.igstAmount) : null,
+      })),
+    })),
+  }));
+
+  const pendingDC = dcForwardOrders.filter(o => o.status === "IN_PROVISIONING" || o.status === "DC_REQUESTED" || o.status === "RTO_DC_REQUESTED").length;
 
   // Reverse pickups stay visible after they are generated — otherwise the row
   // vanishes from this table the moment finance hits "save".
@@ -161,6 +201,10 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
   const activeTab = searchParams.tab === "reverse" ? "reverse" : "forward";
   // Badge = cases still waiting on finance, not every case shown in the tab.
   const reversePending = rpRequests.filter(r => r.status === "DC_REQUESTED" || r.status === "EWAY_BILL_REQUESTED").length;
+
+  const subTab = (financeSubTab === "eway" || financeSubTab === "e-way" || financeSubTab === "eWay") ? "eway" : "dc";
+  const reverseSubTab = ((searchParams.rtab === "eway" || searchParams.rtab === "e-way" || searchParams.rtab === "eWay") ? "eway" : "dc");
+  const forwardOrdersToShow = subTab === "eway" ? ewayForwardOrders : dcForwardOrders;
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -198,16 +242,33 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
       </div>
 
       {activeTab === "forward" ? (
-        orders.length === 0 ? (
-          <div className="p-8 rounded-xl glass text-center text-muted-foreground">
-            No orders ready for finance processing.
+        <div className="space-y-4">
+          <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+            <a
+              href={`/dashboard/finance?ftab=dc${reverseSubTab === "eway" ? '&rtab=eway' : (searchParams.rtab === 'dc' ? '&rtab=dc' : '')}`}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${subTab === "dc" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              DC
+            </a>
+            <a
+              href={`/dashboard/finance?ftab=eway${reverseSubTab === "eway" ? '&rtab=eway' : (searchParams.rtab ? `&rtab=${searchParams.rtab}` : '')}`}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${subTab === "eway" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              E-Way Bill
+            </a>
           </div>
-        ) : (
-          <>
-            <FinanceOrderTable orders={orders} canManage={canManage} selectedId={selectedId} columnFilterValues={columnFilterValues} />
-            <PaginationBar basePath="/dashboard/finance" currentPage={safePage} totalPages={totalPages} totalCount={totalCount} limit={limit} />
-          </>
-        )
+
+          {forwardOrdersToShow.length === 0 ? (
+            <div className="p-8 rounded-xl glass text-center text-muted-foreground">
+              {subTab === "dc" ? "No DC requests to process." : "No E-Way Bill requests to process."}
+            </div>
+          ) : (
+            <>
+              <FinanceOrderTable orders={forwardOrdersToShow} canManage={canManage} selectedId={selectedId} columnFilterValues={columnFilterValues} financeSubTab={subTab} />
+              <PaginationBar basePath="/dashboard/finance" currentPage={safePage} totalPages={totalPages} totalCount={totalCount} limit={limit} />
+            </>
+          )}
+        </div>
       ) : (
         <>
           <ReversePickupFinanceSection
@@ -215,12 +276,8 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
             ewayRequests={rpEwayRequests}
             canManage={canManage}
             dcIdMap={rpDcMap}
+            reverseSubTab={reverseSubTab}
           />
-          {rpDcRequests.length === 0 && rpEwayRequests.length === 0 && (
-            <div className="p-8 rounded-xl glass text-center text-muted-foreground">
-              No reverse pickup cases waiting for finance.
-            </div>
-          )}
         </>
       )}
     </div>

@@ -94,7 +94,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 const ALL_STATUSES = Object.keys(STATUS_LABELS);
 
-export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderData; canManage: boolean; elementId?: string }) {
+export function FinanceOrderRow({ order, canManage, elementId, financeSubTab = "dc" }: { order: OrderData; canManage: boolean; elementId?: string; financeSubTab?: string }) {
   const { toast } = useToast();
   const { showAlert } = useAlert();
   const router = useRouter();
@@ -304,6 +304,12 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
                   <FileText className="size-3" /> Generate DC
                 </button>
               )}
+              {(order.status === "EWAY_BILL_REQUESTED" || order.status === "RTO_EWAY_BILL_REQUESTED") && (
+                <button onClick={() => { setExpanded(true); }}
+                  className="px-2.5 py-1 rounded text-xs font-medium bg-orange-600 text-white hover:bg-orange-700 transition-colors flex items-center gap-1">
+                  Generate E-Way Bill
+                </button>
+              )}
               <button onClick={() => { setExpanded(true); setEditMode(true); }}
                 className="px-2.5 py-1 rounded text-xs font-medium border hover:bg-muted transition-colors">
                 Edit
@@ -508,7 +514,7 @@ export function FinanceOrderRow({ order, canManage, elementId }: { order: OrderD
                 </div>
               )}
 
-              {!editMode && order.deliveryChallans.length === 0 && order.dockets.length === 0 && order.status !== "EWAY_BILL_REQUESTED" && (
+              {!editMode && order.deliveryChallans.length === 0 && order.dockets.length === 0 && order.status !== "EWAY_BILL_REQUESTED" && order.status !== "RTO_EWAY_BILL_REQUESTED" && (
                 <p className="text-xs text-muted-foreground italic">No DC or docket details available.</p>
               )}
             </div>
