@@ -6,7 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
-import { hasPriorDelivery, createAssignmentOrder } from "@/app/actions/assignment";
+import { hasPriorDelivery } from "@/app/actions/assignment";
 import { calculateZone, calculateTier, calculateTatDays, calculateExpectedDeliveryDate, normalizeOdaLocation } from "@/lib/location-utils";
 import { calculateSlaStatus } from "@/lib/sla-utils";
 
@@ -714,13 +714,6 @@ export async function reassignItem(id: string, formData: FormData) {
         trackingStatus: "Order Placed",
         ...assignmentFields,
       },
-    });
-    await createAssignmentOrder({
-      id: existing.id,
-      employeeName: employeeName || existing.employeeName,
-      entity,
-      city,
-      state,
     });
   }
 

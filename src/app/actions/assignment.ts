@@ -38,41 +38,20 @@ export async function hasPriorDelivery(itemId: string, serialNumber: string): Pr
   );
 }
 
-export async function createAssignmentOrder(item: {
-  id: string;
-  employeeName: string | null;
-  entity: string | null;
-  city: string | null;
-  state: string | null;
-}) {
+export async function markItemAllocated(id: string) {
   const user = await requireAuth();
   requirePermission(user, "inventory", "canEdit");
-  await prisma.$transaction(async (tx) => {
-    const order = await tx.order.create({
-      data: {
-        clientName: item.employeeName || item.entity || "Individual Dispatch",
-        intermediary: "Direct from Inventory",
-        totalQuantity: 1,
-        deliveryLocation: [item.city, item.state].filter(Boolean).join(", ") || "N/A",
-        status: "ORDER_PLACED",
-      },
-    });
 
-    await tx.asset.create({
-      data: {
-        orderId: order.id,
-        status: "allocated",
-        inventoryItemId: item.id,
-      },
-    });
-
-    await tx.inventoryItem.update({
-      where: { id: item.id },
-      data: {
-        status: "ALLOCATED",
-        trackingStatus: "Order Placed",
-      },
-    });
+  // Assigning a user only reserves the asset. The ORDER_PLACED order that
+  // parks it in the warehouse pending-allocation queue is created by Send to
+  // Warehouse, so a bulk send never collides with an order that assignment
+  // used to create on its own.
+  await prisma.inventoryItem.update({
+    where: { id },
+    data: {
+      status: "ALLOCATED",
+      trackingStatus: "Order Placed",
+    },
   });
 
   revalidatePath("/dashboard/warehouse");

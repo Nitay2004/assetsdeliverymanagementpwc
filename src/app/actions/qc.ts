@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession, requireAuth } from "@/lib/auth";
 import { requirePermission, canModuleAction } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
-import { hasPriorDelivery, createAssignmentOrder } from "@/app/actions/assignment";
+import { hasPriorDelivery, markItemAllocated } from "@/app/actions/assignment";
 import { calculateExpectedDeliveryDate, normalizeOdaLocation } from "@/lib/location-utils";
 import { calculateSlaStatus } from "@/lib/sla-utils";
 
@@ -394,13 +394,7 @@ export async function completeQc(id: string, finalRemarks?: string) {
   const purgePass = item.qcPurgeResult === "PASS";
 
   if (cleanPass && purgePass) {
-    await createAssignmentOrder({
-      id: item.id,
-      employeeName: item.employeeName,
-      entity: item.entity,
-      city: item.city,
-      state: item.state,
-    });
+    await markItemAllocated(item.id);
     await prisma.inventoryItem.update({
       where: { id: item.id },
       data: {
