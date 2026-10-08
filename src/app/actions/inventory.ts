@@ -5,7 +5,7 @@ import { getSession, requireAuth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
+import { syncOrderTrackingStatus } from "@/lib/order-sync";
 import { hasPriorDelivery } from "@/app/actions/assignment";
 import { calculateZone, calculateTier, calculateTatDays, calculateExpectedDeliveryDate, normalizeOdaLocation } from "@/lib/location-utils";
 import { calculateSlaStatus } from "@/lib/sla-utils";

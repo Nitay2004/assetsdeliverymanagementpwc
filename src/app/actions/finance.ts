@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
-import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
+import { syncOrderTrackingStatus } from "@/lib/order-sync";
 
 export async function updateOrderFinance(
   orderId: string,

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession, requireAuth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
-import { syncOrderTrackingStatus } from "@/app/actions/warehouse";
+import { syncOrderTrackingStatus } from "@/lib/order-sync";
 
 async function syncInventoryWarehouseLocation(orderId: string, warehouseLocation: string) {
   if (!warehouseLocation) return;
