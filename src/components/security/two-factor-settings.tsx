@@ -116,13 +116,38 @@ export function TwoFactorSettings({
     setError(null);
   };
 
+  const copyWithTextarea = (text: string) => {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand("copy");
+    textarea.remove();
+    if (!ok) throw new Error("execCommand copy failed");
+  };
+
   const handleCopy = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        return;
+      }
+      copyWithTextarea(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      setError("Could not copy to clipboard. Select the text and copy manually.");
+      try {
+        copyWithTextarea(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        setError("Could not copy to clipboard. Select the text and copy manually.");
+      }
     }
   };
 
