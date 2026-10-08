@@ -1256,9 +1256,12 @@ async function handleUploadMode(
     }
   }
 
-  // Build assignment records for all existing rows (including duplicate serials)
+  // Build assignment records only for rows that actually carry a user. A record
+  // with no employeeName is not a real assignment and would otherwise surface as
+  // phantom, nameless history in the inventory drawer.
   const allAssignments: Record<string, unknown>[] = [];
   for (const item of existingRows) {
+    if (!item.data.employeeName || !String(item.data.employeeName).trim()) continue;
     allAssignments.push(buildAssignmentRecord(item.itemId, item.data));
   }
 
