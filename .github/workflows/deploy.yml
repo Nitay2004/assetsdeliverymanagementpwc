@@ -16,6 +16,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Quality gate — runs BEFORE anything is written to the deploy dir, so a
+      # broken typecheck stops the deploy here and the old container keeps
+      # serving. Lint runs too but is non-blocking while the pre-existing
+      # no-explicit-any backlog (see APP-AUDIT-REPORT) is being cleared.
+      - name: Quality gate (typecheck + lint)
+        run: |
+          docker run --rm -v "$PWD":/repo -w /repo -v ads-npm-cache:/root/.npm node:22-alpine sh -c '
+            npm ci --no-audit --no-fund
+            npx tsc --noEmit
+            npm run lint || echo "::warning::lint reported issues (non-blocking)"
+          '
+
       - name: Sync code to deploy dir
         run: |
           # tar only adds/overwrites; remove files deleted from the repo so they
