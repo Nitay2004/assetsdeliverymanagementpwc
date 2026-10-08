@@ -156,12 +156,54 @@ export async function updateInventoryItem(id: string, formData: FormData) {
   const trackingValue = rawTrackingStatus?.toLowerCase() || "";
   const isDelivered = trackingValue.includes("delivered") || trackingValue.includes("confirmed") || trackingValue.includes("dispatched") || trackingValue.includes("invoiced") || trackingValue.includes("payment") || trackingValue.includes("warranty");
 
-  const current = await prisma.inventoryItem.findUnique({ where: { id }, select: { status: true, expectedDeliveryDate: true } });
+  const current = await prisma.inventoryItem.findUnique({ where: { id } });
+  const newEmployeeName = (formData.get("employeeName") as string)?.trim() || null;
+  const clearingUser = !!current?.employeeName && !newEmployeeName;
+
   let effectiveStatus = current?.status;
-  if (isDelivered && effectiveStatus === "AVAILABLE") {
+  if (clearingUser && effectiveStatus === "ALLOCATED") {
+    // No user left on the item — it is back in stock, not allocated.
+    effectiveStatus = "AVAILABLE";
+  } else if (isDelivered && effectiveStatus === "AVAILABLE") {
     effectiveStatus = "ALLOCATED";
   }
   const slaFallback = current?.expectedDeliveryDate ?? null;
+
+  // Editing the user must not silently erase the previous assignment: snapshot
+  // it into history first (same pattern as returnItemToStock / reassignItem).
+  if (current?.employeeName && current.employeeName !== newEmployeeName) {
+    const alreadyRecorded = await prisma.assignmentRecord.findFirst({
+      where: { inventoryItemId: id, employeeName: current.employeeName },
+    });
+    if (!alreadyRecorded) {
+      await prisma.assignmentRecord.create({
+        data: {
+          inventoryItemId: id,
+          employeeName: current.employeeName,
+          emailId: current.emailId,
+          mobileNumber: current.mobileNumber,
+          alternatePhoneNumber: current.alternatePhoneNumber,
+          shippingAddress: current.shippingAddress,
+          landMark: current.landMark,
+          city: current.city,
+          state: current.state,
+          pinCode: current.pinCode,
+          purpose: current.purpose,
+          requestDate: current.requestDate,
+          userBaseLocation: current.userBaseLocation,
+          imageType: current.imageType,
+          count: current.count,
+          pwcRemarks: current.pwcRemarks,
+          trackingStatus: current.trackingStatus,
+          trackingSubStatus: current.trackingSubStatus,
+          dcNumber: current.dcNumber,
+          docketNumber: current.docketNumber,
+          deliveryDate: current.deliveryDate,
+          assignedAt: new Date(),
+        },
+      });
+    }
+  }
 
   try {
     await prisma.inventoryItem.update({
@@ -179,7 +221,7 @@ export async function updateInventoryItem(id: string, formData: FormData) {
         purpose: (formData.get("purpose") as string) || null,
         requestDate: parseDate(formData.get("requestDate") as string),
         count: parseIntValue(formData.get("count") as string),
-        employeeName: (formData.get("employeeName") as string) || null,
+        employeeName: newEmployeeName,
         emailId: (formData.get("emailId") as string) || null,
         shippingAddress: (formData.get("shippingAddress") as string) || null,
         landMark: (formData.get("landMark") as string) || null,
