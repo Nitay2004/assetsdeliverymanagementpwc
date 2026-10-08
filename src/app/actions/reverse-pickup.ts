@@ -1,6 +1,6 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
+import { Prisma, type InventoryItem } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { requirePermission, canModuleAction } from "@/lib/permissions";
@@ -364,6 +364,75 @@ export async function markAsPickedUp(formData: FormData) {
   revalidatePath("/dashboard/reverse-pickup");
 }
 
+// Archives the item's current user into assignment history (so it shows up
+// under "previous") and returns the unit to stock. Shared by the inward and
+// complete steps; the alreadyRecorded check keeps it safe to run twice.
+async function restockInventoryItem(tx: Prisma.TransactionClient, inventoryItem: InventoryItem) {
+  if (inventoryItem.employeeName) {
+    const alreadyRecorded = await tx.assignmentRecord.findFirst({
+      where: {
+        inventoryItemId: inventoryItem.id,
+        employeeName: inventoryItem.employeeName,
+      },
+    });
+    if (!alreadyRecorded) {
+      await tx.assignmentRecord.create({
+        data: {
+          inventoryItemId: inventoryItem.id,
+          employeeName: inventoryItem.employeeName,
+          emailId: inventoryItem.emailId,
+          mobileNumber: inventoryItem.mobileNumber,
+          alternatePhoneNumber: inventoryItem.alternatePhoneNumber,
+          shippingAddress: inventoryItem.shippingAddress,
+          landMark: inventoryItem.landMark,
+          city: inventoryItem.city,
+          state: inventoryItem.state,
+          pinCode: inventoryItem.pinCode,
+          purpose: inventoryItem.purpose,
+          requestDate: inventoryItem.requestDate,
+          userBaseLocation: inventoryItem.userBaseLocation,
+          imageType: inventoryItem.imageType,
+          count: inventoryItem.count,
+          pwcRemarks: inventoryItem.pwcRemarks,
+          trackingStatus: inventoryItem.trackingStatus,
+          trackingSubStatus: inventoryItem.trackingSubStatus,
+          dcNumber: inventoryItem.dcNumber,
+          docketNumber: inventoryItem.docketNumber,
+          deliveryDate: inventoryItem.deliveryDate,
+          assignedAt: new Date(),
+        },
+      });
+    }
+  }
+
+  await tx.inventoryItem.update({
+    where: { id: inventoryItem.id },
+    data: {
+      status: "AVAILABLE",
+      trackingStatus: null,
+      trackingSubStatus: null,
+      employeeName: null,
+      emailId: null,
+      mobileNumber: null,
+      alternatePhoneNumber: null,
+      shippingAddress: null,
+      landMark: null,
+      city: null,
+      state: null,
+      pinCode: null,
+      purpose: null,
+      requestDate: null,
+      userBaseLocation: null,
+      imageType: null,
+      count: null,
+      pwcRemarks: null,
+      dcNumber: null,
+      docketNumber: null,
+      deliveryDate: null,
+    },
+  });
+}
+
 export async function receiveAtWarehouse(formData: FormData) {
   const user = await getSession();
   requirePermission(user, "reverse-pickup", "canEdit");
@@ -375,17 +444,60 @@ export async function receiveAtWarehouse(formData: FormData) {
 
   if (!id || !warehouseLocation) throw new Error("Request ID and warehouse location are required.");
 
-  await prisma.reversePickupRequest.update({
+  const request = await prisma.reversePickupRequest.findUnique({
     where: { id },
-    data: {
-      status: "RECEIVED_AT_WAREHOUSE",
-      warehouseLocation,
-      receivedDate,
-      receivedBy: receivedBy || null,
-    },
+    select: { status: true },
+  });
+  if (!request) throw new Error("Reverse pickup request not found.");
+
+  // Server-side precondition: receiving is only valid straight after pick-up.
+  // The UI gates the button, but a stale/double form submit must not re-run the
+  // restock side effect once the unit has moved on (e.g. re-assigned).
+  const RECEIVABLE_STATUSES = ["PICKED_UP", "IN_TRANSIT"] as const;
+  if (!RECEIVABLE_STATUSES.includes(request.status as (typeof RECEIVABLE_STATUSES)[number])) {
+    throw new Error(
+      `Cannot receive: request is "${request.status}" (expected ${RECEIVABLE_STATUSES.join(" or ")}).`
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Re-read both rows inside the transaction so the restock decision and the
+    // status flip act on current data, not a possibly stale pre-transaction read.
+    const current = await tx.reversePickupRequest.findUnique({
+      where: { id },
+      select: { inventoryItemId: true, serialNumber: true },
+    });
+    if (!current) throw new Error("Reverse pickup request not found.");
+
+    const item = current.inventoryItemId
+      ? await tx.inventoryItem.findUnique({ where: { id: current.inventoryItemId } })
+      : await tx.inventoryItem.findUnique({ where: { serialNumber: current.serialNumber } });
+
+    // Inward = unit is back in our hands: the current user moves to assignment
+    // history and the serial becomes AVAILABLE stock again.
+    if (item) {
+      await restockInventoryItem(tx, item);
+    }
+
+    // Optimistic status guard: exactly one row may leave RECEIVABLE state.
+    const { count } = await tx.reversePickupRequest.updateMany({
+      where: { id, status: { in: [...RECEIVABLE_STATUSES] } },
+      data: {
+        status: "RECEIVED_AT_WAREHOUSE",
+        warehouseLocation,
+        receivedDate,
+        receivedBy: receivedBy || null,
+        inventoryItemId: item?.id ?? current.inventoryItemId,
+      },
+    });
+    if (count !== 1) {
+      throw new Error("Request already received or status changed — refresh and retry.");
+    }
   });
 
   revalidatePath("/dashboard/reverse-pickup");
+  revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
 }
 
 // Overall QC result is derived from both stages: FAIL if either stage failed,
@@ -656,69 +768,7 @@ export async function completeReversePickup(formData: FormData) {
 
   await prisma.$transaction(async (tx) => {
     if (inventoryItem) {
-      if (inventoryItem.employeeName) {
-        const alreadyRecorded = await tx.assignmentRecord.findFirst({
-          where: {
-            inventoryItemId: inventoryItem.id,
-            employeeName: inventoryItem.employeeName,
-          },
-        });
-        if (!alreadyRecorded) {
-          await tx.assignmentRecord.create({
-            data: {
-              inventoryItemId: inventoryItem.id,
-              employeeName: inventoryItem.employeeName,
-              emailId: inventoryItem.emailId,
-              mobileNumber: inventoryItem.mobileNumber,
-              alternatePhoneNumber: inventoryItem.alternatePhoneNumber,
-              shippingAddress: inventoryItem.shippingAddress,
-              landMark: inventoryItem.landMark,
-              city: inventoryItem.city,
-              state: inventoryItem.state,
-              pinCode: inventoryItem.pinCode,
-              purpose: inventoryItem.purpose,
-              requestDate: inventoryItem.requestDate,
-              userBaseLocation: inventoryItem.userBaseLocation,
-              imageType: inventoryItem.imageType,
-              count: inventoryItem.count,
-              pwcRemarks: inventoryItem.pwcRemarks,
-              trackingStatus: inventoryItem.trackingStatus,
-              trackingSubStatus: inventoryItem.trackingSubStatus,
-              dcNumber: inventoryItem.dcNumber,
-              docketNumber: inventoryItem.docketNumber,
-              deliveryDate: inventoryItem.deliveryDate,
-              assignedAt: new Date(),
-            },
-          });
-        }
-      }
-
-      await tx.inventoryItem.update({
-        where: { id: inventoryItem.id },
-        data: {
-          status: "AVAILABLE",
-          trackingStatus: null,
-          trackingSubStatus: null,
-          employeeName: null,
-          emailId: null,
-          mobileNumber: null,
-          alternatePhoneNumber: null,
-          shippingAddress: null,
-          landMark: null,
-          city: null,
-          state: null,
-          pinCode: null,
-          purpose: null,
-          requestDate: null,
-          userBaseLocation: null,
-          imageType: null,
-          count: null,
-          pwcRemarks: null,
-          dcNumber: null,
-          docketNumber: null,
-          deliveryDate: null,
-        },
-      });
+      await restockInventoryItem(tx, inventoryItem);
     }
 
     await tx.reversePickupRequest.update({
