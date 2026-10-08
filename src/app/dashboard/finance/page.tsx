@@ -188,7 +188,10 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
       .map(dc => [dc.reversePickupRequestId, dc.id])
   );
 
-  const rpDcRequests = rpRequests.filter(r => r.status === "DC_REQUESTED" || r.status === "DC_GENERATED");
+  // Sticky reverse DC sub-tab: the case stays in the DC table through the
+  // e-way stages too, so finance never loses the row after requesting or
+  // generating the e-way bill.
+  const rpDcRequests = rpRequests;
   const rpEwayRequests = rpRequests.filter(r => r.status === "EWAY_BILL_REQUESTED" || r.status === "EWAY_BILL_GENERATED");
 
   const activeTab = searchParams.tab === "reverse" ? "reverse" : "forward";

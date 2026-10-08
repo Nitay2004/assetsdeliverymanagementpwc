@@ -27,26 +27,17 @@ export const ORDER_PIPELINE_STATUSES: OrderStatus[] = [
   "CANCELLED",
 ];
 
-// Forward finance sub-tab status sets. Together they cover the entire
-// pipeline, so a forward order always shows in exactly one sub-tab and never
-// vanishes from the finance table as its stage advances.
+// Forward finance sub-tab status sets. Both sub-tabs are sticky: once an order
+// has shown in a sub-tab it never leaves it, so advancing stages (DC generated
+// → e-way requested → e-way generated → onward) never empties a table.
 //
-// DC sub-tab: everything up to the RTO DC stage — DC work plus the docket
-// steps logistics completes before e-way is requested. E-way rows never
-// appear here.
-export const FORWARD_DC_STATUSES: OrderStatus[] = [
-  "ALLOCATED",
-  "IN_PROVISIONING",
-  "DC_REQUESTED",
-  "DC_GENERATED",
-  "DOCKET_REQUESTED",
-  "DOCKET_ASSIGNED",
-  "RTO",
-  "RTO_DC_REQUESTED",
-  "RTO_DC_GENERATED",
-];
+// DC sub-tab: the full pipeline — a row stays visible from its first entry all
+// the way through dispatch, delivery, RTO and everything after. Orders that
+// reach the e-way stage keep showing here as well (the E-Way sub-tab is a
+// focused overlay of the same rows, not a move).
+export const FORWARD_DC_STATUSES: OrderStatus[] = ORDER_PIPELINE_STATUSES;
 
-// E-Way sub-tab: e-way request onwards. Once an order enters here it stays —
+// E-Way sub-tab: e-way work onwards. Once an order enters here it stays —
 // generated, packed, dispatched, delivered rows are all kept visible.
 export const FORWARD_EWAY_STATUSES: OrderStatus[] = [
   "PACKED_AND_LABELLED",
