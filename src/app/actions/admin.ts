@@ -76,6 +76,8 @@ export async function updateUser(userId: string, formData: FormData) {
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (!existing) return { success: false, error: "User not found." };
 
+  const roleChanged = Boolean(role) && role !== existing.role;
+
   const updateData: Record<string, unknown> = {
     name: name || null,
     role: role as any,
@@ -86,7 +88,7 @@ export async function updateUser(userId: string, formData: FormData) {
     updateData.passwordHash = await bcrypt.hash(password, 10);
   }
 
-  if (role && role !== existing.role) {
+  if (roleChanged) {
     updateData.permissions = getDefaultPermissions(role) as any;
   }
 
@@ -94,6 +96,13 @@ export async function updateUser(userId: string, formData: FormData) {
     where: { id: userId },
     data: updateData,
   });
+
+  // Security: password change, role change or disabling an account must end
+  // every existing session for that user — otherwise old sessions keep their
+  // previous privileges for up to 8 hours (absolute session timeout).
+  if (password || roleChanged || !isActive) {
+    await prisma.session.deleteMany({ where: { userId } });
+  }
 
   revalidatePath("/dashboard/admin/users");
   return { success: true };
@@ -130,10 +139,15 @@ export async function toggleUserStatus(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return { success: false, error: "User not found." };
 
-  await prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: userId },
     data: { isActive: !user.isActive },
   });
+
+  // Disabling an account revokes all of its live sessions immediately.
+  if (!updated.isActive) {
+    await prisma.session.deleteMany({ where: { userId } });
+  }
 
   revalidatePath("/dashboard/admin/users");
   return { success: true };

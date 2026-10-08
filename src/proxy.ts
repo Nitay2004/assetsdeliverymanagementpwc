@@ -68,7 +68,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // Validate the session against the DB (proxy runs on the Node.js runtime).
-  let session: { expiresAt: Date; createdAt: Date; user: { role: string; permissions: unknown } } | null = null;
+  let session: { expiresAt: Date; createdAt: Date; user: { role: string; permissions: unknown; isActive: boolean } } | null = null;
   try {
     const hash = crypto.createHash("sha256").update(sessionToken).digest("hex");
     session = await prisma.session.findUnique({
@@ -76,7 +76,7 @@ export async function proxy(request: NextRequest) {
       select: {
         expiresAt: true,
         createdAt: true,
-        user: { select: { role: true, permissions: true } },
+        user: { select: { role: true, permissions: true, isActive: true } },
       },
     });
   } catch {
@@ -86,6 +86,7 @@ export async function proxy(request: NextRequest) {
   const now = Date.now();
   const isValid =
     !!session &&
+    session.user.isActive &&
     session.expiresAt.getTime() > now &&
     now - session.createdAt.getTime() < ABSOLUTE_TIMEOUT_MS;
 

@@ -78,6 +78,14 @@ export async function getSession() {
     return null;
   }
 
+  // A disabled account keeps no valid session: revoke every session the user
+  // has (covers sessions created before an admin toggled isActive off, which
+  // the proxy and getSession would otherwise keep honouring until expiry).
+  if (!session.user.isActive) {
+    await prisma.session.deleteMany({ where: { userId: session.userId } });
+    return null;
+  }
+
   const now = new Date();
 
   // Absolute timeout — session can live for at most 8 hours after creation,
