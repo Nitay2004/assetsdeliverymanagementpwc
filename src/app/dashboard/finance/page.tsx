@@ -3,14 +3,13 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { FileText } from "lucide-react";
 import { FinanceOrderTable } from "@/components/finance/finance-order-table";
-import { ScrollToItem } from "@/components/shared/scroll-to-item";
 import { ReversePickupFinanceSection } from "@/components/finance/reverse-pickup-finance-section";
 import { FinanceExportButton } from "@/components/finance/finance-export-button";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { ForwardReverseTabs } from "@/components/shared/forward-reverse-tabs";
 import { getCorrectOrderPage } from "@/lib/order-page";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
-import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
+import { ORDER_PIPELINE_STATUSES, FORWARD_DC_STATUSES, FORWARD_EWAY_STATUSES } from "@/lib/order-status";
 import type { Prisma, OrderStatus } from "@prisma/client";
 
 const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
@@ -23,17 +22,35 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
   const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
   const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
   const financeSubTab = typeof searchParams.ftab === "string" ? searchParams.ftab : (typeof searchParams.financeTab === "string" ? searchParams.financeTab : "dc");
+  const subTab = (financeSubTab === "eway" || financeSubTab === "e-way" || financeSubTab === "eWay") ? "eway" : "dc";
+  const forwardStatuses = subTab === "eway" ? FORWARD_EWAY_STATUSES : FORWARD_DC_STATUSES;
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "FINANCE"));
 
   if (selectedId) {
-    const correctPage = await getCorrectOrderPage(selectedId, STATUS_FILTER, limit);
-    if (correctPage && correctPage !== page) {
-      redirect(`/dashboard/finance?page=${correctPage}&limit=${limit}&selected=${selectedId}`);
+    const selectedOrder = await prisma.order.findUnique({ where: { id: selectedId }, select: { status: true } });
+    if (selectedOrder) {
+      const selectedSubTab = FORWARD_EWAY_STATUSES.includes(selectedOrder.status) ? "eway" : "dc";
+      const selectedStatuses = selectedSubTab === "eway" ? FORWARD_EWAY_STATUSES : FORWARD_DC_STATUSES;
+      const correctPage = await getCorrectOrderPage(selectedId, selectedStatuses, limit);
+      if (correctPage !== null && (correctPage !== page || selectedSubTab !== subTab)) {
+        const params = new URLSearchParams();
+        for (const [key, value] of Object.entries(searchParams)) {
+          if (typeof value === "string") params.set(key, value);
+        }
+        params.set("page", String(correctPage));
+        params.set("limit", String(limit));
+        params.set("selected", selectedId);
+        params.set("ftab", selectedSubTab);
+        redirect(`/dashboard/finance?${params.toString()}`);
+      }
     }
   }
 
-  const baseWhere: Prisma.OrderWhereInput = { status: { in: STATUS_FILTER } };
+  // Rows are scoped to the active sub-tab from the query itself so that a
+  // generated DC / E-Way bill (which flips the status to *_GENERATED) never
+  // falls out of the table after saving.
+  const baseWhere: Prisma.OrderWhereInput = { status: { in: forwardStatuses } };
   const where: Prisma.OrderWhereInput = search ? {
     ...baseWhere,
     OR: [
@@ -54,11 +71,29 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
   if (ewayFilters.length && !where.dockets) where.dockets = { some: { AND: ewayFilters } };
   if (columnFilters.clientName) where.clientName = { in: columnFilters.clientName };
   if (columnFilters.deliveryLocation) where.deliveryLocation = { in: columnFilters.deliveryLocation };
-  if (columnFilters.status) where.status = { in: columnFilters.status as OrderStatus[] };
+  if (columnFilters.status) {
+    // Keep the pick inside the active sub-tab so filtered rows cannot jump
+    // into a table that does not render them.
+    where.status = { in: (columnFilters.status as OrderStatus[]).filter(s => forwardStatuses.includes(s)) };
+  }
   if (columnFilters.totalQuantity) where.totalQuantity = { in: columnFilters.totalQuantity.map(Number) };
   andFilterConditions(where, collectBlankTokenConditions(columnFilters, { dcNumber: "dcNumber" }));
 
-  const totalCount = await prisma.order.count({ where });
+  const pipelineStatuses = columnFilters.status
+    ? (columnFilters.status as OrderStatus[]).filter(s => STATUS_FILTER.includes(s))
+    : STATUS_FILTER;
+  const dcPendingStatuses = (["IN_PROVISIONING", "DC_REQUESTED", "RTO_DC_REQUESTED"] as OrderStatus[])
+    .filter(s => !columnFilters.status || (columnFilters.status as OrderStatus[]).includes(s));
+
+  const [totalCount, pipelineTotalCount, pendingDC] = await Promise.all([
+    prisma.order.count({ where }),
+    prisma.order.count({ where: { ...where, status: { in: pipelineStatuses } } }),
+    prisma.order.count({ where: { ...where, status: { in: dcPendingStatuses } } }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+  const safePage = Math.min(page, totalPages);
+
   const rawOrders = await prisma.order.findMany({
     where,
     include: {
@@ -72,7 +107,7 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
       },
     },
     orderBy: { createdAt: "desc" },
-    skip: (page - 1) * limit,
+    skip: (safePage - 1) * limit,
     take: limit,
   });
 
@@ -136,47 +171,6 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
     .map(r => ({ value: r.ewayBillNumber ?? "(Blank)", count: r._count._all }))
     .sort((a, b) => a.value.localeCompare(b.value));
 
-  const dcForwardRaw = rawOrders.filter(o => o.status === "IN_PROVISIONING" || o.status === "DC_REQUESTED" || o.status === "RTO_DC_REQUESTED");
-  const ewayForwardRaw = rawOrders.filter(o => o.status === "EWAY_BILL_REQUESTED" || o.status === "RTO_EWAY_BILL_REQUESTED");
-  const dcForwardOrders = dcForwardRaw.map(o => ({
-    ...o,
-    deliveryChallans: o.deliveryChallans.map(dc => ({
-      ...dc,
-      dcDate: dc.dcDate.toISOString(),
-      taxableValue: dc.taxableValue ? Number(dc.taxableValue) : null,
-      igst: dc.igst ? Number(dc.igst) : null,
-      totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null,
-      items: dc.items.map(i => ({
-        ...i,
-        rate: Number(i.rate),
-        amount: Number(i.amount),
-        taxableValue: i.taxableValue ? Number(i.taxableValue) : null,
-        igstRate: i.igstRate ? Number(i.igstRate) : null,
-        igstAmount: i.igstAmount ? Number(i.igstAmount) : null,
-      })),
-    })),
-  }));
-  const ewayForwardOrders = ewayForwardRaw.map(o => ({
-    ...o,
-    deliveryChallans: o.deliveryChallans.map(dc => ({
-      ...dc,
-      dcDate: dc.dcDate.toISOString(),
-      taxableValue: dc.taxableValue ? Number(dc.taxableValue) : null,
-      igst: dc.igst ? Number(dc.igst) : null,
-      totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null,
-      items: dc.items.map(i => ({
-        ...i,
-        rate: Number(i.rate),
-        amount: Number(i.amount),
-        taxableValue: i.taxableValue ? Number(i.taxableValue) : null,
-        igstRate: i.igstRate ? Number(i.igstRate) : null,
-        igstAmount: i.igstAmount ? Number(i.igstAmount) : null,
-      })),
-    })),
-  }));
-
-  const pendingDC = dcForwardOrders.filter(o => o.status === "IN_PROVISIONING" || o.status === "DC_REQUESTED" || o.status === "RTO_DC_REQUESTED").length;
-
   // Reverse pickups stay visible after they are generated — otherwise the row
   // vanishes from this table the moment finance hits "save".
   const rpRequests = await prisma.reversePickupRequest.findMany({
@@ -196,15 +190,12 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
   const rpDcRequests = rpRequests.filter(r => r.status === "DC_REQUESTED" || r.status === "DC_GENERATED");
   const rpEwayRequests = rpRequests.filter(r => r.status === "EWAY_BILL_REQUESTED" || r.status === "EWAY_BILL_GENERATED");
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
-  const safePage = Math.min(page, totalPages);
   const activeTab = searchParams.tab === "reverse" ? "reverse" : "forward";
   // Badge = cases still waiting on finance, not every case shown in the tab.
   const reversePending = rpRequests.filter(r => r.status === "DC_REQUESTED" || r.status === "EWAY_BILL_REQUESTED").length;
 
-  const subTab = (financeSubTab === "eway" || financeSubTab === "e-way" || financeSubTab === "eWay") ? "eway" : "dc";
   const reverseSubTab = ((searchParams.rtab === "eway" || searchParams.rtab === "e-way" || searchParams.rtab === "eWay") ? "eway" : "dc");
-  const forwardOrdersToShow = subTab === "eway" ? ewayForwardOrders : dcForwardOrders;
+  const forwardOrdersToShow = orders;
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -236,7 +227,7 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
           </div>
           <div>
             <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Total Orders</p>
-            <p className="text-2xl font-bold text-primary mt-1">{totalCount}</p>
+            <p className="text-2xl font-bold text-primary mt-1">{pipelineTotalCount}</p>
           </div>
         </div>
       </div>
