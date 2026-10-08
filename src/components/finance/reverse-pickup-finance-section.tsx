@@ -29,6 +29,13 @@ interface Props {
 
 const HEADERS = ["Request #", "Serial #", "Model", "Employee", "Status", "DC No", "E-Way Bill", "Action"];
 
+const DC_BADGES: Record<string, { label: string; color: string }> = {
+  DC_REQUESTED:        { label: "DC Requested",   color: "bg-orange-100 text-orange-700" },
+  DC_GENERATED:        { label: "DC Generated",   color: "bg-green-100 text-green-700" },
+  EWAY_BILL_REQUESTED: { label: "E-Way Bill Req.", color: "bg-yellow-100 text-yellow-700" },
+  EWAY_BILL_GENERATED: { label: "E-Way Generated", color: "bg-green-100 text-green-700" },
+};
+
 export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManage, dcIdMap, reverseSubTab = "dc" }: Props) {
   const { toast } = useToast();
   const router = useRouter();
@@ -85,8 +92,8 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
       setEwayInputs(prev => { const n = { ...prev }; delete n[requestId]; return n; });
       setEwayFiles(prev => { const n = { ...prev }; delete n[requestId]; return n; });
       router.refresh();
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "error" });
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : String(err), variant: "error" });
     } finally { setSaving(null); }
   }
 
@@ -142,7 +149,8 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
               </thead>
               <tbody className="divide-y">
                 {dcRequests.map(r => {
-                  const dcDone = r.status === "DC_GENERATED";
+                  const dcDone = r.status !== "DC_REQUESTED";
+                  const badge = DC_BADGES[r.status] ?? { label: r.status, color: "bg-orange-100 text-orange-700" };
                   return (
                   <tr key={r.id} className="hover:bg-muted/10 transition-colors">
                     <td className="px-6 py-4 font-mono text-xs font-semibold text-indigo-600">{r.requestNumber}</td>
@@ -150,8 +158,8 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
                     <td className="px-6 py-4">{r.model}</td>
                     <td className="px-6 py-4">{r.employeeName}</td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${dcDone ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
-                        {dcDone ? "DC Generated" : "DC Requested"}
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${badge.color}`}>
+                        {badge.label}
                       </span>
                     </td>
                     <td className="px-6 py-4 font-mono text-xs">

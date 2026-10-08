@@ -30,10 +30,11 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
   if (selectedId) {
     const selectedOrder = await prisma.order.findUnique({ where: { id: selectedId }, select: { status: true } });
     if (selectedOrder) {
-      const selectedSubTab = FORWARD_EWAY_STATUSES.includes(selectedOrder.status) ? "eway" : "dc";
-      const selectedStatuses = selectedSubTab === "eway" ? FORWARD_EWAY_STATUSES : FORWARD_DC_STATUSES;
-      const correctPage = await getCorrectOrderPage(selectedId, selectedStatuses, limit);
-      if (correctPage !== null && (correctPage !== page || selectedSubTab !== subTab)) {
+      const visibleHere = forwardStatuses.includes(selectedOrder.status);
+      const targetTab = visibleHere ? subTab : "dc";
+      const targetStatuses = visibleHere ? forwardStatuses : FORWARD_DC_STATUSES;
+      const correctPage = await getCorrectOrderPage(selectedId, targetStatuses, limit);
+      if (correctPage !== null && (correctPage !== page || targetTab !== subTab)) {
         const params = new URLSearchParams();
         for (const [key, value] of Object.entries(searchParams)) {
           if (typeof value === "string") params.set(key, value);
@@ -41,7 +42,7 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
         params.set("page", String(correctPage));
         params.set("limit", String(limit));
         params.set("selected", selectedId);
-        params.set("ftab", selectedSubTab);
+        params.set("ftab", targetTab);
         redirect(`/dashboard/finance?${params.toString()}`);
       }
     }
@@ -187,7 +188,9 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
       .map(dc => [dc.reversePickupRequestId, dc.id])
   );
 
-  const rpDcRequests = rpRequests.filter(r => r.status === "DC_REQUESTED" || r.status === "DC_GENERATED");
+  // The reverse DC sub-tab keeps the case through the e-way stage as well, so
+  // it never leaves the table the moment finance requests/generates the e-way bill.
+  const rpDcRequests = rpRequests;
   const rpEwayRequests = rpRequests.filter(r => r.status === "EWAY_BILL_REQUESTED" || r.status === "EWAY_BILL_GENERATED");
 
   const activeTab = searchParams.tab === "reverse" ? "reverse" : "forward";
