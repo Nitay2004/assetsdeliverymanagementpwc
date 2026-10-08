@@ -31,8 +31,8 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
     const selectedOrder = await prisma.order.findUnique({ where: { id: selectedId }, select: { status: true } });
     if (selectedOrder) {
       const visibleHere = forwardStatuses.includes(selectedOrder.status);
-      const targetTab = visibleHere ? subTab : "dc";
-      const targetStatuses = visibleHere ? forwardStatuses : FORWARD_DC_STATUSES;
+      const targetTab = visibleHere ? subTab : (FORWARD_EWAY_STATUSES.includes(selectedOrder.status) ? "eway" : "dc");
+      const targetStatuses = targetTab === "eway" ? FORWARD_EWAY_STATUSES : FORWARD_DC_STATUSES;
       const correctPage = await getCorrectOrderPage(selectedId, targetStatuses, limit);
       if (correctPage !== null && (correctPage !== page || targetTab !== subTab)) {
         const params = new URLSearchParams();
@@ -188,9 +188,7 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
       .map(dc => [dc.reversePickupRequestId, dc.id])
   );
 
-  // The reverse DC sub-tab keeps the case through the e-way stage as well, so
-  // it never leaves the table the moment finance requests/generates the e-way bill.
-  const rpDcRequests = rpRequests;
+  const rpDcRequests = rpRequests.filter(r => r.status === "DC_REQUESTED" || r.status === "DC_GENERATED");
   const rpEwayRequests = rpRequests.filter(r => r.status === "EWAY_BILL_REQUESTED" || r.status === "EWAY_BILL_GENERATED");
 
   const activeTab = searchParams.tab === "reverse" ? "reverse" : "forward";
@@ -199,6 +197,19 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
 
   const reverseSubTab = ((searchParams.rtab === "eway" || searchParams.rtab === "e-way" || searchParams.rtab === "eWay") ? "eway" : "dc");
   const forwardOrdersToShow = orders;
+
+  // Sub-tab links keep search / filters / reverse state and only reset the
+  // page, so switching tabs never silently drops the active view.
+  const subTabHref = (ftab: "dc" | "eway") => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(searchParams)) {
+      if (typeof value === "string") params.set(key, value);
+    }
+    params.set("ftab", ftab);
+    params.delete("page");
+    params.delete("selected");
+    return `/dashboard/finance?${params.toString()}`;
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -239,13 +250,13 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
         <div className="space-y-4">
           <div className="inline-flex rounded-lg border bg-muted/40 p-1">
             <a
-              href={`/dashboard/finance?ftab=dc${reverseSubTab === "eway" ? '&rtab=eway' : (searchParams.rtab === 'dc' ? '&rtab=dc' : '')}`}
+              href={subTabHref("dc")}
               className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${subTab === "dc" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               DC
             </a>
             <a
-              href={`/dashboard/finance?ftab=eway${reverseSubTab === "eway" ? '&rtab=eway' : (searchParams.rtab ? `&rtab=${searchParams.rtab}` : '')}`}
+              href={subTabHref("eway")}
               className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${subTab === "eway" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               E-Way Bill

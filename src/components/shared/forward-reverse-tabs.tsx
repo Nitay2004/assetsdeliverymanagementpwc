@@ -7,8 +7,8 @@ import { ArrowRight, RotateCcw } from "lucide-react";
  * Top-level Forward / Reverse switch for the finance and logistics modules.
  *
  * Mirrors ProvisioningTabs: Forward is the default and carries no `tab` param,
- * so plain links (and PaginationBar, which rebuilds the query string) land on
- * Forward instead of silently keeping a stale tab.
+ * so plain links land on Forward instead of silently keeping a stale tab.
+ * In-app controls (pagination, sub-tab links) preserve the current params.
  */
 export function ForwardReverseTabs({ reverseCount }: { reverseCount?: number }) {
   const router = useRouter();
