@@ -15,8 +15,14 @@ const prisma = new PrismaClient({ adapter });
 
 async function main() {
   const email = 'admin@devit.com';
-  const password = 'password123';
-  
+  // No default password in the repo: set SEED_ADMIN_PASSWORD in .env before
+  // running `node seed.mjs`. Existing admins are untouched (upsert update:{}).
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  if (!password) {
+    console.error('SEED_ADMIN_PASSWORD is not set. Add it to .env and retry.');
+    process.exit(1);
+  }
+
   const passwordHash = await bcrypt.hash(password, 10);
 
   const user = await prisma.user.upsert({
@@ -30,8 +36,8 @@ async function main() {
     },
   });
 
-  console.log(`✅ Created user: ${user.email}`);
-  console.log(`🔑 Password: ${password}`);
+  console.log(`✅ Admin user ready: ${user.email}`);
+  console.log('🔑 Password taken from SEED_ADMIN_PASSWORD (not stored in the repo)');
 }
 
 main()
