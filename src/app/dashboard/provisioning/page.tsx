@@ -161,10 +161,15 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     .map(r => ({ value: r.provisioningLocation ?? "(Blank)", count: r._count._all }))
     .sort((a, b) => a.value.localeCompare(b.value));
 
-  const engineers = [...new Set(orders.map(o => o.engineerName).filter(Boolean))] as string[];
-  const inProvisioningCount = orders.filter(o => ACTIVE_PROVISIONING_STATUSES.includes(o.status)).length;
-  const handedOverCount = orders.filter(o => !ACTIVE_PROVISIONING_STATUSES.includes(o.status)).length;
-  const totalAssets = orders.reduce((sum, o) => sum + o.assets.length, 0);
+  // Cards, totals and the engineer dropdown must cover the whole filtered
+  // result set — deriving them from `orders` (one page) made them page-dependent.
+  const [engineerGroups, inProvisioningCount, handedOverCount, totalAssets] = await Promise.all([
+    prisma.order.findMany({ where, distinct: ["engineerName"], select: { engineerName: true }, orderBy: { engineerName: "asc" } }),
+    prisma.order.count({ where: { AND: [where, { status: { in: ACTIVE_PROVISIONING_STATUSES } }] } }),
+    prisma.order.count({ where: { AND: [where, { status: { notIn: ACTIVE_PROVISIONING_STATUSES } }] } }),
+    prisma.asset.count({ where: { order: where } }),
+  ]);
+  const engineers = engineerGroups.map(o => o.engineerName).filter(Boolean) as string[];
 
   const qcFilters = parseColumnFilters(searchParams, QC_FILTER_KEYS);
   const qcWhere: Prisma.InventoryItemWhereInput = {

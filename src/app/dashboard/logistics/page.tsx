@@ -145,10 +145,14 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
     .map(r => ({ value: r.ewayBillNumber ?? "(Blank)", count: r._count._all }))
     .sort((a, b) => a.value.localeCompare(b.value));
 
-  const needsDocket = rawOrders.filter(o => o.status === "DOCKET_REQUESTED").length;
-  const awaitingFinance = rawOrders.filter(o => ["DOCKET_ASSIGNED", "DC_REQUESTED", "EWAY_BILL_REQUESTED", "RTO_DC_REQUESTED", "RTO_EWAY_BILL_REQUESTED"].includes(o.status)).length;
-  const readyToPack = rawOrders.filter(o => ["DC_GENERATED", "EWAY_BILL_GENERATED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_GENERATED"].includes(o.status)).length;
-  const inTransit = rawOrders.filter(o => ["DISPATCHED", "DELIVERED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"].includes(o.status)).length;
+  // Stat cards must cover the whole filtered result set — computing them from
+  // `rawOrders` (one page) made the numbers depend on which page you were on.
+  const [needsDocket, awaitingFinance, readyToPack, inTransit] = await Promise.all([
+    prisma.order.count({ where: { AND: [where, { status: "DOCKET_REQUESTED" }] } }),
+    prisma.order.count({ where: { AND: [where, { status: { in: ["DOCKET_ASSIGNED", "DC_REQUESTED", "EWAY_BILL_REQUESTED", "RTO_DC_REQUESTED", "RTO_EWAY_BILL_REQUESTED"] } }] } }),
+    prisma.order.count({ where: { AND: [where, { status: { in: ["DC_GENERATED", "EWAY_BILL_GENERATED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_GENERATED"] } }] } }),
+    prisma.order.count({ where: { AND: [where, { status: { in: ["DISPATCHED", "DELIVERED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"] } }] } }),
+  ]);
 
   const warehouses = await getWarehouses();
 
