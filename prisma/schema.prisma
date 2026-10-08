@@ -153,6 +153,9 @@ model Order {
   deliveryChallans     DeliveryChallan[]
   rtoRecords           RtoRecord[]
 
+  @@index([status])
+  @@index([createdAt])
+  @@index([updatedAt])
   @@map("orders")
 }
 
@@ -311,6 +314,7 @@ model InventoryItem {
 
   @@index([status])
   @@index([invoicingWarehouse])
+  @@index([employeeName])
   @@map("inventory_items")
 }
 
@@ -365,6 +369,8 @@ model Asset {
   order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
 
+  @@index([orderId])
+  @@index([inventoryItemId])
   @@map("assets")
 }
 
@@ -583,6 +589,10 @@ model ReversePickupRequest {
 
   @@index([expectedPickupDate])
   @@index([sla])
+  @@index([status])
+  @@index([serialNumber])
+  @@index([docketNumber])
+  @@index([employeeName])
   @@map("reverse_pickup_requests")
 }
 
@@ -635,6 +645,9 @@ model Docket {
 
   order                Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@index([orderId])
+  @@index([docketNumber])
+  @@index([ewayBillNumber])
   @@map("dockets")
 }
 
@@ -698,6 +711,8 @@ model DeliveryChallan {
   warehouse               Warehouse?            @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   items                   DeliveryChallanItem[]
 
+  @@index([orderId])
+  @@index([reversePickupRequestId])
   @@map("delivery_challans")
 }
 
