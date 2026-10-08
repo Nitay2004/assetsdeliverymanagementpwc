@@ -22,7 +22,13 @@ jobs:
       # no-explicit-any backlog (see APP-AUDIT-REPORT) is being cleared.
       - name: Quality gate (typecheck + lint)
         run: |
-          docker run --rm -v "$PWD":/repo -w /repo -v ads-npm-cache:/root/.npm node:22-alpine sh -c '
+          # --user is essential: the docker daemon runs as root, so without it
+          # npm ci writes root-owned node_modules into the checkout and the next
+          # actions/checkout fails with EACCES trying to clean it. The npm cache
+          # lives on a tmpfs path because the named volume is root-owned.
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
+            -v "$PWD":/repo -w /repo node:22-alpine sh -c '
             npm ci --no-audit --no-fund
             npx tsc --noEmit
             npm run lint || echo "::warning::lint reported issues (non-blocking)"
