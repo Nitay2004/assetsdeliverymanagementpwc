@@ -467,9 +467,12 @@ export function InventoryDetailDrawer({
   const rawPrevious = records !== null ? (currentRecord ? records.slice(1) : records) : [];
   const seen = new Set<string>();
   const previousRecords = rawPrevious.filter((r) => {
-    const name = r.employeeName ?? "";
-    if (!name || seen.has(name)) return false;
-    seen.add(name);
+    const name = (r.employeeName ?? "").trim();
+    // Named records dedupe by name; nameless records are kept (keyed by id) so
+    // imported history is never silently hidden from the drawer.
+    const key = name || r.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 
@@ -548,7 +551,7 @@ export function InventoryDetailDrawer({
                     {previousRecords.map((r, i) => (
                       <AssignmentCard
                         key={r.id}
-                        label={i === 0 ? "Previous User" : `Previous #${i + 1}`}
+                        label={r.employeeName ? (i === 0 ? "Previous User" : `Previous #${i + 1}`) : "Unassigned record"}
                         values={r as unknown as Record<string, unknown>}
                       />
                     ))}
