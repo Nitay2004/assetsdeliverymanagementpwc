@@ -8,11 +8,12 @@ const IV_BYTES = 12;
 const TOTP_STEP_SECONDS = 30;
 // Authenticator apps normally need +/-1 step, but the machines this app runs on
 // are frequently minutes out of sync with real time (unsynced CMOS clock, no NTP
-// available), which makes a strict window reject perfectly valid codes. Five steps
-// of tolerance covers that drift. The trade-off is that a captured code stays
-// usable for 2.5 minutes instead of 30 seconds — mitigated by the 5-attempt limit
-// on the verification endpoint and by the replay guard below.
-const TOTP_EPOCH_TOLERANCE_SECONDS = 150;
+// available), which makes a strict window reject perfectly valid codes. Measured
+// skew on STAGE-APP1 was ~345s, so tolerance is +/-600s (10 minutes) to cover it.
+// The trade-off is that a captured code stays usable for ~20 minutes instead of
+// 30 seconds — mitigated by the 5-attempt limit on the verification endpoint and
+// by the replay guard below (a matched step can never be reused).
+const TOTP_EPOCH_TOLERANCE_SECONDS = 600;
 export const RECOVERY_CODE_COUNT = 10;
 
 // Crockford-ish alphabet: no I/L/O/U/0/1, so codes are unambiguous when read
