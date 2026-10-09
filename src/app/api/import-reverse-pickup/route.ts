@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 import { normalizeOdaLocation } from "@/lib/location-utils";
 import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
+import { STATUS_LABELS } from "@/lib/reverse-pickup-config";
 import { nextSequenceNumber } from "@/lib/sequence-number";
 import { toDenseRow, toDenseRows } from "@/lib/sheet-cells";
 
@@ -19,6 +20,7 @@ const skippedHeaders = new Set([
 
 const baseMapping: Record<string, string> = {
   "Request Number": "requestNumber",
+  "Status": "status",
   "Serial Number": "serialNumber",
   "Employee Name": "employeeName",
   "Email ID": "emailId",
@@ -105,6 +107,9 @@ const baseMapping: Record<string, string> = {
 
 const aliases: Record<string, string> = {
   "employee name": "employeeName",
+  "status": "status",
+  "current status": "status",
+  "request status": "status",
   "emp name": "employeeName",
   "name of user": "employeeName",
   "serial number": "serialNumber",
@@ -226,6 +231,60 @@ const intFields = new Set([
   "year",
 ]);
 
+const statusToEnum: Record<string, string> = {
+  REQUESTED: "REQUESTED",
+  PARTNER_ASSIGNED: "PARTNER_ASSIGNED",
+  DOCKET_REQUESTED: "DOCKET_REQUESTED",
+  DOCKET_ASSIGNED: "DOCKET_ASSIGNED",
+  INSPECTED: "INSPECTED",
+  PICKED_UP: "PICKED_UP",
+  PICKUP_CANCELLED: "PICKUP_CANCELLED",
+  DUPLICATE: "DUPLICATE",
+  ALREADY_SUBMITTED_TO_PWC_OFFICE: "ALREADY_SUBMITTED_TO_PWC_OFFICE",
+  PENDING: "PENDING",
+  PWC_CONFIRMATION_AWAITED: "PWC_CONFIRMATION_AWAITED",
+  GATEPASS_PENDING: "GATEPASS_PENDING",
+  ALIGN_FOR_PICKUP: "ALIGN_FOR_PICKUP",
+  IN_TRANSIT: "IN_TRANSIT",
+  ON_HOLD: "ON_HOLD",
+  RTO_CASE: "RTO_CASE",
+  LOST_DEVICE: "LOST_DEVICE",
+  RECEIVED_AT_WAREHOUSE: "RECEIVED_AT_WAREHOUSE",
+  QC_CLEANED: "QC_CLEANED",
+  QC_COMPLETED: "QC_COMPLETED",
+  CASE_LOGGED_WITH_HP: "CASE_LOGGED_WITH_HP",
+  DC_REQUESTED: "DC_REQUESTED",
+  DC_GENERATED: "DC_GENERATED",
+  EWAY_BILL_REQUESTED: "EWAY_BILL_REQUESTED",
+  EWAY_BILL_GENERATED: "EWAY_BILL_GENERATED",
+  BLANCO_CLEARED: "BLANCO_CLEARED",
+  BLANCO_PURGED: "BLANCO_PURGED",
+  BLANCO_CERTIFIED: "BLANCO_CERTIFIED",
+  COMPLETED: "COMPLETED",
+};
+
+const labelToStatus: Record<string, string> = {};
+for (const [enumValue, label] of Object.entries(STATUS_LABELS)) {
+  labelToStatus[label.toLowerCase()] = statusToEnum[enumValue] ?? enumValue;
+  labelToStatus[enumValue.replace(/_/g, " ").toLowerCase()] = statusToEnum[enumValue] ?? enumValue;
+}
+
+// The shared PWC tracking sheet marks pickup progress with these display values,
+// not with workflow-status labels. Map them to the closest enum state so an
+// upload doesn't silently reset everything back to REQUESTED.
+labelToStatus["received"] = "RECEIVED_AT_WAREHOUSE";
+labelToStatus["pickup pending"] = "REQUESTED";
+labelToStatus["pickup initiated"] = "PARTNER_ASSIGNED";
+
+function resolveStatus(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const normalized = raw.trim().toUpperCase().replace(/\s+/g, "_");
+  if (statusToEnum[normalized]) return statusToEnum[normalized];
+  const byLabel = labelToStatus[raw.trim().toLowerCase()];
+  if (byLabel) return byLabel;
+  return null;
+}
+
 function excelSerialToDate(serial: number): Date {
   return new Date((serial - 25569) * 86400000);
 }
@@ -243,6 +302,9 @@ function parseValue(value: string, field: string): unknown {
   if (intFields.has(field)) {
     const n = parseInt(value, 10);
     return isNaN(n) ? null : n;
+  }
+  if (field === "status") {
+    return resolveStatus(value) ?? null;
   }
   return value;
 }
@@ -387,7 +449,6 @@ export async function POST(request: Request) {
 
     data.requestNumber = `RPU-${String(requestCounter).padStart(4, "0")}`;
     requestCounter++;
-    data.status = "REQUESTED";
 
     if (data.odaLocation !== undefined && data.odaLocation !== null) {
       data.odaLocation = normalizeOdaLocation(String(data.odaLocation));
