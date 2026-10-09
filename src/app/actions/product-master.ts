@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 export async function getProducts() {
   const user = await getSession();
   requirePermission(user, "product-master", "canView");
-  const products = await prisma.productMaster.findMany({ orderBy: { updatedAt: "desc" } });
+  const products = await prisma.productMaster.findMany({ orderBy: [{ createdAt: "desc" }, { id: "asc" }] });
   return products.map(p => ({
     ...p,
     gstRate: p.gstRate ? Number(p.gstRate) : null,

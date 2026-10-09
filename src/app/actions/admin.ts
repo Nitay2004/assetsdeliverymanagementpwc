@@ -18,7 +18,7 @@ async function requireAdmin() {
 export async function getUsers() {
   await requireAdmin();
   return prisma.user.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     select: {
       id: true,
       email: true,

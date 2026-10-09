@@ -55,11 +55,11 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
       take: pageSize,
       include: {
         assignmentRecords: {
-          orderBy: { assignedAt: "desc" },
+          orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
           take: 1,
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     }),
     prisma.inventoryItem.count({ where }),
     prisma.inventoryItem.count({ where: { status: "NEW" } }),

@@ -43,7 +43,7 @@ export async function globalSearch(raw: string): Promise<SearchResult[]> {
         ],
       },
       take: 5,
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     }),
     prisma.order.findMany({
       where: {
@@ -55,7 +55,7 @@ export async function globalSearch(raw: string): Promise<SearchResult[]> {
         ],
       },
       take: 5,
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     }),
     prisma.asset.findMany({
       where: {
@@ -68,7 +68,7 @@ export async function globalSearch(raw: string): Promise<SearchResult[]> {
         inventoryItem: { select: { serialNumber: true } },
       },
       take: 5,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     }),
     prisma.docket.findMany({
       where: {
@@ -79,7 +79,7 @@ export async function globalSearch(raw: string): Promise<SearchResult[]> {
       },
       include: { order: { select: { clientName: true } } },
       take: 5,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     }),
   ]);
 

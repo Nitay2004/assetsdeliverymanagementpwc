@@ -103,12 +103,12 @@ export default async function DashboardPage(props: {
     }),
     prisma.order.findMany({
       where: orderWhere,
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       take: 5,
     }),
     prisma.inventoryItem.findMany({
       where: { ...(inventoryWhere ?? {}), status: "ALLOCATED" },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       take: 5,
     }),
     prisma.reversePickupRequest.groupBy({

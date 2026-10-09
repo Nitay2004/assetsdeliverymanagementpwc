@@ -61,7 +61,7 @@ export async function generateEwayBill(orderId: string, ewayBillNumber: string, 
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { dockets: { orderBy: { createdAt: "desc" }, take: 1 } },
+    include: { dockets: { orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: 1 } },
   });
   if (!order) throw new Error("Order not found.");
 

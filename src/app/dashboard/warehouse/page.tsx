@@ -58,7 +58,7 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
           include: { inventoryItem: true },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     }),
     prisma.order.count({ where: allocatedWhere }),
     prisma.order.findMany({
@@ -69,19 +69,19 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
         },
         dockets: true,
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip: (page - 1) * limit,
       take: limit,
     }),
     prisma.inventoryItem.findMany({
       where: { status: "AVAILABLE" },
-      orderBy: { serialNumber: "asc" },
+      orderBy: [{ serialNumber: "asc" }, { id: "asc" }],
     }),
     prisma.inventoryItem.findMany({
       where: {
         OR: [{ status: "QC_PENDING" }, { qcCompletedAt: { not: null } }],
       },
-      orderBy: { qcRequestedAt: "desc" },
+      orderBy: [{ qcRequestedAt: "desc" }, { id: "desc" }],
     }),
   ]);
 

@@ -233,11 +233,11 @@ export default async function ReversePickupPage({
   const [requests, totalCount] = await Promise.all([
     prisma.reversePickupRequest.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip,
       take: limit,
       include: {
-        deliveryChallans: { select: { id: true }, orderBy: { createdAt: "desc" }, take: 1 },
+        deliveryChallans: { select: { id: true }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: 1 },
       },
     }),
     prisma.reversePickupRequest.count({ where }),

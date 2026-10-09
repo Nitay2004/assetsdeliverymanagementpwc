@@ -254,7 +254,7 @@ export async function getDCsByOrder(orderId: string) {
   const dcs = await prisma.deliveryChallan.findMany({
     where: { orderId },
     include: { items: true },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
   });
   return dcs.map(dc => ({
     ...dc,
@@ -524,7 +524,7 @@ export async function getOrderForDc(orderId: string) {
         include: { inventoryItem: true },
       },
       dockets: {
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       },
     },
   });

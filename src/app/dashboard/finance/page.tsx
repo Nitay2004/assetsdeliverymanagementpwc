@@ -100,14 +100,14 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
     include: {
       deliveryChallans: {
         include: { items: true, warehouse: true },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       },
-      dockets: { orderBy: { createdAt: "desc" } },
+      dockets: { orderBy: [{ createdAt: "desc" }, { id: "asc" }] },
       assets: {
         include: { inventoryItem: true },
       },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     skip: (safePage - 1) * limit,
     take: limit,
   });
@@ -176,7 +176,7 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
   // vanishes from this table the moment finance hits "save".
   const rpRequests = await prisma.reversePickupRequest.findMany({
     where: { status: { in: ["DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED"] } },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
   });
 
   const rpDcIds = await prisma.deliveryChallan.findMany({

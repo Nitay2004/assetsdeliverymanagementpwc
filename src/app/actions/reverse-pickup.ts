@@ -89,7 +89,7 @@ export async function getReversePickupRequests() {
   requirePermission(user, "reverse-pickup", "canView");
 
   const requests = await prisma.reversePickupRequest.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
   });
 
   return requests;

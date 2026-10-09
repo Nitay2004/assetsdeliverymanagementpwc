@@ -776,7 +776,7 @@ export async function getAssignmentHistory(itemId: string) {
   requirePermission(user, "inventory", "canView");
   const records = await prisma.assignmentRecord.findMany({
     where: { inventoryItemId: itemId },
-    orderBy: { assignedAt: "desc" },
+    orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
   });
   return records.map((r) => ({
     ...r,

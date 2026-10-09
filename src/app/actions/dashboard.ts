@@ -28,9 +28,9 @@ export async function getOrdersByStatus(
       where: { status: { in: statuses } },
       include: {
         assets: { include: { inventoryItem: true } },
-        dockets: { orderBy: { createdAt: "desc" } },
+        dockets: { orderBy: [{ createdAt: "desc" }, { id: "asc" }] },
       },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip,
       take: limit,
     }),
@@ -79,7 +79,7 @@ export async function getReversePickupsByStatus(
   const [raw, total] = await Promise.all([
     prisma.reversePickupRequest.findMany({
       where: { status: { in: statuses } },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip,
       take: limit,
     }),
@@ -113,7 +113,7 @@ export async function getCancelledReversePickups(
   const [raw, total] = await Promise.all([
     prisma.reversePickupRequest.findMany({
       where: { remark: { contains: "cancel", mode: "insensitive" } },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip,
       take: limit,
     }),
@@ -157,7 +157,7 @@ export async function getInventoryBySlaStatus(
   const [raw, total] = await Promise.all([
     prisma.inventoryItem.findMany({
       where: { slaStatus: { equals: slaValue, mode: "insensitive" } },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip,
       take: limit,
     }),
@@ -200,7 +200,7 @@ export async function getInventoryByStatus(
   const [raw, total] = await Promise.all([
     prisma.inventoryItem.findMany({
       where: { status: { equals: statusFilter } },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip,
       take: limit,
     }),
@@ -255,7 +255,7 @@ export async function getInventoryItemsByTrackingKeywords(
   const [raw, total] = await Promise.all([
     prisma.inventoryItem.findMany({
       where,
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip,
       take: limit,
     }),

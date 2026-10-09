@@ -91,10 +91,10 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
       include: {
         assets: {
           include: { inventoryItem: true },
-          orderBy: { createdAt: "asc" },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         },
       },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip: (page - 1) * limit,
       take: limit,
     }),
@@ -186,7 +186,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
 
   const qcPendingItems = await prisma.inventoryItem.findMany({
     where: qcWhere,
-    orderBy: { qcRequestedAt: "desc" },
+    orderBy: [{ qcRequestedAt: "desc" }, { id: "desc" }],
   });
 
   const serializedQc: QcItem[] = qcPendingItems.map(i => ({
@@ -237,7 +237,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const hpRows = activeTab === "hp"
     ? await prisma.reversePickupRequest.findMany({
         where: { status: "CASE_LOGGED_WITH_HP" },
-        orderBy: { hpCaseLoggedAt: "desc" },
+        orderBy: [{ hpCaseLoggedAt: "desc" }, { id: "desc" }],
         skip: (page - 1) * limit,
         take: limit,
       })

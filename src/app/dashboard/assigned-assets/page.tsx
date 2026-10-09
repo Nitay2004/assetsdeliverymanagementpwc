@@ -84,7 +84,7 @@ export default async function AssignedAssetsPage(props: {
     by: ["inventoryItemId"],
     where: { inventoryItem: where },
     _max: { assignedAt: true },
-    orderBy: { _max: { assignedAt: "desc" } },
+    orderBy: [{ _max: { assignedAt: "desc" } }, { _max: { id: "desc" } }],
   });
 
   const assignmentOrder = new Map(
@@ -98,7 +98,7 @@ export default async function AssignedAssetsPage(props: {
       where: { id: { in: [...assignmentOrder.keys()] } },
       include: {
         assignmentRecords: {
-          orderBy: { assignedAt: "desc" },
+          orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
           take: 1,
         },
       },
@@ -120,7 +120,7 @@ export default async function AssignedAssetsPage(props: {
         by: ["model"],
         where: { status: "ALLOCATED" },
         _count: { id: true },
-        orderBy: { _count: { id: "desc" } },
+        orderBy: [{ _count: { id: "desc" } }, { _max: { id: "desc" } }],
         take: 5,
       }),
     ]);

@@ -64,15 +64,15 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
   const rawOrders = await prisma.order.findMany({
     where,
     include: {
-      dockets: { orderBy: { createdAt: "desc" } },
+      dockets: { orderBy: [{ createdAt: "desc" }, { id: "asc" }] },
       assets: { include: { inventoryItem: true } },
       deliveryChallans: {
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
         take: 1,
       },
       rtoRecords: true,
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     skip: (page - 1) * limit,
     take: limit,
   });
@@ -160,7 +160,7 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
     // Stays in the list once the docket is assigned so the row does not vanish
     // right after logistics hits save.
     where: { status: { in: ["DOCKET_REQUESTED", "DOCKET_ASSIGNED"] } },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
   });
 
   const serializedRp = rpDocketRequests.map(r => ({

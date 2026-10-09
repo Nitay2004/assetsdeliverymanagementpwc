@@ -14,7 +14,7 @@ export default async function WarrantyPage(props: { searchParams: Promise<Record
     where: {
       status: { in: ["ALLOCATED", "AVAILABLE"] },
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
   });
 
   const withWarranty = items.filter(i => i.warrantyPeriod || i.warrantyEndPeriod).length;

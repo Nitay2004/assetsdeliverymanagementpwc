@@ -19,7 +19,7 @@ async function getNextGrnNumber(): Promise<string> {
 export async function getVendors() {
   const user = await getSession();
   requirePermission(user, "vendor-master", "canView");
-  const vendors = await prisma.vendorMaster.findMany({ orderBy: { updatedAt: "desc" } });
+  const vendors = await prisma.vendorMaster.findMany({ orderBy: [{ createdAt: "desc" }, { id: "asc" }] });
   return vendors;
 }
 
