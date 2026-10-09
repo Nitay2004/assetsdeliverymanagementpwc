@@ -272,9 +272,58 @@ for (const [enumValue, label] of Object.entries(STATUS_LABELS)) {
 // The shared PWC tracking sheet marks pickup progress with these display values,
 // not with workflow-status labels. Map them to the closest enum state so an
 // upload doesn't silently reset everything back to REQUESTED.
+// "Display Status" column common-practice values observed in real files.
 labelToStatus["received"] = "RECEIVED_AT_WAREHOUSE";
 labelToStatus["pickup pending"] = "REQUESTED";
 labelToStatus["pickup initiated"] = "PARTNER_ASSIGNED";
+labelToStatus["asset received in warehouse"] = "RECEIVED_AT_WAREHOUSE";
+labelToStatus["asset received in warehouse "] = "RECEIVED_AT_WAREHOUSE";
+labelToStatus["pickup cancelled"] = "PICKUP_CANCELLED";
+labelToStatus["cancel"] = "PICKUP_CANCELLED";
+labelToStatus["cancelled"] = "PICKUP_CANCELLED";
+labelToStatus["duplicate"] = "DUPLICATE";
+labelToStatus["already submitted to pwc office"] = "ALREADY_SUBMITTED_TO_PWC_OFFICE";
+labelToStatus["submitted to pwc office"] = "ALREADY_SUBMITTED_TO_PWC_OFFICE";
+labelToStatus["pending for gatepass"] = "GATEPASS_PENDING";
+labelToStatus["gatepass pending"] = "GATEPASS_PENDING";
+labelToStatus["pwc confirmation awaited"] = "PWC_CONFIRMATION_AWAITED";
+labelToStatus["pw c confirmation awaited"] = "PWC_CONFIRMATION_AWAITED";
+labelToStatus["align for pickup"] = "ALIGN_FOR_PICKUP";
+labelToStatus["pickup complete (in transit to warehouse)"] = "IN_TRANSIT";
+labelToStatus["in transit"] = "IN_TRANSIT";
+labelToStatus["pickup complete"] = "IN_TRANSIT";
+labelToStatus["on hold"] = "ON_HOLD";
+labelToStatus["hold"] = "ON_HOLD";
+labelToStatus["lost device"] = "LOST_DEVICE";
+labelToStatus["rto case"] = "RTO_CASE";
+labelToStatus["inspection done"] = "INSPECTED";
+labelToStatus["inspected"] = "INSPECTED";
+labelToStatus["pending"] = "PENDING";
+labelToStatus["qe"] = "QC_CLEANED";
+labelToStatus["hardware qc"] = "QC_CLEANED";
+labelToStatus["software qc"] = "QC_COMPLETED";
+labelToStatus["qc done"] = "QC_COMPLETED";
+labelToStatus["qc completed"] = "QC_COMPLETED";
+labelToStatus["case logged with hp"] = "CASE_LOGGED_WITH_HP";
+labelToStatus["blanco cleared"] = "BLANCO_CLEARED";
+labelToStatus["blanco purged"] = "BLANCO_PURGED";
+labelToStatus["blanco certified"] = "BLANCO_CERTIFIED";
+labelToStatus["completed"] = "COMPLETED";
+labelToStatus["close"] = "COMPLETED";
+labelToStatus["closed"] = "COMPLETED";
+labelToStatus["done"] = "COMPLETED";
+labelToStatus["dock requested"] = "DC_REQUESTED";
+labelToStatus["dc requested"] = "DC_REQUESTED";
+labelToStatus["dc generated"] = "DC_GENERATED";
+labelToStatus["dc ready"] = "DC_GENERATED";
+labelToStatus["eway bill requested"] = "EWAY_BILL_REQUESTED";
+labelToStatus["e-way bill requested"] = "EWAY_BILL_REQUESTED";
+labelToStatus["eway bill generated"] = "EWAY_BILL_GENERATED";
+labelToStatus["e-way bill generated"] = "EWAY_BILL_GENERATED";
+labelToStatus["docket requested"] = "DOCKET_REQUESTED";
+labelToStatus["docket assigned"] = "DOCKET_ASSIGNED";
+labelToStatus["assign partner"] = "PARTNER_ASSIGNED";
+labelToStatus["partner assigned"] = "PARTNER_ASSIGNED";
 
 function resolveStatus(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -449,6 +498,16 @@ export async function POST(request: Request) {
 
     data.requestNumber = `RPU-${String(requestCounter).padStart(4, "0")}`;
     requestCounter++;
+
+    // The shared tracking sheet carries the real workflow state in a
+    // "Display Status"-style column (e.g. "Asset Received in Warehouse",
+    // "Pickup Cancelled"). Translate it into the enum so list badges and
+    // status filters reflect the file instead of everything showing "Requested".
+    // An explicit "Status" column still wins.
+    if (!data.status) {
+      const enumStatus = resolveStatus(String(data.displayStatus ?? "").trim());
+      if (enumStatus) data.status = enumStatus;
+    }
 
     if (data.odaLocation !== undefined && data.odaLocation !== null) {
       data.odaLocation = normalizeOdaLocation(String(data.odaLocation));
