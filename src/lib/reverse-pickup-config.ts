@@ -3,6 +3,7 @@ export const TYPE_OPTIONS = [
   { value: "External", label: "External" },
   { value: "Warranty", label: "Warranty" },
   { value: "Insurance", label: "Insurance" },
+  { value: "Office", label: "Office" },
 ];
 
 export const ENTITY_OPTIONS = [

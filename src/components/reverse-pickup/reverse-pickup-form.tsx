@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Users, Upload } from "lucide-react";
 import Link from "next/link";
 import { createReversePickupRequest, getReversePickupDropdowns, addReversePickupDropdownOption, deleteReversePickupDropdownOption, seedReversePickupDropdowns, lookupInventoryBySerial } from "@/app/actions/reverse-pickup";
 import { calculateCutoff } from "@/lib/cutoff-utils";
@@ -14,6 +14,19 @@ import {
 import { calculateSlaStatus } from "@/lib/sla-utils";
 import { useToast } from "@/hooks/use-toast";
 import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
+
+type OfficeUser = {
+  userName: string; serialNumber: string; model: string;
+  entity: string; imageType: string; accessories: string; reason: string;
+};
+
+const OFFICE_FIELDS: (keyof OfficeUser)[] = [
+  "userName", "serialNumber", "model", "entity", "imageType", "accessories", "reason",
+];
+
+function emptyOfficeUser(): OfficeUser {
+  return { userName: "", serialNumber: "", model: "", entity: "", imageType: "", accessories: "", reason: "" };
+}
 
 type DropdownData = {
   type: string[]; entity: string[]; imageType: string[]; reason: string[];
@@ -110,6 +123,22 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
   const [emailReceivedHour, setEmailReceivedHour] = useState("");
   const [odaLocation, setOdaLocation] = useState("No");
   const [pickupDate, setPickupDate] = useState("");
+  const [type, setType] = useState(initialData?.type || "");
+  const [officeUsers, setOfficeUsers] = useState<OfficeUser[]>([emptyOfficeUser()]);
+
+  // Office pickups bundle several users on one request. Every per-asset field of
+  // each user is saved on this single request as its own comma-separated list,
+  // so nothing needs a new request per laptop.
+  const isOffice = type.trim().toLowerCase() === "office";
+  const joinOffice = (field: keyof OfficeUser) =>
+    officeUsers.map(u => u[field].trim()).filter(Boolean).join(", ");
+  const officeNames = joinOffice("userName");
+  const officeSerials = joinOffice("serialNumber");
+  const officeModels = joinOffice("model");
+  const officeEntities = joinOffice("entity");
+  const officeImageTypes = joinOffice("imageType");
+  const officeAccessories = joinOffice("accessories");
+  const officeReasons = joinOffice("reason");
 
   // Frozen for the life of the form so the mirrored SLA start cannot drift as
   // days pass while the operator is filling the form in.
@@ -148,6 +177,75 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
   async function handleDelete(id: string) {
     await deleteReversePickupDropdownOption(id);
     await loadDd();
+  }
+
+  function updateOfficeUser(index: number, field: keyof OfficeUser, value: string) {
+    setOfficeUsers(prev => prev.map((u, i) => (i === index ? { ...u, [field]: value } : u)));
+  }
+  function addOfficeUser() {
+    setOfficeUsers(prev => [...prev, emptyOfficeUser()]);
+  }
+  function removeOfficeUser(index: number) {
+    setOfficeUsers(prev => (prev.length === 1 ? prev : prev.filter((_, i) => i !== index)));
+  }
+
+  // Fills the office table from a spreadsheet. Columns are matched by header
+  // name (Name, Serial Number, Model, Entity, Image Type, Accessories, Reason);
+  // a sheet with no header is read positionally in that same order. Parsed rows
+  // are appended to whatever is already in the table.
+  async function handleOfficeExcelUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!sheet) throw new Error("No sheet found in the file.");
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: false }) as unknown[][];
+      if (rows.length === 0) throw new Error("The sheet is empty.");
+
+      const headers = (rows[0] ?? []).map(c => String(c ?? "").toLowerCase().trim());
+      const findCol = (re: RegExp) => headers.findIndex(h => re.test(h));
+      const idx: Record<keyof OfficeUser, number> = {
+        userName: findCol(/user ?name|employee ?name|^name$/),
+        serialNumber: findCol(/serial/),
+        model: findCol(/model/),
+        entity: findCol(/entity/),
+        imageType: findCol(/image ?type/),
+        accessories: findCol(/accessor/),
+        reason: findCol(/reason/),
+      };
+      const hasHeader = OFFICE_FIELDS.some(f => idx[f] >= 0);
+      const dataRows = hasHeader ? rows.slice(1) : rows;
+
+      const parsed: OfficeUser[] = [];
+      for (const row of dataRows) {
+        const valueAt = (field: keyof OfficeUser) => {
+          const col = hasHeader ? idx[field] : OFFICE_FIELDS.indexOf(field);
+          return col >= 0 ? String(row[col] ?? "").trim() : "";
+        };
+        const user: OfficeUser = {
+          userName: valueAt("userName"),
+          serialNumber: valueAt("serialNumber"),
+          model: valueAt("model"),
+          entity: valueAt("entity"),
+          imageType: valueAt("imageType"),
+          accessories: valueAt("accessories"),
+          reason: valueAt("reason"),
+        };
+        if (user.userName || user.serialNumber || user.model) parsed.push(user);
+      }
+
+      if (parsed.length === 0) {
+        throw new Error("No user rows found. Add columns such as Name, Serial Number and Model.");
+      }
+
+      setOfficeUsers(prev => [...prev.filter(u => OFFICE_FIELDS.some(f => u[f].trim())), ...parsed]);
+      toast({ title: "Imported", description: `${parsed.length} user row(s) added from ${file.name}.`, variant: "success" });
+    } catch (err) {
+      toast({ title: "Import failed", description: err instanceof Error ? err.message : String(err), variant: "error" });
+    }
   }
 
   useEffect(() => {
@@ -210,6 +308,20 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isOffice) {
+      const rows = officeUsers.filter(u => u.userName.trim() || u.serialNumber.trim() || u.model.trim());
+      const invalid =
+        rows.length === 0 ||
+        rows.some(u => !u.userName.trim() || !u.serialNumber.trim() || !u.model.trim());
+      if (invalid) {
+        toast({
+          title: "Incomplete office users",
+          description: "Add at least one user, and fill in the name, serial number and model for every row.",
+          variant: "error",
+        });
+        return;
+      }
+    }
     setPending(true);
     try {
       const formData = new FormData(e.currentTarget);
@@ -229,7 +341,7 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <AutoField label="Year" value={String(new Date().getFullYear())} />
           <input type="hidden" name="year" value={new Date().getFullYear()} />
-          <DDField name="type" label="Type" category="type" placeholder="Select type..." dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
+          <DDField name="type" label="Type" category="type" placeholder="Select type..." dd={dd} onAdd={handleAdd} onDelete={handleDelete} value={type} onChange={setType} />
           <ManualInput name="srNo" label="Hp Sr No" placeholder="HP serial number" />
           <ManualInput name="requestDateHp" label="Request Date (HP)" type="date" />
           <ManualInput name="employeeId" label="Employee ID" placeholder="EMP-001" />
@@ -242,25 +354,129 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
       <div className="rounded-xl glass shadow-sm p-6 space-y-4">
         <h2 className="text-lg font-semibold text-foreground">User Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ManualInput name="employeeName" label="Name of User" required colSpan value={employeeName} onChange={setEmployeeName} />
+          {isOffice ? (
+            <input type="hidden" name="employeeName" value={officeNames} />
+          ) : (
+            <ManualInput name="employeeName" label="Name of User" required colSpan value={employeeName} onChange={setEmployeeName} />
+          )}
           <ManualInput name="emailId" label="Email ID" type="text" placeholder="Email ID" value={emailId} onChange={setEmailId} />
           <ManualInput name="mobileNumber" label="User Contact Details" placeholder="+91 9876543210" value={mobileNumber} onChange={setMobileNumber} />
           <ManualInput name="contact" label="Contact" placeholder="Alternate contact" />
         </div>
       </div>
 
-      {/* ── Asset Details ── */}
-      <div className="rounded-xl glass shadow-sm p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">Asset Details</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ManualInput name="model" label="Laptop Model" required placeholder="e.g. HP EliteBook" value={model} onChange={setModel} />
-          <ManualInput name="serialNumber" label="Serial Number" required placeholder="SN-12345" value={serialNumber} onChange={setSerialNumber} />
-          <DDField name="entity" label="Entity" category="entity" dd={dd} onAdd={handleAdd} onDelete={handleDelete} value={entity} onChange={setEntity} />
-          <DDField name="imageType" label="Image Type" category="imageType" dd={dd} onAdd={handleAdd} onDelete={handleDelete} value={imageType} onChange={setImageType} />
-          <ManualInput name="accessories" label="Accessories" placeholder="Charger, mouse, etc." colSpan value={accessories} onChange={setAccessories} />
-          <DDField name="reason" label="Reason" category="reason" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
+      {/* ── Office Users (multiple users per request) ── */}
+      {isOffice && (
+        <div className="rounded-xl glass shadow-sm p-6 space-y-4">
+          <input type="hidden" name="serialNumber" value={officeSerials} />
+          <input type="hidden" name="model" value={officeModels} />
+          <input type="hidden" name="entity" value={officeEntities} />
+          <input type="hidden" name="imageType" value={officeImageTypes} />
+          <input type="hidden" name="accessories" value={officeAccessories} />
+          <input type="hidden" name="reason" value={officeReasons} />
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <Users className="size-5 text-primary" /> Office Users
+            </h2>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors cursor-pointer">
+                <Upload className="size-4" /> Upload Excel
+                <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleOfficeExcelUpload} />
+              </label>
+              <button
+                type="button"
+                onClick={addOfficeUser}
+                className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+              >
+                <Plus className="size-4" /> Add User
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            An office pickup bundles multiple users. Add each user manually or upload an Excel/CSV sheet
+            with columns like Name, Serial Number, Model, Entity, Image Type, Accessories and Reason.
+            Everything is saved on this single request as comma-separated lists.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1100px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-input/60 text-left text-muted-foreground">
+                  <th className="px-2 py-2 font-medium">Name of User</th>
+                  <th className="px-2 py-2 font-medium">Serial Number</th>
+                  <th className="px-2 py-2 font-medium">Laptop Model</th>
+                  <th className="px-2 py-2 font-medium">Entity</th>
+                  <th className="px-2 py-2 font-medium">Image Type</th>
+                  <th className="px-2 py-2 font-medium">Accessories</th>
+                  <th className="px-2 py-2 font-medium">Reason</th>
+                  <th className="px-2 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {officeUsers.map((u, idx) => (
+                  <tr key={idx} className="border-b border-input/40">
+                    <td className="px-2 py-1.5 align-top">
+                      <input type="text" value={u.userName} onChange={e => updateOfficeUser(idx, "userName", e.target.value)} placeholder="Rahul Sharma" className="flex h-10 w-full min-w-[140px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                    </td>
+                    <td className="px-2 py-1.5 align-top">
+                      <input type="text" value={u.serialNumber} onChange={e => updateOfficeUser(idx, "serialNumber", e.target.value)} placeholder="SN-12345" className="flex h-10 w-full min-w-[140px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                    </td>
+                    <td className="px-2 py-1.5 align-top">
+                      <input type="text" value={u.model} onChange={e => updateOfficeUser(idx, "model", e.target.value)} placeholder="HP EliteBook" className="flex h-10 w-full min-w-[150px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                    </td>
+                    <td className="px-2 py-1.5 align-top">
+                      <select value={u.entity} onChange={e => updateOfficeUser(idx, "entity", e.target.value)} className="flex h-10 w-full min-w-[130px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                        <option value="">Select...</option>
+                        {(dd?.entity ?? []).map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1.5 align-top">
+                      <select value={u.imageType} onChange={e => updateOfficeUser(idx, "imageType", e.target.value)} className="flex h-10 w-full min-w-[130px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                        <option value="">Select...</option>
+                        {(dd?.imageType ?? []).map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1.5 align-top">
+                      <input type="text" value={u.accessories} onChange={e => updateOfficeUser(idx, "accessories", e.target.value)} placeholder="Charger, mouse..." className="flex h-10 w-full min-w-[150px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                    </td>
+                    <td className="px-2 py-1.5 align-top">
+                      <select value={u.reason} onChange={e => updateOfficeUser(idx, "reason", e.target.value)} className="flex h-10 w-full min-w-[130px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                        <option value="">Select...</option>
+                        {(dd?.reason ?? []).map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1.5 align-top">
+                      <button
+                        type="button"
+                        onClick={() => removeOfficeUser(idx)}
+                        disabled={officeUsers.length === 1}
+                        title="Remove user"
+                        className="flex h-10 w-10 items-center justify-center rounded-lg border border-input text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ── Asset Details ── */}
+      {!isOffice && (
+        <div className="rounded-xl glass shadow-sm p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-foreground">Asset Details</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <ManualInput name="model" label="Laptop Model" required placeholder="e.g. HP EliteBook" value={model} onChange={setModel} />
+            <ManualInput name="serialNumber" label="Serial Number" required placeholder="SN-12345" value={serialNumber} onChange={setSerialNumber} />
+            <DDField name="entity" label="Entity" category="entity" dd={dd} onAdd={handleAdd} onDelete={handleDelete} value={entity} onChange={setEntity} />
+            <DDField name="imageType" label="Image Type" category="imageType" dd={dd} onAdd={handleAdd} onDelete={handleDelete} value={imageType} onChange={setImageType} />
+            <ManualInput name="accessories" label="Accessories" placeholder="Charger, mouse, etc." colSpan value={accessories} onChange={setAccessories} />
+            <DDField name="reason" label="Reason" category="reason" dd={dd} onAdd={handleAdd} onDelete={handleDelete} />
+          </div>
+        </div>
+      )}
 
       {/* ── Pickup Location ── */}
       <div className="rounded-xl glass shadow-sm p-6 space-y-4">
