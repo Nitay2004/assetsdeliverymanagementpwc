@@ -214,11 +214,14 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
 
   let effectiveStatus = request.status;
   // The imported tracking sheets carry the real workflow state in the free-text
-  // displayStatus column even when the DB status never moved past REQUESTED.
-  // Resolve it so the progress tracker and next-step panel open on the stage
-  // that matches the request's actual progress instead of always Requested.
+  // displayStatus column even when the DB status never moved past REQUESTED, so
+  // fall back to it to open on the stage that matches actual progress. It is only
+  // a fallback while the status is still untouched: once a real action advances
+  // the status, that becomes authoritative, otherwise a stale display value (for
+  // example "Pickup Initiated") would pin the page to Partner Assigned forever.
   const displayDerived = resolveStatus(request.displayStatus ?? "");
-  if (displayDerived && displayDerived !== request.status && displayDerived !== "COMPLETED") {
+  const statusUntouched = ["REQUESTED", ...INITIAL_STAGE_STATUSES].includes(request.status);
+  if (statusUntouched && displayDerived && displayDerived !== "COMPLETED") {
     effectiveStatus = displayDerived;
   }
   if (INITIAL_STAGE_STATUSES.includes(effectiveStatus)) effectiveStatus = "REQUESTED";
