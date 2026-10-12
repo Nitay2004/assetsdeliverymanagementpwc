@@ -26,6 +26,7 @@ import {
   seedReversePickupDropdowns,
 } from "@/app/actions/reverse-pickup";
 import { getNextStatus, hasReachedWarehouse } from "@/lib/reverse-pickup-config";
+import { resolveStatus } from "@/lib/reverse-pickup-status";
 import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
 
 interface RequestData {
@@ -211,8 +212,16 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
   const NON_EDITABLE_STATUSES = ["COMPLETED", "PICKUP_CANCELLED", "DUPLICATE", "ALREADY_SUBMITTED_TO_PWC_OFFICE", "RTO_CASE", "LOST_DEVICE"];
 
   let effectiveStatus = request.status;
-  if (INITIAL_STAGE_STATUSES.includes(request.status)) effectiveStatus = "REQUESTED";
-  else if (PICKED_UP_EQUIVALENT.includes(request.status)) effectiveStatus = "PICKED_UP";
+  // The imported tracking sheets carry the real workflow state in the free-text
+  // displayStatus column even when the DB status never moved past REQUESTED.
+  // Resolve it so the progress tracker and next-step panel open on the stage
+  // that matches the request's actual progress instead of always Requested.
+  const displayDerived = resolveStatus(request.displayStatus ?? "");
+  if (displayDerived && displayDerived !== request.status && displayDerived !== "COMPLETED") {
+    effectiveStatus = displayDerived;
+  }
+  if (INITIAL_STAGE_STATUSES.includes(effectiveStatus)) effectiveStatus = "REQUESTED";
+  else if (PICKED_UP_EQUIVALENT.includes(effectiveStatus)) effectiveStatus = "PICKED_UP";
   // A request parked on an HP case still sits at whichever QC stage it stopped
   // at, so the stepper shows real progress rather than an unknown state with
   // nothing done yet. No next step is offered while it is parked: it only moves
@@ -785,7 +794,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
           )}
 
           {/* QC failed and no HP case logged yet */}
-          {request.qcResult === "FAIL" && !hpParked && (request.status === "QC_CLEANED" || request.status === "QC_COMPLETED") && (
+          {request.qcResult === "FAIL" && !hpParked && (effectiveStatus === "QC_CLEANED" || effectiveStatus === "QC_COMPLETED") && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 shadow-sm p-6 space-y-4">
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-lg bg-amber-100 shrink-0">
@@ -929,7 +938,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
 
               {/* Request DC from Finance */}
-              {request.status === "PARTNER_ASSIGNED" && (
+              {effectiveStatus === "PARTNER_ASSIGNED" && (
                 <form action={async (formData) => handleAction("requestDc", formData)} className="space-y-4">
                   <p className="text-sm text-muted-foreground">
                     Partner assigned. Request a delivery challan from the Finance team for this pickup.
@@ -946,7 +955,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
 
               {/* Mark Picked Up */}
-              {request.status === "INSPECTED" && (
+              {effectiveStatus === "INSPECTED" && (
                 <form action={async (formData) => handleAction("markAsPickedUp", formData)} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
@@ -1038,7 +1047,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
 
               {/* Record Hardware QC */}
-              {request.status === "RECEIVED_AT_WAREHOUSE" && (
+              {effectiveStatus === "RECEIVED_AT_WAREHOUSE" && (
                 <form action={async (formData) => handleAction("recordCleanQc", formData)} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
@@ -1097,7 +1106,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
 
               {/* Record Software QC */}
-              {request.status === "QC_CLEANED" && (
+              {effectiveStatus === "QC_CLEANED" && (
                 <form action={async (formData) => handleAction("recordPurgeQc", formData)} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
@@ -1156,7 +1165,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
 
               {/* Request E-Way Bill from Finance */}
-              {request.status === "DC_GENERATED" && (
+              {effectiveStatus === "DC_GENERATED" && (
                 <form action={async (formData) => handleAction("requestEwayBill", formData)} className="space-y-4">
                   <p className="text-sm text-muted-foreground">
                     DC has been generated. Request an E-Way bill from the Finance team.
@@ -1173,7 +1182,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
 
               {/* Request Docket from Logistics */}
-              {request.status === "EWAY_BILL_GENERATED" && (
+              {effectiveStatus === "EWAY_BILL_GENERATED" && (
                 <form action={async (formData) => handleAction("requestDocket", formData)} className="space-y-4">
                   <p className="text-sm text-muted-foreground">
                     DC and E-Way bill are ready. Request the reverse docket number from the Logistics team to
@@ -1191,7 +1200,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
 
               {/* Record Inspection */}
-              {request.status === "DOCKET_ASSIGNED" && (
+              {effectiveStatus === "DOCKET_ASSIGNED" && (
                 <form action={async (formData) => handleAction("recordInspection", formData)} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
@@ -1226,7 +1235,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
 
               {/* Record Blanco Clear */}
-              {request.status === "QC_COMPLETED" && (
+              {effectiveStatus === "QC_COMPLETED" && (
                 <form action={async (formData) => handleAction("recordBlancoClear", formData)} className="space-y-4">
                   {request.qcResult !== "PASS" && (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -1292,7 +1301,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
 
               {/* Record Blanco Purge + Certificate */}
-              {request.status === "BLANCO_CLEARED" && (
+              {effectiveStatus === "BLANCO_CLEARED" && (
                 <form onSubmit={handleUploadBlanco} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
@@ -1376,7 +1385,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               )}
 
               {/* Move Back to Inventory */}
-              {(request.status === "BLANCO_PURGED" || request.status === "BLANCO_CERTIFIED") && (
+              {(effectiveStatus === "BLANCO_PURGED" || effectiveStatus === "BLANCO_CERTIFIED") && (
                 <form action={async (formData) => handleAction("completeReversePickup", formData)} className="space-y-4">
                   <div className="flex items-center gap-3 p-4 rounded-lg bg-teal-50 border border-teal-200">
                     <Package className="size-5 text-teal-600 shrink-0" />
@@ -1401,7 +1410,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       )}
 
       {/* Docket Requested - Awaiting Logistics */}
-      {request.status === "DOCKET_REQUESTED" && (
+      {effectiveStatus === "DOCKET_REQUESTED" && (
         <div className="rounded-xl glass shadow-sm p-6 space-y-4">
           <div className="flex items-center gap-3 p-4 rounded-lg bg-orange-50 border border-orange-200">
             <Loader2 className="size-5 text-orange-600 animate-spin shrink-0" />
@@ -1417,7 +1426,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       )}
 
       {/* DC Requested - Awaiting Finance */}
-      {request.status === "DC_REQUESTED" && (
+      {effectiveStatus === "DC_REQUESTED" && (
         <div className="rounded-xl glass shadow-sm p-6 space-y-4">
           <div className="flex items-center gap-3 p-4 rounded-lg bg-orange-50 border border-orange-200">
             <Loader2 className="size-5 text-orange-600 animate-spin shrink-0" />
@@ -1432,7 +1441,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       )}
 
       {/* DC Generated */}
-      {request.status === "DC_GENERATED" && (
+      {effectiveStatus === "DC_GENERATED" && (
         <div className="rounded-xl glass shadow-sm p-6 space-y-4">
           <div className="flex items-center gap-3 p-4 rounded-lg bg-indigo-50 border border-indigo-200">
             <FileText className="size-5 text-indigo-600 shrink-0" />
@@ -1453,7 +1462,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       )}
 
       {/* E-Way Bill Requested - Awaiting Finance */}
-      {request.status === "EWAY_BILL_REQUESTED" && (
+      {effectiveStatus === "EWAY_BILL_REQUESTED" && (
         <div className="rounded-xl glass shadow-sm p-6 space-y-4">
           <div className="flex items-center gap-3 p-4 rounded-lg bg-yellow-50 border border-yellow-200">
             <Loader2 className="size-5 text-yellow-600 animate-spin shrink-0" />
@@ -1468,7 +1477,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       )}
 
       {/* E-Way Bill Generated */}
-      {request.status === "EWAY_BILL_GENERATED" && (
+      {effectiveStatus === "EWAY_BILL_GENERATED" && (
         <div className="rounded-xl glass shadow-sm p-6 space-y-4">
           <div className="flex items-center gap-3 p-4 rounded-lg bg-indigo-50 border border-indigo-200">
             <FileText className="size-5 text-indigo-600 shrink-0" />
@@ -1483,7 +1492,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       )}
 
       {/* Docket Assigned */}
-      {request.status === "DOCKET_ASSIGNED" && (
+      {effectiveStatus === "DOCKET_ASSIGNED" && (
         <div className="rounded-xl glass shadow-sm p-6 space-y-4">
           <div className="flex items-center gap-3 p-4 rounded-lg bg-cyan-50 border border-cyan-200">
             <FileText className="size-5 text-cyan-600 shrink-0" />
