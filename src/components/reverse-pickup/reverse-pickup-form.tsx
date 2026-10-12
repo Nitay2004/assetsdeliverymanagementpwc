@@ -16,16 +16,21 @@ import { useToast } from "@/hooks/use-toast";
 import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
 
 type OfficeUser = {
-  userName: string; serialNumber: string; model: string;
+  userName: string; emailId: string; mobileNumber: string; contact: string;
+  serialNumber: string; model: string;
   entity: string; imageType: string; accessories: string; reason: string;
 };
 
 const OFFICE_FIELDS: (keyof OfficeUser)[] = [
-  "userName", "serialNumber", "model", "entity", "imageType", "accessories", "reason",
+  "userName", "emailId", "mobileNumber", "contact",
+  "serialNumber", "model", "entity", "imageType", "accessories", "reason",
 ];
 
 function emptyOfficeUser(): OfficeUser {
-  return { userName: "", serialNumber: "", model: "", entity: "", imageType: "", accessories: "", reason: "" };
+  return {
+    userName: "", emailId: "", mobileNumber: "", contact: "",
+    serialNumber: "", model: "", entity: "", imageType: "", accessories: "", reason: "",
+  };
 }
 
 type DropdownData = {
@@ -139,6 +144,9 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
   const officeImageTypes = joinOffice("imageType");
   const officeAccessories = joinOffice("accessories");
   const officeReasons = joinOffice("reason");
+  const officeEmails = joinOffice("emailId");
+  const officeMobiles = joinOffice("mobileNumber");
+  const officeContacts = joinOffice("contact");
 
   // Frozen for the life of the form so the mirrored SLA start cannot drift as
   // days pass while the operator is filling the form in.
@@ -215,6 +223,9 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
         imageType: findCol(/image ?type/),
         accessories: findCol(/accessor/),
         reason: findCol(/reason/),
+        emailId: findCol(/e-?mail/),
+        mobileNumber: findCol(/mobile|contact ?(number|no)|phone/),
+        contact: findCol(/alternate ?contact|alt ?contact/),
       };
       const hasHeader = OFFICE_FIELDS.some(f => idx[f] >= 0);
       const dataRows = hasHeader ? rows.slice(1) : rows;
@@ -233,6 +244,9 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
           imageType: valueAt("imageType"),
           accessories: valueAt("accessories"),
           reason: valueAt("reason"),
+          emailId: valueAt("emailId"),
+          mobileNumber: valueAt("mobileNumber"),
+          contact: valueAt("contact"),
         };
         if (user.userName || user.serialNumber || user.model) parsed.push(user);
       }
@@ -351,23 +365,25 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
       </div>
 
       {/* ── User Details ── */}
-      <div className="rounded-xl glass shadow-sm p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">User Details</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {isOffice ? (
-            <input type="hidden" name="employeeName" value={officeNames} />
-          ) : (
+      {!isOffice && (
+        <div className="rounded-xl glass shadow-sm p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-foreground">User Details</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <ManualInput name="employeeName" label="Name of User" required colSpan value={employeeName} onChange={setEmployeeName} />
-          )}
-          <ManualInput name="emailId" label="Email ID" type="text" placeholder="Email ID" value={emailId} onChange={setEmailId} />
-          <ManualInput name="mobileNumber" label="User Contact Details" placeholder="+91 9876543210" value={mobileNumber} onChange={setMobileNumber} />
-          <ManualInput name="contact" label="Contact" placeholder="Alternate contact" />
+            <ManualInput name="emailId" label="Email ID" type="text" placeholder="Email ID" value={emailId} onChange={setEmailId} />
+            <ManualInput name="mobileNumber" label="User Contact Details" placeholder="+91 9876543210" value={mobileNumber} onChange={setMobileNumber} />
+            <ManualInput name="contact" label="Contact" placeholder="Alternate contact" />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Office Users (multiple users per request) ── */}
       {isOffice && (
         <div className="rounded-xl glass shadow-sm p-6 space-y-4">
+          <input type="hidden" name="employeeName" value={officeNames} />
+          <input type="hidden" name="emailId" value={officeEmails} />
+          <input type="hidden" name="mobileNumber" value={officeMobiles} />
+          <input type="hidden" name="contact" value={officeContacts} />
           <input type="hidden" name="serialNumber" value={officeSerials} />
           <input type="hidden" name="model" value={officeModels} />
           <input type="hidden" name="entity" value={officeEntities} />
@@ -394,14 +410,17 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
           </div>
           <p className="text-xs text-muted-foreground">
             An office pickup bundles multiple users. Add each user manually or upload an Excel/CSV sheet
-            with columns like Name, Serial Number, Model, Entity, Image Type, Accessories and Reason.
-            Everything is saved on this single request as comma-separated lists.
+            with columns like Name, Email, Contact Number, Serial Number, Model, Entity, Image Type,
+            Accessories and Reason. Everything is saved on this single request as comma-separated lists.
           </p>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] border-collapse text-sm">
+            <table className="w-full min-w-[1500px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-input/60 text-left text-muted-foreground">
                   <th className="px-2 py-2 font-medium">Name of User</th>
+                  <th className="px-2 py-2 font-medium">Email ID</th>
+                  <th className="px-2 py-2 font-medium">Contact Number</th>
+                  <th className="px-2 py-2 font-medium">Alternate Contact</th>
                   <th className="px-2 py-2 font-medium">Serial Number</th>
                   <th className="px-2 py-2 font-medium">Laptop Model</th>
                   <th className="px-2 py-2 font-medium">Entity</th>
@@ -416,6 +435,15 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
                   <tr key={idx} className="border-b border-input/40">
                     <td className="px-2 py-1.5 align-top">
                       <input type="text" value={u.userName} onChange={e => updateOfficeUser(idx, "userName", e.target.value)} placeholder="Rahul Sharma" className="flex h-10 w-full min-w-[140px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                    </td>
+                    <td className="px-2 py-1.5 align-top">
+                      <input type="text" value={u.emailId} onChange={e => updateOfficeUser(idx, "emailId", e.target.value)} placeholder="name@company.com" className="flex h-10 w-full min-w-[170px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                    </td>
+                    <td className="px-2 py-1.5 align-top">
+                      <input type="text" value={u.mobileNumber} onChange={e => updateOfficeUser(idx, "mobileNumber", e.target.value)} placeholder="+91 9876543210" className="flex h-10 w-full min-w-[150px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                    </td>
+                    <td className="px-2 py-1.5 align-top">
+                      <input type="text" value={u.contact} onChange={e => updateOfficeUser(idx, "contact", e.target.value)} placeholder="Alternate contact" className="flex h-10 w-full min-w-[150px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
                     </td>
                     <td className="px-2 py-1.5 align-top">
                       <input type="text" value={u.serialNumber} onChange={e => updateOfficeUser(idx, "serialNumber", e.target.value)} placeholder="SN-12345" className="flex h-10 w-full min-w-[140px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
