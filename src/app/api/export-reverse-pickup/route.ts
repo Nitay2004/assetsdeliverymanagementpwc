@@ -13,6 +13,7 @@ const columns: { label: string; field: string }[] = [
   { label: "Employee ID", field: "employeeId" },
   { label: "Alternate ID", field: "alternateId" },
   { label: "Last Working Day", field: "lastWorkingDay" },
+  { label: "Office Last Working Days", field: "officeLastWorkingDays" },
   { label: "Employee Name", field: "employeeName" },
   { label: "Email ID", field: "emailId" },
   { label: "Mobile Number", field: "mobileNumber" },

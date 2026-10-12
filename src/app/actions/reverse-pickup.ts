@@ -153,6 +153,7 @@ export async function createReversePickupRequest(formData: FormData) {
     employeeId: (formData.get("employeeId") as string) || null,
     alternateId: (formData.get("alternateId") as string) || null,
     lastWorkingDay: parseDate(formData.get("lastWorkingDay") as string),
+    officeLastWorkingDays: (formData.get("officeLastWorkingDays") as string) || null,
 
     // User Details
     employeeName,

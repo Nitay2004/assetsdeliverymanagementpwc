@@ -442,6 +442,7 @@ model ReversePickupRequest {
   employeeId            String?              @map("employee_id")
   alternateId           String?              @map("alternate_id")
   lastWorkingDay        DateTime?            @map("last_working_day") @db.Date
+  officeLastWorkingDays String?              @map("office_last_working_days") // Office multi-user list
 
   // ── User Details ──
   employeeName          String               @map("employee_name")

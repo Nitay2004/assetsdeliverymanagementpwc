@@ -39,6 +39,7 @@ interface RequestData {
   employeeId: string | null;
   alternateId: string | null;
   lastWorkingDay: string | null;
+  officeLastWorkingDays: string | null;
   employeeName: string;
   emailId: string | null;
   mobileNumber: string | null;
@@ -664,6 +665,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                 {request.employeeId && <div className="flex justify-between"><span className="text-muted-foreground">Employee ID</span><span>{request.employeeId}</span></div>}
                 {request.alternateId && <div className="flex justify-between"><span className="text-muted-foreground">Alt ID</span><span>{request.alternateId}</span></div>}
                 {request.lastWorkingDay && <div className="flex justify-between"><span className="text-muted-foreground">Last Working Day</span><span>{new Date(request.lastWorkingDay).toLocaleDateString("en-GB")}</span></div>}
+                {request.officeLastWorkingDays && <div className="flex justify-between"><span className="text-muted-foreground">Last Working Days</span><span className="text-right">{request.officeLastWorkingDays}</span></div>}
                 {request.entity && <div className="flex justify-between"><span className="text-muted-foreground">Entity</span><span>{request.entity}</span></div>}
                 {request.imageType && <div className="flex justify-between"><span className="text-muted-foreground">Image Type</span><span>{request.imageType}</span></div>}
                 {request.reason && <div className="flex justify-between"><span className="text-muted-foreground">Reason</span><span>{request.reason}</span></div>}
