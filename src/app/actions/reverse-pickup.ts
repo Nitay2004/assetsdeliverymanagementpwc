@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { normalizeOdaLocation } from "@/lib/location-utils";
 import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
 import { nextSequenceNumber } from "@/lib/sequence-number";
+import { hasPriorDelivery } from "@/app/actions/assignment";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -153,7 +154,6 @@ export async function createReversePickupRequest(formData: FormData) {
     employeeId: (formData.get("employeeId") as string) || null,
     alternateId: (formData.get("alternateId") as string) || null,
     lastWorkingDay: parseDate(formData.get("lastWorkingDay") as string),
-    officeLastWorkingDays: (formData.get("officeLastWorkingDays") as string) || null,
 
     // User Details
     employeeName,
@@ -222,6 +222,74 @@ export async function createReversePickupRequest(formData: FormData) {
 
     createdBy: user.name || user.email || null,
   };
+
+  const serial = data.serialNumber?.trim();
+  if (!serial) {
+    throw new Error("Serial number is required");
+  }
+
+  // A request is only "open" while it is not in one of these states, so one of
+  // them is what lets a serial be picked up again later. Only real enum members
+  // may be listed here: the ReversePickupStatus enum has no CANCELLED/REJECTED
+  // values (a cancelled pickup is PICKUP_CANCELLED), and passing them made Prisma
+  // reject the whole query with a validation error before any check could run.
+  const terminalStatuses = ["COMPLETED", "PICKUP_CANCELLED", "DUPLICATE"] as const;
+
+  // The office flow submits several serials in one field, joined by ", " — every
+  // serial must pass the same guards before the single request row is created.
+  const serialsToValidate = serial.split(",").map((s) => s.trim()).filter(Boolean);
+
+  const [activeRpRows, inventoryRows] = await Promise.all([
+    prisma.reversePickupRequest.findMany({
+      where: {
+        serialNumber: { in: serialsToValidate },
+        status: { notIn: [...terminalStatuses] },
+      },
+      select: { serialNumber: true, requestNumber: true, status: true },
+    }),
+    prisma.inventoryItem.findMany({
+      where: { serialNumber: { in: serialsToValidate } },
+      select: { id: true, serialNumber: true, status: true },
+    }),
+  ]);
+  const inventoryBySerial = new Map(inventoryRows.map((i) => [i.serialNumber, i]));
+
+  for (const s of serialsToValidate) {
+    // Duplicate guard: while any request for this serial is still open, no
+    // second one may be raised. The serial can only be requested again after
+    // the open request reaches a terminal state (came back / cancelled).
+    const activeRp = activeRpRows.find((r) => r.serialNumber === s);
+    if (activeRp) {
+      throw new Error(
+        `Reverse pickup request already exists for serial number ${s} (request ${activeRp.requestNumber}, status: ${activeRp.status}). Cannot raise another request until this one is completed or cancelled.`
+      );
+    }
+
+    const inventoryItem = inventoryBySerial.get(s);
+    if (!inventoryItem) {
+      throw new Error(
+        `Serial number ${s} was not found in inventory. Reverse pickup can only be raised for an asset that is deployed and delivered to a user.`
+      );
+    }
+
+    // Only an asset that is out with a user (ALLOCATED) may be picked up.
+    // Anything still in inventory — NEW/AVAILABLE/QC_PENDING/DEFECTIVE/RETIRED —
+    // is either in our hands or in provisioning, so there is nothing to pick up.
+    if (inventoryItem.status !== "ALLOCATED") {
+      throw new Error(
+        `Asset ${s} is in inventory (status: ${inventoryItem.status}), not deployed. Reverse pickup can only be raised for an asset that is deployed and delivered to a user.`
+      );
+    }
+
+    // Allocated alone is not enough: an asset can be allocated to an order that
+    // has not shipped yet (or parked in provisioning). Require delivery evidence.
+    const delivered = await hasPriorDelivery(inventoryItem.id, s);
+    if (!delivered) {
+      throw new Error(
+        `Asset ${s} is allocated but has no record of being delivered to a user. Reverse pickup can only be raised for an asset that has been delivered.`
+      );
+    }
+  }
 
   // The number is read-then-write, so two engineers submitting at the same
   // moment can still land on the same value. Re-derive it and retry instead of

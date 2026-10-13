@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { parse } from "csv-parse/sync";
 import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { normalizeOdaLocation } from "@/lib/location-utils";
 import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
 import { resolveStatus } from "@/lib/reverse-pickup-status";
@@ -418,20 +419,91 @@ export async function POST(request: Request) {
     rows.map(r => String(r.data.serialNumber ?? "").trim()).filter(Boolean)
   )];
 
-  const inventoryMap = new Map<string, any>();
+  // Statuses that close a reverse pickup request. Anything else is "open" and
+  // holds the serial, so the same serial cannot get a second open request.
+  const TERMINAL_RP_STATUSES = ["COMPLETED", "PICKUP_CANCELLED", "DUPLICATE"] as const;
+
+  type InventoryLookupItem = Prisma.InventoryItemGetPayload<{
+    select: {
+      id: true;
+      serialNumber: true;
+      status: true;
+      deliveryDate: true;
+      actualDeliveryDate: true;
+      model: true;
+      entity: true;
+      imageType: true;
+      employeeName: true;
+      emailId: true;
+      mobileNumber: true;
+      shippingAddress: true;
+      landMark: true;
+      city: true;
+      state: true;
+      pinCode: true;
+    };
+  }>;
+  const inventoryMap = new Map<string, InventoryLookupItem>();
+  // Serials that already have an OPEN reverse-pickup request in the database.
+  const serialsWithActiveRequest = new Set<string>();
+  // Serials with any evidence of having been delivered to a user (the same
+  // signals hasPriorDelivery checks). Only these may get a new open request.
+  const deliveredSerials = new Set<string>();
   const CHUNK = 500;
   for (let c = 0; c < allSerials.length; c += CHUNK) {
     const chunk = allSerials.slice(c, c + CHUNK);
     const items = await prisma.inventoryItem.findMany({
       where: { serialNumber: { in: chunk } },
       select: {
-        serialNumber: true, model: true, entity: true, imageType: true,
+        id: true, serialNumber: true, status: true,
+        deliveryDate: true, actualDeliveryDate: true,
+        model: true, entity: true, imageType: true,
         employeeName: true, emailId: true, mobileNumber: true,
         shippingAddress: true, landMark: true, city: true, state: true, pinCode: true,
       },
     });
     for (const item of items) {
       inventoryMap.set(item.serialNumber, item);
+    }
+
+    const active = await prisma.reversePickupRequest.findMany({
+      where: {
+        serialNumber: { in: chunk },
+        status: { notIn: [...TERMINAL_RP_STATUSES] },
+      },
+      select: { serialNumber: true },
+    });
+    for (const a of active) serialsWithActiveRequest.add(a.serialNumber);
+
+    const itemIds = items.map((i) => i.id);
+    if (itemIds.length > 0) {
+      const [fromAssignment, fromAsset, fromDelivery] = await Promise.all([
+        prisma.assignmentRecord.findMany({
+          where: { inventoryItemId: { in: itemIds }, deliveryDate: { not: null } },
+          select: { inventoryItemId: true },
+        }),
+        prisma.asset.findMany({
+          where: {
+            inventoryItemId: { in: itemIds },
+            order: { status: { in: ["DELIVERED", "DELIVERY_CONFIRMED"] } },
+          },
+          select: { inventoryItemId: true },
+        }),
+        prisma.deliveryRecord.findMany({
+          where: { serialNumber: { in: chunk } },
+          select: { serialNumber: true },
+        }),
+      ]);
+
+      const deliveredIds = new Set<string>();
+      for (const r of fromAssignment) if (r.inventoryItemId) deliveredIds.add(r.inventoryItemId);
+      for (const r of fromAsset) if (r.inventoryItemId) deliveredIds.add(r.inventoryItemId);
+      for (const r of fromDelivery) if (r.serialNumber) deliveredSerials.add(r.serialNumber);
+      for (const item of items) {
+        if (deliveredIds.has(item.id) || item.deliveryDate || item.actualDeliveryDate) {
+          deliveredSerials.add(item.serialNumber);
+        }
+      }
     }
   }
 
@@ -448,6 +520,9 @@ export async function POST(request: Request) {
 
   // Auto-fill from inventory + skip missing serial numbers
   const rowsToInsert: typeof rows = [];
+  // Serials this import has already queued as an OPEN request. Guards against a
+  // file that lists the same serial twice both becoming open requests.
+  const stagedActiveSerials = new Set<string>();
   for (const row of validRows) {
     const sn = String(row.data.serialNumber ?? "").trim();
     const item = inventoryMap.get(sn);
@@ -498,6 +573,32 @@ export async function POST(request: Request) {
       continue;
     }
 
+    // Only rows that would create an OPEN request are validated against the
+    // duplicate/deployed rules. Rows already in a terminal state (COMPLETED,
+    // PICKUP_CANCELLED, DUPLICATE) are historical records of a finished pickup:
+    // the asset is legitimately back in inventory by now, so those must still
+    // import even though the serial is no longer deployed.
+    const rowStatus = String(row.data.status ?? "REQUESTED");
+    const isOpenRequest = !TERMINAL_RP_STATUSES.includes(
+      rowStatus as (typeof TERMINAL_RP_STATUSES)[number]
+    );
+
+    if (isOpenRequest) {
+      if (serialsWithActiveRequest.has(sn) || stagedActiveSerials.has(sn)) {
+        errors.push(`Row ${row.rowNum}: Skipped - "${sn}" already has an open reverse pickup request`);
+        continue;
+      }
+      if (item.status !== "ALLOCATED") {
+        errors.push(`Row ${row.rowNum}: Skipped - "${sn}" is in inventory (${item.status}), not deployed`);
+        continue;
+      }
+      if (!deliveredSerials.has(sn)) {
+        errors.push(`Row ${row.rowNum}: Skipped - "${sn}" has no record of delivery to a user`);
+        continue;
+      }
+      stagedActiveSerials.add(sn);
+    }
+
     rowsToInsert.push(row);
   }
 
@@ -508,13 +609,13 @@ export async function POST(request: Request) {
     const batch = rowsToInsert.slice(i, i + BATCH_SIZE);
     const batchData = batch.map(r => r.data);
     try {
-      await prisma.reversePickupRequest.createMany({ data: batchData as any[] });
+      await prisma.reversePickupRequest.createMany({ data: batchData as Prisma.ReversePickupRequestCreateManyInput[] });
       imported += batchData.length;
     } catch {
       // Batch failed — retry one by one
       for (const item of batch) {
         try {
-          await prisma.reversePickupRequest.create({ data: item.data as any });
+          await prisma.reversePickupRequest.create({ data: item.data as Prisma.ReversePickupRequestCreateInput });
           imported++;
         } catch {
           errors.push(`Row ${item.rowNum}: Failed for "${item.data.serialNumber}"`);
