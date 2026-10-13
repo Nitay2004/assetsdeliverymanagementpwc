@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Package, Truck, ClipboardList, FileText, Hash } from "lucide-react";
 import { LogisticsTable } from "@/components/logistics/logistics-table";
 import { ReversePickupDocketSection } from "@/components/logistics/reverse-pickup-docket-section";
+import { ReversePickupPartnerAlignSection } from "@/components/logistics/reverse-pickup-partner-align-section";
 import { LogisticsExportButton } from "@/components/logistics/logistics-export-button";
 import { PodExportButton } from "@/components/logistics/pod-export-button";
 import { getWarehouses } from "@/app/actions/dc";
@@ -156,6 +157,43 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
 
   const warehouses = await getWarehouses();
 
+  const rpPartnerAlignRequests = await prisma.reversePickupRequest.findMany({
+    where: {
+      status: {
+        in: [
+          "REQUESTED",
+          "PENDING",
+          "PWC_CONFIRMATION_AWAITED",
+          "GATEPASS_PENDING",
+          "ALIGN_FOR_PICKUP",
+          "ON_HOLD",
+        ],
+      },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+  });
+
+  const serializedRpPartnerAlign = rpPartnerAlignRequests.map((r) => ({
+    ...r,
+    requestDateHp: r.requestDateHp ? r.requestDateHp.toISOString() : null,
+    lastWorkingDay: r.lastWorkingDay ? r.lastWorkingDay.toISOString() : null,
+    inspectionDate: r.inspectionDate ? r.inspectionDate.toISOString() : null,
+    pickupDate: r.pickupDate ? r.pickupDate.toISOString() : null,
+    receivedDate: r.receivedDate ? r.receivedDate.toISOString() : null,
+    qcDate: r.qcDate ? r.qcDate.toISOString() : null,
+    blanccoDate: r.blanccoDate ? r.blanccoDate.toISOString() : null,
+    blancoCertificateDate: r.blancoCertificateDate ? r.blancoCertificateDate.toISOString() : null,
+    eta: r.eta ? r.eta.toISOString() : null,
+    futureDatePickup: r.futureDatePickup ? r.futureDatePickup.toISOString() : null,
+    slaStartDate: r.slaStartDate ? r.slaStartDate.toISOString() : null,
+    expectedPickupDate: r.expectedPickupDate ? r.expectedPickupDate.toISOString() : null,
+    actualDeliveryPodDate: r.actualDeliveryPodDate ? r.actualDeliveryPodDate.toISOString() : null,
+    laptopAcceptanceDate: r.laptopAcceptanceDate ? r.laptopAcceptanceDate.toISOString() : null,
+    etaForUnitReceived: r.etaForUnitReceived ? r.etaForUnitReceived.toISOString() : null,
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+  }));
+
   const rpDocketRequests = await prisma.reversePickupRequest.findMany({
     // Stays in the list once the docket is assigned so the row does not vanish
     // right after logistics hits save.
@@ -260,11 +298,18 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
 
           <PaginationBar basePath="/dashboard/logistics" currentPage={safePage} totalPages={totalPages} totalCount={totalCount} limit={limit} />
         </>
-      ) : serializedRp.length > 0 ? (
-        <ReversePickupDocketSection requests={serializedRp} canManage={canManage} />
+      ) : (serializedRpPartnerAlign.length > 0 || serializedRp.length > 0) ? (
+        <>
+          {serializedRpPartnerAlign.length > 0 && (
+            <ReversePickupPartnerAlignSection requests={serializedRpPartnerAlign} canManage={canManage} />
+          )}
+          {serializedRp.length > 0 && (
+            <ReversePickupDocketSection requests={serializedRp} canManage={canManage} />
+          )}
+        </>
       ) : (
         <div className="p-8 rounded-xl glass text-center text-muted-foreground">
-          No reverse pickup cases waiting for a docket.
+          No reverse pickup requests pending.
         </div>
       )}
     </div>

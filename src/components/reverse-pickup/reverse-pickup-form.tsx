@@ -148,7 +148,7 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
   const officeMobiles = joinOffice("mobileNumber");
   const officeContacts = joinOffice("contact");
   const officeEmployeeIds = joinOffice("employeeId");
-  const officeLastWorkingDays = joinOffice("lastWorkingDay");
+  // officeLastWorkingDays removed (not in schema)
 
   // Frozen for the life of the form so the mirrored SLA start cannot drift as
   // days pass while the operator is filling the form in.
@@ -391,7 +391,6 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
           <input type="hidden" name="emailId" value={officeEmails} />
           <input type="hidden" name="mobileNumber" value={officeMobiles} />
           <input type="hidden" name="contact" value={officeContacts} />
-          <input type="hidden" name="officeLastWorkingDays" value={officeLastWorkingDays} />
           <input type="hidden" name="serialNumber" value={officeSerials} />
           <input type="hidden" name="model" value={officeModels} />
           <input type="hidden" name="entity" value={officeEntities} />

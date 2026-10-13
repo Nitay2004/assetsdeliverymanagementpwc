@@ -57,3 +57,7 @@ prov-test.csv
 # deploy archives
 /project.tgz
 *.tgz
+
+
+# Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
