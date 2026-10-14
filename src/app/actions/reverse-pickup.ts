@@ -23,6 +23,17 @@ function parseIntValue(value: string | null): number | null {
   return isNaN(n) ? null : n;
 }
 
+// The partner / DC / e-way / docket handover steps are all driven from the
+// Logistics dashboard. A plain LOGISTICS user has no reverse-pickup:canEdit
+// grant, so these actions accept either module's edit permission rather than
+// showing a control that would be rejected on submit.
+function requireLogisticsOrReversePickup(user: { permissions: unknown; role: string } | null): void {
+  if (!user) throw new Error("Unauthorized");
+  const canLogistics = canModuleAction(user.permissions, user.role, "logistics", "canEdit");
+  const canReversePickup = canModuleAction(user.permissions, user.role, "reverse-pickup", "canEdit");
+  if (!canLogistics && !canReversePickup) throw new Error("Permission denied");
+}
+
 const RPU_NUMBER = /^RPU-([0-9]+)$/;
 
 async function nextReversePickupRequestNumber(): Promise<string> {
@@ -370,7 +381,7 @@ export async function createReversePickupRequest(formData: FormData) {
 
 export async function assignPartner(formData: FormData) {
   const user = await getSession();
-  requirePermission(user, "reverse-pickup", "canEdit");
+  requireLogisticsOrReversePickup(user);
 
   const id = formData.get("id") as string;
   const partnerName = formData.get("partnerName") as string;
@@ -387,27 +398,16 @@ export async function assignPartner(formData: FormData) {
     },
   });
 
+  revalidatePath("/dashboard/logistics");
   revalidatePath("/dashboard/reverse-pickup");
 }
 
-export async function requestDocket(formData: FormData) {
-  const user = await getSession();
-  requirePermission(user, "reverse-pickup", "canEdit");
-
-  const id = formData.get("id") as string;
-  if (!id) throw new Error("Request ID is required.");
-
-  await prisma.reversePickupRequest.update({
-    where: { id },
-    data: { status: "DOCKET_REQUESTED" },
-  });
-
-  revalidatePath("/dashboard/reverse-pickup");
-}
-
+// All three handover steps are driven from the Logistics pipeline, so each one
+// refreshes both the logistics queue (where the row moves on) and the reverse
+// detail page (where the matching "Awaiting ..." card is shown).
 export async function requestDc(formData: FormData) {
   const user = await getSession();
-  requirePermission(user, "reverse-pickup", "canEdit");
+  requireLogisticsOrReversePickup(user);
 
   const id = formData.get("id") as string;
   if (!id) throw new Error("Request ID is required.");
@@ -417,12 +417,13 @@ export async function requestDc(formData: FormData) {
     data: { status: "DC_REQUESTED" },
   });
 
+  revalidatePath("/dashboard/logistics");
   revalidatePath("/dashboard/reverse-pickup");
 }
 
 export async function requestEwayBill(formData: FormData) {
   const user = await getSession();
-  requirePermission(user, "reverse-pickup", "canEdit");
+  requireLogisticsOrReversePickup(user);
 
   const id = formData.get("id") as string;
   if (!id) throw new Error("Request ID is required.");
@@ -432,6 +433,7 @@ export async function requestEwayBill(formData: FormData) {
     data: { status: "EWAY_BILL_REQUESTED" },
   });
 
+  revalidatePath("/dashboard/logistics");
   revalidatePath("/dashboard/reverse-pickup");
 }
 

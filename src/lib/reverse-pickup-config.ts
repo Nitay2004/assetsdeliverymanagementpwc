@@ -103,11 +103,14 @@ export const STATUS_LABELS: Record<string, string> = {
 
 export const STATUS_FLOW: Record<string, { next: string; label: string } | null> = {
   REQUESTED:              { next: "PARTNER_ASSIGNED",      label: "Assign Partner" },
-  PARTNER_ASSIGNED:       { next: "DC_REQUESTED",          label: "Request DC" },
+  // Every step from partner alignment through docket assignment is driven by the
+  // Logistics team from their reverse pipeline, so the detail page shows an
+  // informational card for these states instead of an action.
+  PARTNER_ASSIGNED:       null,  // Logistics requests DC
   DC_REQUESTED:           null,  // Finance generates DC
-  DC_GENERATED:           { next: "EWAY_BILL_REQUESTED",   label: "Request E-Way Bill" },
+  DC_GENERATED:           null,  // Logistics requests e-way bill
   EWAY_BILL_REQUESTED:    null,  // Finance generates e-way bill
-  EWAY_BILL_GENERATED:    { next: "DOCKET_REQUESTED",      label: "Request Docket" },
+  EWAY_BILL_GENERATED:    null,  // Logistics assigns docket
   DOCKET_REQUESTED:       null,  // Logistics assigns docket and advances to DOCKET_ASSIGNED
   DOCKET_ASSIGNED:        { next: "INSPECTED",             label: "Record Inspection" },
   INSPECTED:              { next: "PICKED_UP",             label: "Mark Picked Up" },

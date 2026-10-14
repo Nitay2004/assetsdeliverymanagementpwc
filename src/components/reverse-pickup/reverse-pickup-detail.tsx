@@ -6,15 +6,12 @@ import Link from "next/link";
 import { ArrowLeft, AlertTriangle, Check, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileText, Package, Circle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  requestDc,
-  requestDocket,
   recordInspection,
   markAsPickedUp,
   receiveAtWarehouse,
   recordCleanQc,
   recordPurgeQc,
   logHpCase,
-  requestEwayBill,
   recordBlancoClear,
   recordBlancoPurge,
   uploadPodDocument,
@@ -241,15 +238,12 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
     try {
       formData.append("id", request.id);
       const actionMap: Record<string, (fd: FormData) => Promise<void>> = {
-        requestDc,
-        requestDocket,
         recordInspection,
         markAsPickedUp,
         receiveAtWarehouse,
         recordCleanQc,
         recordPurgeQc,
         logHpCase,
-        requestEwayBill,
         recordBlancoClear,
         recordBlancoPurge,
         completeReversePickup,
@@ -908,23 +902,6 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                 Next Step: {nextAction.label}
               </h2>
 
-              {/* Request DC from Finance */}
-              {effectiveStatus === "PARTNER_ASSIGNED" && (
-                <form action={async (formData) => handleAction("requestDc", formData)} className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Partner assigned. Request a delivery challan from the Finance team for this pickup.
-                  </p>
-                  <button
-                    type="submit"
-                    disabled={isPending("requestDc")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {isPending("requestDc") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("requestDc") ? "Requesting..." : "Request DC from Finance"}
-                  </button>
-                </form>
-              )}
-
               {/* Mark Picked Up */}
               {effectiveStatus === "INSPECTED" && (
                 <form action={async (formData) => handleAction("markAsPickedUp", formData)} className="space-y-4">
@@ -1131,41 +1108,6 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                   >
                     {isPending("recordPurgeQc") ? <Loader2 className="size-4 animate-spin" /> : null}
                     {isPending("recordPurgeQc") ? "Recording..." : "Record Software QC"}
-                  </button>
-                </form>
-              )}
-
-              {/* Request E-Way Bill from Finance */}
-              {effectiveStatus === "DC_GENERATED" && (
-                <form action={async (formData) => handleAction("requestEwayBill", formData)} className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    DC has been generated. Request an E-Way bill from the Finance team.
-                  </p>
-                  <button
-                    type="submit"
-                    disabled={isPending("requestEwayBill")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {isPending("requestEwayBill") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("requestEwayBill") ? "Requesting..." : "Request E-Way Bill from Finance"}
-                  </button>
-                </form>
-              )}
-
-              {/* Request Docket from Logistics */}
-              {effectiveStatus === "EWAY_BILL_GENERATED" && (
-                <form action={async (formData) => handleAction("requestDocket", formData)} className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    DC and E-Way bill are ready. Request the reverse docket number from the Logistics team to
-                    schedule the pickup.
-                  </p>
-                  <button
-                    type="submit"
-                    disabled={isPending("requestDocket")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {isPending("requestDocket") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("requestDocket") ? "Requesting..." : "Request Docket from Logistics"}
                   </button>
                 </form>
               )}
@@ -1380,9 +1322,9 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
         </div>
       )}
 
-      {/* Partner alignment is done by the Logistics team from their Align
-          Partner queue, so a fresh request has no action here until a partner
-          is aligned. Kept informational, matching the other "Awaiting ..." cards. */}
+      {/* Partner alignment and the DC / E-Way / docket handovers are all done by
+          the Logistics team from their reverse pipeline, so these states are
+          informational only here, matching the other "Awaiting ..." cards. */}
       {effectiveStatus === "REQUESTED" && (
         <div className="rounded-xl glass shadow-sm p-6 space-y-4">
           <div className="flex items-center gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200">
@@ -1392,6 +1334,21 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               <p className="text-xs text-blue-700 mt-0.5">
                 Partner alignment is handled by the Logistics team. This request moves to Partner
                 Assigned once a pickup partner is aligned.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Partner Assigned - Awaiting Logistics */}
+      {effectiveStatus === "PARTNER_ASSIGNED" && (
+        <div className="rounded-xl glass shadow-sm p-6 space-y-4">
+          <div className="flex items-center gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200">
+            <Truck className="size-5 text-blue-600 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-blue-800">Awaiting Logistics</p>
+              <p className="text-xs text-blue-700 mt-0.5">
+                A pickup partner is aligned. Logistics will request the delivery challan from Finance.
               </p>
             </div>
           </div>
@@ -1422,7 +1379,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             <div>
               <p className="text-sm font-semibold text-orange-800">Awaiting Finance</p>
               <p className="text-xs text-orange-700 mt-0.5">
-                DC has been requested from Finance. Once generated, you can request the E-Way bill.
+                DC has been requested from Finance. Once generated, Logistics will request the E-Way bill.
               </p>
             </div>
           </div>
@@ -1437,7 +1394,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             <div>
               <p className="text-sm font-semibold text-indigo-800">DC Generated</p>
               <p className="text-xs text-indigo-700 mt-0.5">
-                DC has been generated. You can now request an E-Way bill from Finance.
+                DC has been generated. Logistics will request the E-Way bill from Finance.
               </p>
               {dcId && (
                 <a href={`/api/dc/${dcId}/pdf`} target="_blank" className="inline-flex items-center gap-1 mt-2 text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline">
@@ -1458,7 +1415,8 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             <div>
               <p className="text-sm font-semibold text-yellow-800">Awaiting Finance</p>
               <p className="text-xs text-yellow-700 mt-0.5">
-                E-Way bill has been requested from Finance. Once generated, you can record inspection.
+                E-Way bill has been requested from Finance. Once generated, Logistics will assign
+                the docket number.
               </p>
             </div>
           </div>
@@ -1473,7 +1431,8 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             <div>
               <p className="text-sm font-semibold text-indigo-800">E-Way Bill Generated</p>
               <p className="text-xs text-indigo-700 mt-0.5">
-                E-Way bill has been generated. Request the docket number from Logistics to proceed with pickup.
+                E-Way bill has been generated. Logistics will assign the docket number to proceed
+                with pickup.
               </p>
             </div>
           </div>
