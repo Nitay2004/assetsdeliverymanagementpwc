@@ -10,15 +10,21 @@ import { ForwardReverseTabs } from "@/components/shared/forward-reverse-tabs";
 import { getCorrectOrderPage } from "@/lib/order-page";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES, FORWARD_DC_STATUSES, FORWARD_EWAY_STATUSES } from "@/lib/order-status";
-import type { Prisma, OrderStatus } from "@prisma/client";
+import type { Prisma, OrderStatus, ReversePickupStatus } from "@prisma/client";
 
 const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
 const FINANCE_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity", "serialNumber", "dcNumber", "ewayBill", "status"];
+// Reverse finance filters are namespaced so they never collide with the
+// forward table's params, which share this route.
+const REVERSE_FINANCE_FILTER_KEYS = ["rmodel", "remployee", "rstatus", "rdc", "reway"];
 
 export default async function FinancePage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
   const page = Math.max(1, parseInt(typeof searchParams.page === "string" ? searchParams.page : "1", 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(typeof searchParams.limit === "string" ? searchParams.limit : "10", 10) || 10));
+  // Reverse queues page on their own params so they never move the forward table.
+  const rpage = Math.max(1, parseInt(typeof searchParams.rpage === "string" ? searchParams.rpage : "1", 10) || 1);
+  const rlimit = Math.min(100, Math.max(1, parseInt(typeof searchParams.rlimit === "string" ? searchParams.rlimit : "10", 10) || 10));
   const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
   const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
   const financeSubTab = typeof searchParams.ftab === "string" ? searchParams.ftab : (typeof searchParams.financeTab === "string" ? searchParams.financeTab : "dc");
@@ -172,11 +178,72 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
     .map(r => ({ value: r.ewayBillNumber ?? "(Blank)", count: r._count._all }))
     .sort((a, b) => a.value.localeCompare(b.value));
 
+  const activeTab = searchParams.tab === "reverse" ? "reverse" : "forward";
+  // Sticky reverse DC sub-tab: the case stays in the DC table through the
+  // e-way stages too, so finance never loses the row after requesting or
+  // generating the e-way bill.
+  const reverseSubTab = ((searchParams.rtab === "eway" || searchParams.rtab === "e-way" || searchParams.rtab === "eWay") ? "eway" : "dc");
+  const isEwayQueue = reverseSubTab === "eway";
+
   // Reverse pickups stay visible after they are generated — otherwise the row
   // vanishes from this table the moment finance hits "save".
-  const rpRequests = await prisma.reversePickupRequest.findMany({
-    where: { status: { in: ["DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED"] } },
-    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+  const rpDcWhere: Prisma.ReversePickupRequestWhereInput = {
+    status: { in: ["DC_REQUESTED", "DC_GENERATED", "EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED"] },
+  };
+  const rpEwayWhere: Prisma.ReversePickupRequestWhereInput = {
+    status: { in: ["EWAY_BILL_REQUESTED", "EWAY_BILL_GENERATED"] },
+  };
+  const rpBaseWhere = isEwayQueue ? rpEwayWhere : rpDcWhere;
+
+  const reverseColumnFilters = parseColumnFilters(searchParams, REVERSE_FINANCE_FILTER_KEYS);
+  const rpSearch = typeof searchParams.rsearch === "string" ? searchParams.rsearch.trim() : "";
+  const rpWhere: Prisma.ReversePickupRequestWhereInput = { ...rpBaseWhere };
+  if (rpSearch) {
+    rpWhere.OR = [
+      { requestNumber: { contains: rpSearch, mode: "insensitive" } },
+      { serialNumber: { contains: rpSearch, mode: "insensitive" } },
+      { model: { contains: rpSearch, mode: "insensitive" } },
+      { employeeName: { contains: rpSearch, mode: "insensitive" } },
+      { dcNo: { contains: rpSearch, mode: "insensitive" } },
+      { eWayBillNo: { contains: rpSearch, mode: "insensitive" } },
+    ];
+  }
+  if (reverseColumnFilters.rmodel) rpWhere.model = { in: reverseColumnFilters.rmodel };
+  if (reverseColumnFilters.remployee) rpWhere.employeeName = { in: reverseColumnFilters.remployee };
+  if (reverseColumnFilters.rstatus) rpWhere.status = { in: reverseColumnFilters.rstatus as ReversePickupStatus[] };
+  if (reverseColumnFilters.rdc) rpWhere.dcNo = { in: reverseColumnFilters.rdc };
+  if (reverseColumnFilters.reway) rpWhere.eWayBillNo = { in: reverseColumnFilters.reway };
+
+  const reverseTotalCount = await prisma.reversePickupRequest.count({ where: rpWhere });
+  const reverseTotalPages = Math.max(1, Math.ceil(reverseTotalCount / rlimit));
+  const safeReversePage = Math.min(rpage, reverseTotalPages);
+
+  const [rpRequests, rpModelGroups, rpEmployeeGroups, rpStatusGroups, rpDcGroups, rpEwayGroups] = await Promise.all([
+    prisma.reversePickupRequest.findMany({
+      where: rpWhere,
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      skip: (safeReversePage - 1) * rlimit,
+      take: rlimit,
+    }),
+    prisma.reversePickupRequest.groupBy({ by: ["model"], where: rpWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: rpWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["status"], where: rpWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["dcNo"], where: rpWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["eWayBillNo"], where: rpWhere, _count: { _all: true } }),
+  ]);
+
+  const reverseColumnFilterValues: Record<string, { value: string; count: number }[]> = {
+    rmodel: rpModelGroups.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    remployee: rpEmployeeGroups.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rstatus: rpStatusGroups.map(r => ({ value: r.status ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rdc: rpDcGroups.map(r => ({ value: r.dcNo ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    reway: rpEwayGroups.map(r => ({ value: r.eWayBillNo ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+  };
+
+  // Badge = cases still waiting on finance across both queues, independent of
+  // which queue (and which page) is currently open.
+  const reversePending = await prisma.reversePickupRequest.count({
+    where: { status: { in: ["DC_REQUESTED", "EWAY_BILL_REQUESTED"] } },
   });
 
   const rpDcIds = await prisma.deliveryChallan.findMany({
@@ -188,17 +255,6 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
       .map(dc => [dc.reversePickupRequestId, dc.id])
   );
 
-  // Sticky reverse DC sub-tab: the case stays in the DC table through the
-  // e-way stages too, so finance never loses the row after requesting or
-  // generating the e-way bill.
-  const rpDcRequests = rpRequests;
-  const rpEwayRequests = rpRequests.filter(r => r.status === "EWAY_BILL_REQUESTED" || r.status === "EWAY_BILL_GENERATED");
-
-  const activeTab = searchParams.tab === "reverse" ? "reverse" : "forward";
-  // Badge = cases still waiting on finance, not every case shown in the tab.
-  const reversePending = rpRequests.filter(r => r.status === "DC_REQUESTED" || r.status === "EWAY_BILL_REQUESTED").length;
-
-  const reverseSubTab = ((searchParams.rtab === "eway" || searchParams.rtab === "e-way" || searchParams.rtab === "eWay") ? "eway" : "dc");
   const forwardOrdersToShow = orders;
 
   // Sub-tab links keep search / filters / reverse state and only reset the
@@ -210,6 +266,7 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
     }
     params.set("ftab", ftab);
     params.delete("page");
+    params.delete("rpage");
     params.delete("selected");
     return `/dashboard/finance?${params.toString()}`;
   };
@@ -278,15 +335,19 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
           )}
         </div>
       ) : (
-        <>
+        <div className="space-y-4">
           <ReversePickupFinanceSection
-            dcRequests={rpDcRequests}
-            ewayRequests={rpEwayRequests}
+            requests={rpRequests}
             canManage={canManage}
             dcIdMap={rpDcMap}
             reverseSubTab={reverseSubTab}
+            totalCount={reverseTotalCount}
+            columnFilterValues={reverseColumnFilterValues}
           />
-        </>
+          {reverseTotalCount > 0 && (
+            <PaginationBar basePath="/dashboard/finance" currentPage={safeReversePage} totalPages={reverseTotalPages} totalCount={reverseTotalCount} limit={rlimit} pageParam="rpage" limitParam="rlimit" />
+          )}
+        </div>
       )}
     </div>
   );

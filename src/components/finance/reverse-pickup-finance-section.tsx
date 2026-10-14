@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { generateReversePickupEwayBill } from "@/app/actions/reverse-pickup";
 import { ReversePickupDcModal } from "@/components/finance/reverse-pickup-dc-modal";
+import { ColumnFilterHeader, useColumnFilters, type ColumnFilterConfig } from "@/components/shared/column-filter";
+import { UrlDataTableFilter } from "@/components/shared/data-table-filter";
 
 interface RpRequest {
   id: string;
@@ -20,14 +22,34 @@ interface RpRequest {
 }
 
 interface Props {
-  dcRequests: RpRequest[];
-  ewayRequests: RpRequest[];
+  requests: RpRequest[];
   canManage: boolean;
   dcIdMap: Map<string, string>;
   reverseSubTab?: string;
+  /** Rows matching the filters across the whole queue, not just this page. */
+  totalCount: number;
+  columnFilterValues?: Record<string, { value: string; count: number }[]>;
 }
 
-const HEADERS = ["Request #", "Serial #", "Model", "Employee", "Status", "DC No", "E-Way Bill", "Action"];
+// Each header carries the filter param it owns, so the same definition drives
+// both the DC and the E-Way table.
+const HEADERS: { label: string; filterKey?: string }[] = [
+  { label: "Request #" },
+  { label: "Serial #" },
+  { label: "Model", filterKey: "rmodel" },
+  { label: "Employee", filterKey: "remployee" },
+  { label: "Status", filterKey: "rstatus" },
+  { label: "DC No", filterKey: "rdc" },
+  { label: "E-Way Bill", filterKey: "reway" },
+];
+
+const FILTER_COLUMNS: ColumnFilterConfig<RpRequest>[] = [
+  { key: "rmodel", getValue: r => r.model },
+  { key: "remployee", getValue: r => r.employeeName },
+  { key: "rstatus", getValue: r => r.status },
+  { key: "rdc", getValue: r => r.dcNo },
+  { key: "reway", getValue: r => r.eWayBillNo },
+];
 
 const DC_BADGES: Record<string, { label: string; color: string }> = {
   DC_REQUESTED:        { label: "DC Requested",   color: "bg-orange-100 text-orange-700" },
@@ -36,7 +58,7 @@ const DC_BADGES: Record<string, { label: string; color: string }> = {
   EWAY_BILL_GENERATED: { label: "E-Way Generated", color: "bg-green-100 text-green-700" },
 };
 
-export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManage, dcIdMap, reverseSubTab = "dc" }: Props) {
+export function ReversePickupFinanceSection({ requests, canManage, dcIdMap, reverseSubTab = "dc", totalCount, columnFilterValues }: Props) {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -97,58 +119,84 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
     } finally { setSaving(null); }
   }
 
-  const requestsToShow = reverseSubTab === "eway" ? ewayRequests : dcRequests;
+  const { filteredRows: rows, distinctValues, filters, applyColumn, activeFilterCount } = useColumnFilters(
+    FILTER_COLUMNS,
+    requests,
+    { distinctValues: columnFilterValues, pageParam: "rpage" },
+  );
   const emptyMessage = reverseSubTab === "eway" ? "No E-Way Bill requests to process." : "No DC requests to process.";
+
+  // One header row for both queues — the columns are identical, only the body
+  // differs, so the filter headers stay in a single place.
+  const headRow = (
+    <tr>
+      {HEADERS.map(h => (
+        h.filterKey ? (
+          <ColumnFilterHeader
+            key={h.label}
+            label={h.label}
+            values={distinctValues[h.filterKey] ?? []}
+            selected={filters[h.filterKey] ?? []}
+            onApply={v => applyColumn(h.filterKey as string, v)}
+          />
+        ) : (
+          <th key={h.label} className="px-6 py-4 font-semibold">{h.label}</th>
+        )
+      ))}
+      {canManage && <th className="px-6 py-4 font-semibold">Action</th>}
+    </tr>
+  );
 
   return (
     <div className="space-y-4">
-      <div className="inline-flex rounded-lg border bg-muted/40 p-1">
-        <button
-          onClick={() => {
-            const params = new URLSearchParams(searchParams.toString());
-            params.set("rtab", "dc");
-            params.delete("page");
-            router.push(`${window.location.pathname}?${params.toString()}`);
-          }}
-          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${reverseSubTab === "dc" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          DC
-        </button>
-        <button
-          onClick={() => {
-            const params = new URLSearchParams(searchParams.toString());
-            params.set("rtab", "eway");
-            params.delete("page");
-            router.push(`${window.location.pathname}?${params.toString()}`);
-          }}
-          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${reverseSubTab === "eway" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          E-Way Bill
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+          <button
+            onClick={() => {
+              const params = new URLSearchParams(searchParams.toString());
+              params.set("rtab", "dc");
+              params.delete("page");
+              params.delete("rpage");
+              router.push(`${window.location.pathname}?${params.toString()}`);
+            }}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${reverseSubTab === "dc" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            DC
+          </button>
+          <button
+            onClick={() => {
+              const params = new URLSearchParams(searchParams.toString());
+              params.set("rtab", "eway");
+              params.delete("page");
+              params.delete("rpage");
+              router.push(`${window.location.pathname}?${params.toString()}`);
+            }}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${reverseSubTab === "eway" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            E-Way Bill
+          </button>
+        </div>
+        <UrlDataTableFilter paramName="rsearch" placeholder="Search by request, serial, model, employee..." className="w-full sm:w-72" />
       </div>
 
-      {requestsToShow.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="p-8 rounded-xl glass text-center text-muted-foreground">
-          {emptyMessage}
+          {activeFilterCount > 0 ? "No rows match the current filters." : emptyMessage}
         </div>
       ) : reverseSubTab === "dc" ? (
         <div className="rounded-xl glass shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b bg-orange-50 flex items-center gap-2">
             <ArrowUpRight className="size-4 text-orange-600" />
             <h2 className="text-sm font-semibold text-orange-800">Reverse Pickup - DC</h2>
-            <span className="ml-auto text-xs text-orange-600 font-medium">{dcRequests.length} cases</span>
+            <span className="ml-auto text-xs text-orange-600 font-medium">{totalCount} cases</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-muted-foreground uppercase bg-muted/40">
-                <tr>
-                  {HEADERS.map(h => (
-                    <th key={h} className="px-6 py-4 font-semibold">{h}</th>
-                  ))}
-                </tr>
+                {headRow}
               </thead>
               <tbody className="divide-y">
-                {dcRequests.map(r => {
+                {rows.map(r => {
                   const dcDone = r.status !== "DC_REQUESTED";
                   const badge = DC_BADGES[r.status] ?? { label: r.status, color: "bg-orange-100 text-orange-700" };
                   return (
@@ -200,19 +248,15 @@ export function ReversePickupFinanceSection({ dcRequests, ewayRequests, canManag
           <div className="px-6 py-4 border-b bg-orange-50 flex items-center gap-2">
             <ArrowUpRight className="size-4 text-orange-600" />
             <h2 className="text-sm font-semibold text-orange-800">Reverse Pickup - E-Way Bill</h2>
-            <span className="ml-auto text-xs text-orange-600 font-medium">{ewayRequests.length} cases</span>
+            <span className="ml-auto text-xs text-orange-600 font-medium">{totalCount} cases</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-muted-foreground uppercase bg-muted/40">
-                <tr>
-                  {HEADERS.map(h => (
-                    <th key={h} className="px-6 py-4 font-semibold">{h}</th>
-                  ))}
-                </tr>
+                {headRow}
               </thead>
               <tbody className="divide-y">
-                {ewayRequests.map(r => {
+                {rows.map(r => {
                   const ewayDone = r.status === "EWAY_BILL_GENERATED";
                   return (
                   <tr key={r.id} className="hover:bg-muted/10 transition-colors">

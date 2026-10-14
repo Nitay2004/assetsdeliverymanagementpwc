@@ -34,11 +34,11 @@ export function DataTableFilter({ value, onChange, placeholder = "Search across 
   );
 }
 
-export function UrlDataTableFilter({ placeholder = "Search across all fields...", className }: { placeholder?: string; className?: string }) {
+export function UrlDataTableFilter({ placeholder = "Search across all fields...", className, paramName = "search" }: { placeholder?: string; className?: string; paramName?: string }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const currentSearch = searchParams.get("search") ?? "";
+  const currentSearch = searchParams.get(paramName) ?? "";
 
   const [localValue, setLocalValue] = useState(currentSearch);
 
@@ -53,15 +53,15 @@ export function UrlDataTableFilter({ placeholder = "Search across all fields..."
       timer = setTimeout(() => {
         const params = new URLSearchParams(searchParams.toString());
         if (val.trim()) {
-          params.set("search", val.trim());
+          params.set(paramName, val.trim());
         } else {
-          params.delete("search");
+          params.delete(paramName);
         }
         params.delete("page");
         router.push(`${pathname}?${params.toString()}`);
       }, 400);
     };
-  }, [searchParams, router, pathname])();
+  }, [searchParams, router, pathname, paramName])();
 
   function handleChange(val: string) {
     setLocalValue(val);
@@ -71,7 +71,7 @@ export function UrlDataTableFilter({ placeholder = "Search across all fields..."
   function handleClear() {
     setLocalValue("");
     const params = new URLSearchParams(searchParams.toString());
-    params.delete("search");
+    params.delete(paramName);
     params.delete("page");
     router.push(`${pathname}?${params.toString()}`);
   }

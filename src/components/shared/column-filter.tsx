@@ -23,6 +23,12 @@ export interface ColumnFilterValue {
 
 interface UseColumnFiltersOptions {
   distinctValues?: Record<string, ColumnFilterValue[]>;
+  /**
+   * Page param to clear when a filter changes. Defaults to `page`; tables that
+   * page on their own param (e.g. a sub-tab using `rpage`) pass it so applying a
+   * filter jumps back to the first page of *that* table.
+   */
+  pageParam?: string;
 }
 
 type FilterMap = Record<string, string[]>;
@@ -63,9 +69,9 @@ export function useColumnFilters<T>(config: ColumnFilterConfig<T>[], rows: T[], 
       if (vals.length) params.set(col.key, vals.join(","));
       else params.delete(col.key);
     }
-    params.delete("page");
+    params.delete(options?.pageParam ?? "page");
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [config, pathname, router]);
+  }, [config, pathname, router, options?.pageParam]);
 
   const apply = useCallback((next: FilterMap) => {
     const clean: FilterMap = {};
