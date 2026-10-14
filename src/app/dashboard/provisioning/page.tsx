@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { CheckCircle, Clock, Wrench, User, Upload } from "lucide-react";
 import Link from "next/link";
 import { ProvisioningTable } from "@/components/provisioning/provisioning-table";
-import { ProvisioningPagination } from "@/components/provisioning/provisioning-pagination";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { ProvisioningExportButton } from "@/components/provisioning/provisioning-export-button";
 import { QcWorkTable } from "@/components/provisioning/qc-work-table";
@@ -85,21 +84,22 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     provisioningLocation: "provisioningLocation",
   }));
 
-  const [totalCount, orders] = await Promise.all([
-    prisma.order.count({ where }),
-    prisma.order.findMany({
-      where,
-      include: {
-        assets: {
-          include: { inventoryItem: true },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        },
+  const totalCount = await prisma.order.count({ where });
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+  const safePage = Math.min(page, totalPages);
+
+  const orders = await prisma.order.findMany({
+    where,
+    include: {
+      assets: {
+        include: { inventoryItem: true },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       },
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-  ]);
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    skip: (safePage - 1) * limit,
+    take: limit,
+  });
 
   const [serialNumberGroups, modelGroups, imageTypeGroups, stickerColourGroups, assetStatusGroups, clientNameGroups, engineerNameGroups, warehouseLocationGroups, provisioningLocationGroups] = await Promise.all([
     prisma.inventoryItem.groupBy({
@@ -252,12 +252,14 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const hpTotalCount = await prisma.reversePickupRequest.count({
     where: { status: "CASE_LOGGED_WITH_HP" },
   });
+  const hpTotalPages = Math.max(1, Math.ceil(hpTotalCount / limit));
+  const safeHpPage = Math.min(page, hpTotalPages);
 
   const hpRows = activeTab === "hp"
     ? await prisma.reversePickupRequest.findMany({
         where: { status: "CASE_LOGGED_WITH_HP" },
         orderBy: [{ hpCaseLoggedAt: "desc" }, { id: "desc" }],
-        skip: (page - 1) * limit,
+        skip: (safeHpPage - 1) * limit,
         take: limit,
       })
     : [];
@@ -361,12 +363,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
         <>
           <HpCasesTable items={serializedHp} />
           {hpTotalCount > 0 && (
-            <ProvisioningPagination
-              totalCount={hpTotalCount}
-              currentPage={page}
-              pageSize={limit}
-              extraParams={{ tab: "hp" }}
-            />
+            <PaginationBar basePath="/dashboard/provisioning" currentPage={safeHpPage} totalPages={hpTotalPages} totalCount={hpTotalCount} limit={limit} />
           )}
         </>
       ) : (
@@ -488,7 +485,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
             </section>
           )}
 
-          <ProvisioningPagination totalCount={totalCount} currentPage={page} pageSize={limit} />
+          <PaginationBar basePath="/dashboard/provisioning" currentPage={safePage} totalPages={totalPages} totalCount={totalCount} limit={limit} />
         </>
       )}
     </div>
