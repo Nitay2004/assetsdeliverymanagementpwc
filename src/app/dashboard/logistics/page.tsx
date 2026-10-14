@@ -20,8 +20,8 @@ const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
 const LOGISTICS_FILTER_KEYS = ["clientName", "dcNumber", "deliveryLocation", "totalQuantity", "serialNumber", "dockets", "ewayBill", "status"];
 // Each reverse queue owns its filter params so a filter set on one queue never
 // follows the user into the other.
-const ALIGN_FILTER_KEYS = ["amodel", "aemployee", "acity"];
-const DOCKET_FILTER_KEYS = ["dmodel", "demployee", "dcity", "dstatus"];
+const ALIGN_FILTER_KEYS = ["aserial", "amodel", "aemployee", "acity"];
+const DOCKET_FILTER_KEYS = ["dserial", "dmodel", "demployee", "dcity", "dstatus"];
 
 export default async function LogisticsPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
@@ -214,6 +214,7 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
       { city: { contains: alignSearch, mode: "insensitive" } },
     ];
   }
+  if (alignColumnFilters.aserial) rpAlignWhere.serialNumber = { in: alignColumnFilters.aserial };
   if (alignColumnFilters.amodel) rpAlignWhere.model = { in: alignColumnFilters.amodel };
   if (alignColumnFilters.aemployee) rpAlignWhere.employeeName = { in: alignColumnFilters.aemployee };
   if (alignColumnFilters.acity) rpAlignWhere.city = { in: alignColumnFilters.acity };
@@ -229,6 +230,7 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
       { docketNumber: { contains: docketSearch, mode: "insensitive" } },
     ];
   }
+  if (docketColumnFilters.dserial) rpDocketWhere.serialNumber = { in: docketColumnFilters.dserial };
   if (docketColumnFilters.dmodel) rpDocketWhere.model = { in: docketColumnFilters.dmodel };
   if (docketColumnFilters.demployee) rpDocketWhere.employeeName = { in: docketColumnFilters.demployee };
   if (docketColumnFilters.dcity) rpDocketWhere.city = { in: docketColumnFilters.dcity };
@@ -249,22 +251,26 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
   // Filter dropdown values for the active queue only.
   const reverseColumnFilterValues: Record<string, { value: string; count: number }[]> = {};
   if (isDocketQueue) {
-    const [dModel, dEmployee, dCity, dStatus] = await Promise.all([
+    const [dSerial, dModel, dEmployee, dCity, dStatus] = await Promise.all([
+      prisma.reversePickupRequest.groupBy({ by: ["serialNumber"], where: rpDocketWhere, _count: { _all: true } }),
       prisma.reversePickupRequest.groupBy({ by: ["model"], where: rpDocketWhere, _count: { _all: true } }),
       prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: rpDocketWhere, _count: { _all: true } }),
       prisma.reversePickupRequest.groupBy({ by: ["city"], where: rpDocketWhere, _count: { _all: true } }),
       prisma.reversePickupRequest.groupBy({ by: ["status"], where: rpDocketWhere, _count: { _all: true } }),
     ]);
+    reverseColumnFilterValues.dserial = dSerial.map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
     reverseColumnFilterValues.dmodel = dModel.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
     reverseColumnFilterValues.demployee = dEmployee.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
     reverseColumnFilterValues.dcity = dCity.map(r => ({ value: r.city ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
     reverseColumnFilterValues.dstatus = dStatus.map(r => ({ value: r.status ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
   } else {
-    const [aModel, aEmployee, aCity] = await Promise.all([
+    const [aSerial, aModel, aEmployee, aCity] = await Promise.all([
+      prisma.reversePickupRequest.groupBy({ by: ["serialNumber"], where: rpAlignWhere, _count: { _all: true } }),
       prisma.reversePickupRequest.groupBy({ by: ["model"], where: rpAlignWhere, _count: { _all: true } }),
       prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: rpAlignWhere, _count: { _all: true } }),
       prisma.reversePickupRequest.groupBy({ by: ["city"], where: rpAlignWhere, _count: { _all: true } }),
     ]);
+    reverseColumnFilterValues.aserial = aSerial.map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
     reverseColumnFilterValues.amodel = aModel.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
     reverseColumnFilterValues.aemployee = aEmployee.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
     reverseColumnFilterValues.acity = aCity.map(r => ({ value: r.city ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));

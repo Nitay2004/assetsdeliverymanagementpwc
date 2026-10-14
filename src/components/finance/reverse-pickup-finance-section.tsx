@@ -35,7 +35,7 @@ interface Props {
 // both the DC and the E-Way table.
 const HEADERS: { label: string; filterKey?: string }[] = [
   { label: "Request #" },
-  { label: "Serial #" },
+  { label: "Serial #", filterKey: "rserial" },
   { label: "Model", filterKey: "rmodel" },
   { label: "Employee", filterKey: "remployee" },
   { label: "Status", filterKey: "rstatus" },
@@ -44,6 +44,7 @@ const HEADERS: { label: string; filterKey?: string }[] = [
 ];
 
 const FILTER_COLUMNS: ColumnFilterConfig<RpRequest>[] = [
+  { key: "rserial", getValue: r => r.serialNumber },
   { key: "rmodel", getValue: r => r.model },
   { key: "remployee", getValue: r => r.employeeName },
   { key: "rstatus", getValue: r => r.status },

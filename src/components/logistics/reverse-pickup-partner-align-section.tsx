@@ -42,9 +42,10 @@ interface Props {
   columnFilterValues?: Record<string, { value: string; count: number }[]>;
 }
 
-// Only the columns that are worth narrowing by get a filter header; request and
-// serial numbers stay in the free-text search.
+// Only the columns that are worth narrowing by get a filter header; request
+// numbers stay in the free-text search.
 const FILTER_COLUMNS: ColumnFilterConfig<RpRequest>[] = [
+  { key: "aserial", getValue: r => r.serialNumber },
   { key: "amodel", getValue: r => r.model },
   { key: "aemployee", getValue: r => r.employeeName },
   { key: "acity", getValue: r => r.city },
@@ -149,7 +150,7 @@ export function ReversePickupPartnerAlignSection({ requests, canManage, totalPen
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40">
             <tr>
               <th className="px-6 py-4 font-semibold">Request #</th>
-              <th className="px-6 py-4 font-semibold">Serial #</th>
+              <ColumnFilterHeader label="Serial #" values={distinctValues.aserial ?? []} selected={filters.aserial ?? []} onApply={v => applyColumn("aserial", v)} />
               <ColumnFilterHeader label="Model" values={distinctValues.amodel ?? []} selected={filters.amodel ?? []} onApply={v => applyColumn("amodel", v)} />
               <ColumnFilterHeader label="Employee" values={distinctValues.aemployee ?? []} selected={filters.aemployee ?? []} onApply={v => applyColumn("aemployee", v)} />
               <th className="px-6 py-4 font-semibold">Status</th>

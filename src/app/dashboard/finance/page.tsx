@@ -16,7 +16,7 @@ const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
 const FINANCE_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity", "serialNumber", "dcNumber", "ewayBill", "status"];
 // Reverse finance filters are namespaced so they never collide with the
 // forward table's params, which share this route.
-const REVERSE_FINANCE_FILTER_KEYS = ["rmodel", "remployee", "rstatus", "rdc", "reway"];
+const REVERSE_FINANCE_FILTER_KEYS = ["rserial", "rmodel", "remployee", "rstatus", "rdc", "reway"];
 
 export default async function FinancePage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
@@ -208,6 +208,7 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
       { eWayBillNo: { contains: rpSearch, mode: "insensitive" } },
     ];
   }
+  if (reverseColumnFilters.rserial) rpWhere.serialNumber = { in: reverseColumnFilters.rserial };
   if (reverseColumnFilters.rmodel) rpWhere.model = { in: reverseColumnFilters.rmodel };
   if (reverseColumnFilters.remployee) rpWhere.employeeName = { in: reverseColumnFilters.remployee };
   if (reverseColumnFilters.rstatus) rpWhere.status = { in: reverseColumnFilters.rstatus as ReversePickupStatus[] };
@@ -218,13 +219,14 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
   const reverseTotalPages = Math.max(1, Math.ceil(reverseTotalCount / rlimit));
   const safeReversePage = Math.min(rpage, reverseTotalPages);
 
-  const [rpRequests, rpModelGroups, rpEmployeeGroups, rpStatusGroups, rpDcGroups, rpEwayGroups] = await Promise.all([
+  const [rpRequests, rpSerialGroups, rpModelGroups, rpEmployeeGroups, rpStatusGroups, rpDcGroups, rpEwayGroups] = await Promise.all([
     prisma.reversePickupRequest.findMany({
       where: rpWhere,
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip: (safeReversePage - 1) * rlimit,
       take: rlimit,
     }),
+    prisma.reversePickupRequest.groupBy({ by: ["serialNumber"], where: rpWhere, _count: { _all: true } }),
     prisma.reversePickupRequest.groupBy({ by: ["model"], where: rpWhere, _count: { _all: true } }),
     prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: rpWhere, _count: { _all: true } }),
     prisma.reversePickupRequest.groupBy({ by: ["status"], where: rpWhere, _count: { _all: true } }),
@@ -233,6 +235,7 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
   ]);
 
   const reverseColumnFilterValues: Record<string, { value: string; count: number }[]> = {
+    rserial: rpSerialGroups.map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
     rmodel: rpModelGroups.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
     remployee: rpEmployeeGroups.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
     rstatus: rpStatusGroups.map(r => ({ value: r.status ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),

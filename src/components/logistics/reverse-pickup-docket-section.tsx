@@ -30,6 +30,7 @@ interface Props {
 }
 
 const FILTER_COLUMNS: ColumnFilterConfig<RpRequest>[] = [
+  { key: "dserial", getValue: r => r.serialNumber },
   { key: "dmodel", getValue: r => r.model },
   { key: "demployee", getValue: r => r.employeeName },
   { key: "dcity", getValue: r => r.city },
@@ -83,7 +84,7 @@ export function ReversePickupDocketSection({ requests, canManage, totalPending, 
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40">
             <tr>
               <th className="px-6 py-4 font-semibold">Request #</th>
-              <th className="px-6 py-4 font-semibold">Serial #</th>
+              <ColumnFilterHeader label="Serial #" values={distinctValues.dserial ?? []} selected={filters.dserial ?? []} onApply={v => applyColumn("dserial", v)} />
               <ColumnFilterHeader label="Model" values={distinctValues.dmodel ?? []} selected={filters.dmodel ?? []} onApply={v => applyColumn("dmodel", v)} />
               <ColumnFilterHeader label="Employee" values={distinctValues.demployee ?? []} selected={filters.demployee ?? []} onApply={v => applyColumn("demployee", v)} />
               <ColumnFilterHeader label="Status" values={distinctValues.dstatus ?? []} selected={filters.dstatus ?? []} onApply={v => applyColumn("dstatus", v)} />
