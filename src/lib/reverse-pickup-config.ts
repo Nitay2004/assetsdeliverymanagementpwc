@@ -164,6 +164,16 @@ export const WAREHOUSE_PIPELINE_STATUSES: string[] = [
   ...WAREHOUSE_RECEIVED_STATUSES,
 ];
 
+/** Statuses where actions are owned by the Warehouse Reverse tab (post-receipt). */
+export const WAREHOUSE_OWNED_STATUSES: string[] = [
+  "RECEIVED_AT_WAREHOUSE",
+  "QC_CLEANED",
+  "QC_COMPLETED",
+  "BLANCO_CLEARED",
+  "BLANCO_PURGED",
+  "BLANCO_CERTIFIED",
+];
+
 // All seedable categories for the DropdownOption table
 export const SEED_CATEGORIES: Record<string, { value: string; label: string }[]> = {
   type: TYPE_OPTIONS,

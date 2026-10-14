@@ -8,14 +8,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   recordInspection,
   markAsPickedUp,
-  recordCleanQc,
-  recordPurgeQc,
-  logHpCase,
-  recordBlancoClear,
-  recordBlancoPurge,
   uploadPodDocument,
-  completeReversePickup,
 } from "@/app/actions/reverse-pickup";
+import { WAREHOUSE_OWNED_STATUSES } from "@/lib/reverse-pickup-config";
 import { getNextStatus, hasReachedWarehouse } from "@/lib/reverse-pickup-config";
 import { resolveStatus } from "@/lib/reverse-pickup-status";
 
@@ -195,14 +190,10 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       const actionMap: Record<string, (fd: FormData) => Promise<void>> = {
         recordInspection,
         markAsPickedUp,
-        recordCleanQc,
-        recordPurgeQc,
-        logHpCase,
-        recordBlancoClear,
-        recordBlancoPurge,
-        completeReversePickup,
       };
-      await actionMap[actionName](formData);
+      const action = actionMap[actionName];
+      if (!action) throw new Error("Action not available here");
+      await action(formData);
       toast({ title: "Action completed successfully", variant: "success" });
       router.refresh();
     } catch (err) {
@@ -212,56 +203,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
     }
   };
 
-  const handleUploadBlanco = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const result = formData.get("blancoPurgeResult") as string | null;
-    if (!result) {
-      toast({ title: "Validation", description: "Blancco Purge result is required.", variant: "error" });
-      return;
-    }
-    const file = formData.get("blancoCertificateFile") as File | null;
-    const date = formData.get("blancoCertificateDate") as string | null;
-
-    if (!file) {
-      toast({ title: "Error", description: "Please select a certificate file.", variant: "error" });
-      return;
-    }
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-    if (!["pdf", "jpg", "jpeg", "png"].includes(ext)) {
-      toast({ title: "Error", description: "Only PDF, JPG, JPEG and PNG files are allowed.", variant: "error" });
-      return;
-    }
-
-    setLoading("recordBlancoPurge");
-    try {
-      const uploadFd = new FormData();
-      uploadFd.set("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: uploadFd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-
-      const actionFd = new FormData();
-      actionFd.set("id", request.id);
-      actionFd.set("blancoPurgeResult", result);
-      const purgeDate = formData.get("blancoPurgeDate") as string | null;
-      if (purgeDate) actionFd.set("blancoPurgeDate", purgeDate);
-      const purgeBy = formData.get("blancoPurgeBy") as string | null;
-      if (purgeBy) actionFd.set("blancoPurgeBy", purgeBy);
-      const purgeRemarks = formData.get("blancoPurgeRemarks") as string | null;
-      if (purgeRemarks) actionFd.set("blancoPurgeRemarks", purgeRemarks);
-      actionFd.set("blancoCertificateUrl", data.url);
-      actionFd.set("blancoCertificateDate", date ?? "");
-      await recordBlancoPurge(actionFd);
-
-      toast({ title: "Action completed successfully", variant: "success" });
-      router.refresh();
-    } catch (err) {
-      toast({ title: "Action failed", description: String(err), variant: "error" });
-    } finally {
-      setLoading(null);
-    }
-  };
+  // Blanco Purge is now handled by the Warehouse Reverse tab.
 
   const handleViewBlanco = async () => {
     const path = request.blancoCertificateUrl;
@@ -400,7 +342,6 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             const StepIcon = step.icon;
             const isCompleted = idx < currentStepIndex;
             const isCurrent = idx === currentStepIndex;
-            const isFuture = idx > currentStepIndex;
 
             return (
               <div key={step.key} className="flex flex-col items-center gap-2 flex-1 relative">
@@ -743,60 +684,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
           </div>
           )}
 
-          {/* QC failed and no HP case logged yet */}
-          {request.qcResult === "FAIL" && !hpParked && (effectiveStatus === "QC_CLEANED" || effectiveStatus === "QC_COMPLETED") && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 shadow-sm p-6 space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-amber-100 shrink-0">
-                  <AlertTriangle className="size-5 text-amber-700" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">QC failed — log a case with HP</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Blancco Clear stays blocked while QC reads FAIL. Logging a case parks the asset here
-                    so it stops at QC. Provisioning sends it back for a fresh Hardware QC once HP has
-                    fixed it.
-                  </p>
-                </div>
-              </div>
-              <form action={async (formData) => handleAction("logHpCase", formData)} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label htmlFor="hpCaseNumber" className="text-sm font-medium text-foreground">
-                      HP Case Number <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="hpCaseNumber"
-                      name="hpCaseNumber"
-                      required
-                      className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      placeholder="HP case reference"
-                    />
-                  </div>
-                  <div className="space-y-1.5 md:col-span-2">
-                    <label htmlFor="hpCaseRemarks" className="text-sm font-medium text-foreground">
-                      Remarks
-                    </label>
-                    <textarea
-                      id="hpCaseRemarks"
-                      name="hpCaseRemarks"
-                      rows={2}
-                      className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                      placeholder="What failed, what HP said..."
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={isPending("logHpCase")}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-50"
-                >
-                  {isPending("logHpCase") ? <Loader2 className="size-4 animate-spin" /> : <AlertTriangle className="size-4" />}
-                  {isPending("logHpCase") ? "Logging..." : "Log Case with HP"}
-                </button>
-              </form>
-            </div>
-          )}
+          {/* HP case logging is now handled by the Warehouse Reverse tab when QC fails */}
 
           {/* QC failed and already parked waiting on HP */}
           {hpParked && (
@@ -850,11 +738,10 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             </div>
           )}
 
-          {nextAction && effectiveStatus !== "REQUESTED" && (
+          {/* Actions are handled by the Warehouse Reverse tab */}
+          {(effectiveStatus === "INSPECTED" || effectiveStatus === "DOCKET_ASSIGNED") && nextAction && (
             <div className="rounded-xl glass shadow-sm p-6 space-y-4">
-              <h2 className="text-lg font-semibold text-foreground">
-                Next Step: {nextAction.label}
-              </h2>
+              <h2 className="text-lg font-semibold text-foreground">Next Step: {nextAction.label}</h2>
 
               {/* Mark Picked Up */}
               {effectiveStatus === "INSPECTED" && (
@@ -862,155 +749,17 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label htmlFor="pickupDate" className="text-sm font-medium text-foreground">Pickup Date</label>
-                      <input
-                        id="pickupDate"
-                        name="pickupDate"
-                        type="date"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      />
+                      <input id="pickupDate" name="pickupDate" type="date" className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
                     </div>
                     <div className="space-y-1.5">
                       <label htmlFor="docketNumber" className="text-sm font-medium text-foreground">Docket Number</label>
-                      <input
-                        id="docketNumber"
-                        name="docketNumber"
-                        value={request.docketNumber ?? ""}
-                        readOnly
-                        className="flex h-10 w-full rounded-lg border border-input/50 bg-muted/20 px-3 py-2 text-sm text-muted-foreground shadow-sm"
-                        placeholder="Auto-filled from logistics"
-                      />
-                      {request.docketNumber ? (
-                        <p className="text-xs text-emerald-600 font-medium">Assigned by logistics.</p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">No docket assigned yet.</p>
-                      )}
+                      <input id="docketNumber" name="docketNumber" value={request.docketNumber ?? ""} readOnly className="flex h-10 w-full rounded-lg border border-input/50 bg-muted/20 px-3 py-2 text-sm text-muted-foreground shadow-sm" />
+                      {request.docketNumber ? (<p className="text-xs text-emerald-600 font-medium">Assigned by logistics.</p>) : (<p className="text-xs text-muted-foreground">No docket assigned yet.</p>)}
                     </div>
                   </div>
-                  <button
-                    type="submit"
-                    disabled={isPending("markAsPickedUp")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
+                  <button type="submit" disabled={isPending("markAsPickedUp")} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50">
                     {isPending("markAsPickedUp") ? <Loader2 className="size-4 animate-spin" /> : null}
                     {isPending("markAsPickedUp") ? "Updating..." : "Mark as Picked Up"}
-                  </button>
-                </form>
-              )}
-
-              {/* Record Hardware QC */}
-              {effectiveStatus === "RECEIVED_AT_WAREHOUSE" && (
-                <form action={async (formData) => handleAction("recordCleanQc", formData)} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label htmlFor="qcCleanResult" className="text-sm font-medium text-foreground">
-                        Hardware QC Result <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        id="qcCleanResult"
-                        name="qcCleanResult"
-                        required
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      >
-                        <option value="">Select result...</option>
-                        <option value="PASS">Pass</option>
-                        <option value="FAIL">Fail</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="qcCleanDate" className="text-sm font-medium text-foreground">Hardware QC Date</label>
-                      <input
-                        id="qcCleanDate"
-                        name="qcCleanDate"
-                        type="date"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="qcCleanBy" className="text-sm font-medium text-foreground">Performed By</label>
-                      <input
-                        id="qcCleanBy"
-                        name="qcCleanBy"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        placeholder="QC engineer name"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label htmlFor="qcCleanRemarks" className="text-sm font-medium text-foreground">Hardware QC Remarks</label>
-                    <textarea
-                      id="qcCleanRemarks"
-                      name="qcCleanRemarks"
-                      rows={2}
-                      className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                      placeholder="Clean QC remarks..."
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isPending("recordCleanQc")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {isPending("recordCleanQc") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("recordCleanQc") ? "Recording..." : "Record Hardware QC"}
-                  </button>
-                </form>
-              )}
-
-              {/* Record Software QC */}
-              {effectiveStatus === "QC_CLEANED" && (
-                <form action={async (formData) => handleAction("recordPurgeQc", formData)} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label htmlFor="qcPurgeResult" className="text-sm font-medium text-foreground">
-                        Software QC Result <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        id="qcPurgeResult"
-                        name="qcPurgeResult"
-                        required
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      >
-                        <option value="">Select result...</option>
-                        <option value="PASS">Pass</option>
-                        <option value="FAIL">Fail</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="qcPurgeDate" className="text-sm font-medium text-foreground">Software QC Date</label>
-                      <input
-                        id="qcPurgeDate"
-                        name="qcPurgeDate"
-                        type="date"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="qcPurgeBy" className="text-sm font-medium text-foreground">Performed By</label>
-                      <input
-                        id="qcPurgeBy"
-                        name="qcPurgeBy"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        placeholder="QC engineer name"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label htmlFor="qcPurgeRemarks" className="text-sm font-medium text-foreground">Software QC Remarks</label>
-                    <textarea
-                      id="qcPurgeRemarks"
-                      name="qcPurgeRemarks"
-                      rows={2}
-                      className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                      placeholder="Purge QC remarks..."
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isPending("recordPurgeQc")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {isPending("recordPurgeQc") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("recordPurgeQc") ? "Recording..." : "Record Software QC"}
                   </button>
                 </form>
               )}
@@ -1021,209 +770,37 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label htmlFor="inspectionDate" className="text-sm font-medium text-foreground">Inspection Date</label>
-                      <input
-                        id="inspectionDate"
-                        name="inspectionDate"
-                        type="date"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      />
+                      <input id="inspectionDate" name="inspectionDate" type="date" className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
                     </div>
                     <div className="space-y-1.5">
                       <label htmlFor="inspectionRemarks" className="text-sm font-medium text-foreground">Inspection Remarks</label>
-                      <textarea
-                        id="inspectionRemarks"
-                        name="inspectionRemarks"
-                        rows={2}
-                        className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                        placeholder="Inspection remarks..."
-                      />
+                      <textarea id="inspectionRemarks" name="inspectionRemarks" rows={2} className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none" placeholder="Inspection remarks..." />
                     </div>
                   </div>
-                  <button
-                    type="submit"
-                    disabled={isPending("recordInspection")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
+                  <button type="submit" disabled={isPending("recordInspection")} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50">
                     {isPending("recordInspection") ? <Loader2 className="size-4 animate-spin" /> : null}
                     {isPending("recordInspection") ? "Recording..." : "Record Inspection"}
                   </button>
                 </form>
               )}
+            </div>
+          )}
 
-              {/* Record Blanco Clear */}
-              {effectiveStatus === "QC_COMPLETED" && (
-                <form action={async (formData) => handleAction("recordBlancoClear", formData)} className="space-y-4">
-                  {request.qcResult !== "PASS" && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                      Blancco Clear is blocked because the overall QC result is{" "}
-                      <span className="font-semibold">{request.qcResult ?? "not recorded as PASS"}</span>. Both
-                      Hardware QC and Software QC must pass to continue.
-                    </div>
-                  )}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label htmlFor="blancoClearResult" className="text-sm font-medium text-foreground">
-                        Blancco Clear Result <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        id="blancoClearResult"
-                        name="blancoClearResult"
-                        required
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      >
-                        <option value="">Select result...</option>
-                        <option value="PASS">Pass</option>
-                        <option value="FAIL">Fail</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="blancoClearDate" className="text-sm font-medium text-foreground">Blancco Clear Date</label>
-                      <input
-                        id="blancoClearDate"
-                        name="blancoClearDate"
-                        type="date"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="blancoClearBy" className="text-sm font-medium text-foreground">Performed By</label>
-                      <input
-                        id="blancoClearBy"
-                        name="blancoClearBy"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        placeholder="Blancco engineer name"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label htmlFor="blancoClearRemarks" className="text-sm font-medium text-foreground">Blancco Clear Remarks</label>
-                    <textarea
-                      id="blancoClearRemarks"
-                      name="blancoClearRemarks"
-                      rows={2}
-                      className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                      placeholder="Blancco clear remarks..."
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isPending("recordBlancoClear") || request.qcResult !== "PASS"}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {isPending("recordBlancoClear") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("recordBlancoClear") ? "Recording..." : "Record Blancco Clear"}
-                  </button>
-                </form>
-              )}
-
-              {/* Record Blanco Purge + Certificate */}
-              {effectiveStatus === "BLANCO_CLEARED" && (
-                <form onSubmit={handleUploadBlanco} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label htmlFor="blancoPurgeResult" className="text-sm font-medium text-foreground">
-                        Blancco Purge Result <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        id="blancoPurgeResult"
-                        name="blancoPurgeResult"
-                        required
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      >
-                        <option value="">Select result...</option>
-                        <option value="PASS">Pass</option>
-                        <option value="FAIL">Fail</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="blancoPurgeDate" className="text-sm font-medium text-foreground">Blancco Purge Date</label>
-                      <input
-                        id="blancoPurgeDate"
-                        name="blancoPurgeDate"
-                        type="date"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="blancoPurgeBy" className="text-sm font-medium text-foreground">Performed By</label>
-                      <input
-                        id="blancoPurgeBy"
-                        name="blancoPurgeBy"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        placeholder="Blancco engineer name"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label htmlFor="blancoPurgeRemarks" className="text-sm font-medium text-foreground">Blancco Purge Remarks</label>
-                    <textarea
-                      id="blancoPurgeRemarks"
-                      name="blancoPurgeRemarks"
-                      rows={2}
-                      className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-                      placeholder="Blancco purge remarks..."
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label htmlFor="blancoCertificateFile" className="text-sm font-medium text-foreground">
-                        Blanco Certificate <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        id="blancoCertificateFile"
-                        name="blancoCertificateFile"
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        required
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary file:mr-2 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
-                      />
-                      <p className="text-xs text-muted-foreground">PDF, JPG, JPEG or PNG</p>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="blancoCertificateDate" className="text-sm font-medium text-foreground">Certificate Date</label>
-                      <input
-                        id="blancoCertificateDate"
-                        name="blancoCertificateDate"
-                        type="date"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      />
-                    </div>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isPending("recordBlancoPurge")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {isPending("recordBlancoPurge") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("recordBlancoPurge") ? "Uploading..." : "Record Blancco Purge"}
-                  </button>
-                </form>
-              )}
-
-              {/* Move Back to Inventory */}
-              {(effectiveStatus === "BLANCO_PURGED" || effectiveStatus === "BLANCO_CERTIFIED") && (
-                <form action={async (formData) => handleAction("completeReversePickup", formData)} className="space-y-4">
-                  <div className="flex items-center gap-3 p-4 rounded-lg bg-teal-50 border border-teal-200">
-                    <Package className="size-5 text-teal-600 shrink-0" />
-                    <div>
-                      <p className="text-sm font-semibold text-teal-800">Blanco purge complete</p>
-                      <p className="text-xs text-teal-700 mt-0.5">
-                        The laptop will be moved back to inventory and this request will be marked as completed.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isPending("completeReversePickup")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {isPending("completeReversePickup") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("completeReversePickup") ? "Moving..." : "Move Back to Inventory"}
-                  </button>
-                </form>
-              )}
-        </div>
-      )}
+          {/* Warehouse-owned pipeline steps are handled from the Warehouse Reverse tab */}
+          {WAREHOUSE_OWNED_STATUSES.includes(effectiveStatus) && effectiveStatus !== "COMPLETED" && !hpParked && (
+            <div className="rounded-xl glass shadow-sm p-6 space-y-4">
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-cyan-50 border border-cyan-200">
+                <Warehouse className="size-5 text-cyan-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-cyan-800">Handled by the Warehouse team</p>
+                  <p className="text-xs text-cyan-700 mt-0.5">
+                    Receiving, Hardware QC, Software QC, Blancco Clear/Purge and moving back to Inventory are
+                    recorded from the Warehouse module&apos;s Reverse tab.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
       {/* Receive-at-warehouse is done by the Warehouse team from their Reverse
           tab, so this state is informational only here. */}
@@ -1234,8 +811,8 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             <div>
               <p className="text-sm font-semibold text-cyan-800">Awaiting Warehouse</p>
               <p className="text-xs text-cyan-700 mt-0.5">
-                The unit is on its way. The Warehouse team will record which warehouse it reaches,
-                the received date and who received it from their Reverse tab.
+                The unit is on its way. The Warehouse team will receive it and run the rest of the pipeline
+                from their Reverse tab.
               </p>
             </div>
           </div>

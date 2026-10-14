@@ -647,7 +647,9 @@ function deriveQcResult(...stageResults: (string | null | undefined)[]) {
 
 export async function recordCleanQc(formData: FormData) {
   const user = await getSession();
-  requirePermission(user, "reverse-pickup", "canEdit");
+  // Hardware QC is recorded by the Warehouse team from their Reverse tab, so the
+  // owning module's edit grant is accepted alongside reverse-pickup:canEdit.
+  requireModuleEditOrReversePickup(user, "warehouse");
 
   const id = formData.get("id") as string;
   const qcCleanResult = formData.get("qcCleanResult") as string;
@@ -674,12 +676,15 @@ export async function recordCleanQc(formData: FormData) {
     },
   });
 
+  revalidatePath("/dashboard/warehouse");
   revalidatePath("/dashboard/reverse-pickup");
+  revalidatePath("/dashboard/provisioning");
 }
 
 export async function recordPurgeQc(formData: FormData) {
   const user = await getSession();
-  requirePermission(user, "reverse-pickup", "canEdit");
+  // Software QC is recorded by the Warehouse team from their Reverse tab.
+  requireModuleEditOrReversePickup(user, "warehouse");
 
   const id = formData.get("id") as string;
   const qcPurgeResult = formData.get("qcPurgeResult") as string;
@@ -706,7 +711,9 @@ export async function recordPurgeQc(formData: FormData) {
     },
   });
 
+  revalidatePath("/dashboard/warehouse");
   revalidatePath("/dashboard/reverse-pickup");
+  revalidatePath("/dashboard/provisioning");
 }
 
 // Raised when a QC stage failed. The request parks here rather than advancing,
@@ -715,7 +722,8 @@ export async function recordPurgeQc(formData: FormData) {
 export async function logHpCase(formData: FormData) {
   const user = await getSession();
   if (!user) throw new Error("Unauthorized");
-  requirePermission(user, "reverse-pickup", "canEdit");
+  // Logged by the Warehouse team when a QC stage fails on their Reverse tab.
+  requireModuleEditOrReversePickup(user, "warehouse");
 
   const id = formData.get("id") as string;
   const hpCaseNumber = ((formData.get("hpCaseNumber") as string) || "").trim();
@@ -749,6 +757,7 @@ export async function logHpCase(formData: FormData) {
     },
   });
 
+  revalidatePath("/dashboard/warehouse");
   revalidatePath("/dashboard/reverse-pickup");
   revalidatePath("/dashboard/provisioning");
 }
@@ -803,7 +812,8 @@ export async function resolveHpCase(formData: FormData) {
 
 export async function recordBlancoClear(formData: FormData) {
   const user = await getSession();
-  requirePermission(user, "reverse-pickup", "canEdit");
+  // Blancco Clear is recorded by the Warehouse team from their Reverse tab.
+  requireModuleEditOrReversePickup(user, "warehouse");
 
   const id = formData.get("id") as string;
   const result = formData.get("blancoClearResult") as string;
@@ -833,12 +843,15 @@ export async function recordBlancoClear(formData: FormData) {
     },
   });
 
+  revalidatePath("/dashboard/warehouse");
   revalidatePath("/dashboard/reverse-pickup");
 }
 
 export async function recordBlancoPurge(formData: FormData) {
   const user = await getSession();
-  requirePermission(user, "reverse-pickup", "canEdit");
+  // Blancco Purge + certificate are recorded by the Warehouse team from their
+  // Reverse tab.
+  requireModuleEditOrReversePickup(user, "warehouse");
 
   const id = formData.get("id") as string;
   const result = formData.get("blancoPurgeResult") as string;
@@ -863,6 +876,7 @@ export async function recordBlancoPurge(formData: FormData) {
     },
   });
 
+  revalidatePath("/dashboard/warehouse");
   revalidatePath("/dashboard/reverse-pickup");
 }
 
@@ -885,7 +899,8 @@ export async function uploadPodDocument(formData: FormData) {
 
 export async function completeReversePickup(formData: FormData) {
   const user = await getSession();
-  requirePermission(user, "reverse-pickup", "canEdit");
+  // The final move back to inventory is driven from the Warehouse Reverse tab.
+  requireModuleEditOrReversePickup(user, "warehouse");
 
   const id = formData.get("id") as string;
   if (!id) throw new Error("Request ID is required.");
@@ -915,6 +930,7 @@ export async function completeReversePickup(formData: FormData) {
     });
   });
 
+  revalidatePath("/dashboard/warehouse");
   revalidatePath("/dashboard/reverse-pickup");
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard");

@@ -19,7 +19,7 @@ const ALLOCATED_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity"
 const QC_FILTER_KEYS = ["serialNumber", "model", "employeeName", "qcEngineer", "qcCleanResult", "qcPurgeResult"];
 // The Reverse tab is namespaced with an `r` prefix so its filters never collide
 // with the allocation (`status`) or QC (`serialNumber`) tabs.
-const REVERSE_FILTER_KEYS = ["rrequest", "rserial", "rmodel", "remployee", "rstatus", "rwarehouse"];
+const REVERSE_FILTER_KEYS = ["rrequest", "rserial", "rmodel", "remployee", "rstatus", "rwarehouse", "rclean", "rpurge"];
 
 function safeISO(date: Date | null | undefined): string | null {
   if (!date) return null;
@@ -82,7 +82,7 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     ...(reverseFilters.remployee ? { employeeName: { in: reverseFilters.remployee } } : {}),
     ...(reverseFilters.rstatus ? { status: { in: reverseFilters.rstatus as ReversePickupStatus[] } } : {}),
   };
-  andFilterConditions(reverseWhere, collectBlankTokenConditions(reverseFilters, { rwarehouse: "warehouseLocation" }));
+  andFilterConditions(reverseWhere, collectBlankTokenConditions(reverseFilters, { rwarehouse: "warehouseLocation", rclean: "qcCleanResult", rpurge: "qcPurgeResult" }));
 
   const [pendingOrders, totalAllocated, allocatedOrders, availableInventory] = await Promise.all([
     prisma.order.findMany({
@@ -182,6 +182,7 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     reverseRequests, reversePendingCount,
     reverseRequestGroups, reverseSerialGroups, reverseModelGroups,
     reverseEmployeeGroups, reverseStatusGroups, reverseWarehouseGroups,
+    reverseCleanGroups, reversePurgeGroups,
     warehouseLocationOptions,
   ] = await Promise.all([
     prisma.reversePickupRequest.findMany({
@@ -190,6 +191,7 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
         id: true, requestNumber: true, serialNumber: true, model: true,
         employeeName: true, status: true, warehouseLocation: true,
         receivedDate: true, receivedBy: true,
+        qcCleanResult: true, qcPurgeResult: true, qcResult: true,
       },
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip: (safeReversePage - 1) * rlimit,
@@ -204,6 +206,8 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: reverseWhere, _count: { _all: true } }),
     prisma.reversePickupRequest.groupBy({ by: ["status"], where: reverseWhere, _count: { _all: true } }),
     prisma.reversePickupRequest.groupBy({ by: ["warehouseLocation"], where: reverseWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["qcCleanResult"], where: reverseWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["qcPurgeResult"], where: reverseWhere, _count: { _all: true } }),
     prisma.dropdownOption.findMany({ where: { category: "warehouseLocation" }, orderBy: { value: "asc" } }),
   ]);
 
@@ -214,6 +218,8 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     remployee: reverseEmployeeGroups.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
     rstatus: reverseStatusGroups.map(r => ({ value: r.status ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
     rwarehouse: reverseWarehouseGroups.map(r => ({ value: r.warehouseLocation ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rclean: reverseCleanGroups.map(r => ({ value: r.qcCleanResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rpurge: reversePurgeGroups.map(r => ({ value: r.qcPurgeResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
   };
 
   const serializedReverse = reverseRequests.map(r => ({
@@ -226,6 +232,9 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     warehouseLocation: r.warehouseLocation,
     receivedDate: safeISO(r.receivedDate),
     receivedBy: r.receivedBy,
+    qcCleanResult: r.qcCleanResult,
+    qcPurgeResult: r.qcPurgeResult,
+    qcResult: r.qcResult,
   }));
 
   const warehouseLocations = warehouseLocationOptions.map(o => o.value);

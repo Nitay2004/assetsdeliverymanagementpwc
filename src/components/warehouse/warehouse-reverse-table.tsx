@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Warehouse, ArrowRight, Truck, PackageCheck } from "lucide-react";
 import { STATUS_LABELS, WAREHOUSE_RECEIVABLE_STATUSES } from "@/lib/reverse-pickup-config";
-import { ReceiveAtWarehouseModal } from "@/components/warehouse/receive-at-warehouse-modal";
+import { WarehouseReverseActionModal, type WarehouseReverseAction, type WarehouseReverseActionItem } from "@/components/warehouse/warehouse-reverse-action-modal";
 import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
 
 export interface WarehouseReverseItem {
@@ -16,6 +16,9 @@ export interface WarehouseReverseItem {
   warehouseLocation: string | null;
   receivedDate: string | null;
   receivedBy: string | null;
+  qcCleanResult: string | null;
+  qcPurgeResult: string | null;
+  qcResult: string | null;
 }
 
 /** Statuses at which the unit is on its way and still needs to be received. */
@@ -28,6 +31,8 @@ const REVERSE_COLUMNS: ColumnFilterConfig<WarehouseReverseItem>[] = [
   { key: "remployee", getValue: r => r.employeeName },
   { key: "rstatus", getValue: r => r.status },
   { key: "rwarehouse", getValue: r => r.warehouseLocation },
+  { key: "rclean", getValue: r => r.qcCleanResult },
+  { key: "rpurge", getValue: r => r.qcPurgeResult },
 ];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -49,6 +54,52 @@ function formatDate(iso: string | null): string {
   return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-GB");
 }
 
+function ResultBadge({ value }: { value: string | null }) {
+  if (!value) return <span className="text-muted-foreground">—</span>;
+  const v = String(value).toUpperCase();
+  const cls = v === "PASS" ? "bg-green-100 text-green-700" : v === "FAIL" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-700";
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>{v}</span>;
+}
+
+type ActionPlan = { action: WarehouseReverseAction; label: string; className: string };
+
+function pendingLabel(item: WarehouseReverseItem): string {
+  const s = item.status;
+  if (s === "CASE_LOGGED_WITH_HP") return "Awaiting HP";
+  if (s === "COMPLETED") return "Completed";
+  return "—";
+}
+
+function actionFor(item: WarehouseReverseItem): ActionPlan | null {
+  const receivable = RECEIVABLE_STATUSES.includes(item.status);
+  if (receivable) {
+    return { action: "receive", label: "Receive", className: "bg-cyan-600 hover:bg-cyan-700" };
+  }
+  const s = item.status;
+  switch (s) {
+    case "RECEIVED_AT_WAREHOUSE":
+      return { action: "cleanQc", label: "Hardware QC", className: "bg-indigo-600 hover:bg-indigo-700" };
+    case "QC_CLEANED":
+      return item.qcResult === "FAIL"
+        ? { action: "logHp", label: "Log HP Case", className: "bg-amber-600 hover:bg-amber-700" }
+        : { action: "purgeQc", label: "Software QC", className: "bg-violet-600 hover:bg-violet-700" };
+    case "QC_COMPLETED":
+      return item.qcResult === "FAIL"
+        ? { action: "logHp", label: "Log HP Case", className: "bg-amber-600 hover:bg-amber-700" }
+        : { action: "blancoClear", label: "Blanco Clear", className: "bg-sky-600 hover:bg-sky-700" };
+    case "BLANCO_CLEARED":
+      return { action: "blancoPurge", label: "Blanco Purge", className: "bg-teal-600 hover:bg-teal-700" };
+    case "BLANCO_PURGED":
+    case "BLANCO_CERTIFIED":
+      return { action: "complete", label: "Move to Inventory", className: "bg-emerald-600 hover:bg-emerald-700" };
+    case "CASE_LOGGED_WITH_HP":
+    case "COMPLETED":
+      return null;
+    default:
+      return null;
+  }
+}
+
 export function WarehouseReverseTable({
   items,
   canManage,
@@ -64,8 +115,7 @@ export function WarehouseReverseTable({
   pendingReceiptCount: number;
   columnFilterValues?: Record<string, ColumnFilterValue[]>;
 }) {
-  const [receiveId, setReceiveId] = useState<string | null>(null);
-  const receiveItem = items.find(i => i.id === receiveId) ?? null;
+  const [dialog, setDialog] = useState<{ item: WarehouseReverseItem; action: WarehouseReverseAction } | null>(null);
 
   const { filteredRows, distinctValues, filters, applyColumn, activeFilterCount } = useColumnFilters(
     REVERSE_COLUMNS,
@@ -82,8 +132,9 @@ export function WarehouseReverseTable({
         <div>
           <h2 className="font-semibold text-foreground">Reverse — Units at the Warehouse</h2>
           <p className="text-xs text-muted-foreground">
-            {totalCount} unit(s) tracked · {pendingReceiptCount} awaiting receipt. Record which warehouse
-            each unit reaches, the received date and who received it.
+            {totalCount} unit(s) tracked · {pendingReceiptCount} awaiting receipt. The entire reverse pipeline
+            (Receive, Hardware QC, Software QC, Blanco Clear, Blanco Purge and Moving back to Inventory) is
+            actioned from this tab.
           </p>
         </div>
       </div>
@@ -127,6 +178,18 @@ export function WarehouseReverseTable({
                 selected={Array.from(filters["rwarehouse"] ?? [])}
                 onApply={(v) => applyColumn("rwarehouse", v)}
               />
+              <ColumnFilterHeader
+                label="H/W QC"
+                values={distinctValues.rclean ?? []}
+                selected={Array.from(filters["rclean"] ?? [])}
+                onApply={(v) => applyColumn("rclean", v)}
+              />
+              <ColumnFilterHeader
+                label="S/W QC"
+                values={distinctValues.rpurge ?? []}
+                selected={Array.from(filters["rpurge"] ?? [])}
+                onApply={(v) => applyColumn("rpurge", v)}
+              />
               <th className="px-4 py-3 font-semibold">Received Date</th>
               <th className="px-4 py-3 font-semibold">Received By</th>
               {canManage && <th className="px-4 py-3 font-semibold text-right">Action</th>}
@@ -135,7 +198,7 @@ export function WarehouseReverseTable({
           <tbody className="divide-y">
             {filteredRows.length === 0 && (
               <tr>
-                <td colSpan={canManage ? 9 : 8} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={canManage ? 11 : 10} className="px-4 py-8 text-center text-muted-foreground">
                   {activeFilterCount > 0
                     ? "No units match the current filters."
                     : "No reverse-pickup units are in the warehouse pipeline yet."}
@@ -144,6 +207,7 @@ export function WarehouseReverseTable({
             )}
             {filteredRows.map(item => {
               const receivable = RECEIVABLE_STATUSES.includes(item.status);
+              const plan = actionFor(item);
               return (
                 <tr key={item.id} className="hover:bg-muted/10 transition-colors">
                   <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">{item.requestNumber}</td>
@@ -158,20 +222,22 @@ export function WarehouseReverseTable({
                     </span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.warehouseLocation || "—"}</td>
+                  <td className="px-4 py-3 whitespace-nowrap"><ResultBadge value={item.qcCleanResult} /></td>
+                  <td className="px-4 py-3 whitespace-nowrap"><ResultBadge value={item.qcPurgeResult} /></td>
                   <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{formatDate(item.receivedDate)}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{item.receivedBy || "—"}</td>
                   {canManage && (
                     <td className="px-4 py-3 whitespace-nowrap text-right">
-                      {receivable ? (
+                      {plan ? (
                         <button
-                          onClick={() => setReceiveId(item.id)}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-cyan-700 transition-colors"
+                          onClick={() => setDialog({ item, action: plan.action })}
+                          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors ${plan.className}`}
                         >
-                          Receive
+                          {plan.label}
                           <ArrowRight className="size-3.5" />
                         </button>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Received</span>
+                        <span className="text-xs text-muted-foreground">{pendingLabel(item)}</span>
                       )}
                     </td>
                   )}
@@ -182,14 +248,13 @@ export function WarehouseReverseTable({
         </table>
       </div>
 
-      {receiveItem && (
-        <ReceiveAtWarehouseModal
-          requestId={receiveItem.id}
-          requestNumber={receiveItem.requestNumber}
-          serialNumber={receiveItem.serialNumber}
+      {dialog && (
+        <WarehouseReverseActionModal
+          item={dialog.item as WarehouseReverseActionItem}
+          action={dialog.action}
           warehouseLocations={warehouseLocations}
           open
-          onClose={() => setReceiveId(null)}
+          onClose={() => setDialog(null)}
         />
       )}
     </div>
