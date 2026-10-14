@@ -23,15 +23,19 @@ function parseIntValue(value: string | null): number | null {
   return isNaN(n) ? null : n;
 }
 
-// The partner / DC / e-way / docket handover steps are all driven from the
-// Logistics dashboard. A plain LOGISTICS user has no reverse-pickup:canEdit
-// grant, so these actions accept either module's edit permission rather than
-// showing a control that would be rejected on submit.
-function requireLogisticsOrReversePickup(user: { permissions: unknown; role: string } | null): void {
+// Handover steps are driven from the owning module's dashboard: Logistics owns
+// the partner / DC / e-way / docket handovers and Warehouse owns the
+// receive-at-warehouse step. A plain user of either module has no
+// reverse-pickup:canEdit grant, so these actions also accept the owning module's
+// edit permission rather than showing a control that would be rejected on submit.
+function requireModuleEditOrReversePickup(
+  user: { permissions: unknown; role: string } | null,
+  module: "logistics" | "warehouse",
+): void {
   if (!user) throw new Error("Unauthorized");
-  const canLogistics = canModuleAction(user.permissions, user.role, "logistics", "canEdit");
+  const canOwn = canModuleAction(user.permissions, user.role, module, "canEdit");
   const canReversePickup = canModuleAction(user.permissions, user.role, "reverse-pickup", "canEdit");
-  if (!canLogistics && !canReversePickup) throw new Error("Permission denied");
+  if (!canOwn && !canReversePickup) throw new Error("Permission denied");
 }
 
 const RPU_NUMBER = /^RPU-([0-9]+)$/;
@@ -381,7 +385,7 @@ export async function createReversePickupRequest(formData: FormData) {
 
 export async function assignPartner(formData: FormData) {
   const user = await getSession();
-  requireLogisticsOrReversePickup(user);
+  requireModuleEditOrReversePickup(user, "logistics");
 
   const id = formData.get("id") as string;
   const partnerName = formData.get("partnerName") as string;
@@ -407,7 +411,7 @@ export async function assignPartner(formData: FormData) {
 // detail page (where the matching "Awaiting ..." card is shown).
 export async function requestDc(formData: FormData) {
   const user = await getSession();
-  requireLogisticsOrReversePickup(user);
+  requireModuleEditOrReversePickup(user, "logistics");
 
   const id = formData.get("id") as string;
   if (!id) throw new Error("Request ID is required.");
@@ -423,7 +427,7 @@ export async function requestDc(formData: FormData) {
 
 export async function requestEwayBill(formData: FormData) {
   const user = await getSession();
-  requireLogisticsOrReversePickup(user);
+  requireModuleEditOrReversePickup(user, "logistics");
 
   const id = formData.get("id") as string;
   if (!id) throw new Error("Request ID is required.");
@@ -563,7 +567,8 @@ async function restockInventoryItem(tx: Prisma.TransactionClient, inventoryItem:
 
 export async function receiveAtWarehouse(formData: FormData) {
   const user = await getSession();
-  requirePermission(user, "reverse-pickup", "canEdit");
+  // Receiving the unit is the Warehouse team's job, driven from their Reverse tab.
+  requireModuleEditOrReversePickup(user, "warehouse");
 
   const id = formData.get("id") as string;
   const warehouseLocation = formData.get("warehouseLocation") as string;
@@ -623,6 +628,7 @@ export async function receiveAtWarehouse(formData: FormData) {
     }
   });
 
+  revalidatePath("/dashboard/warehouse");
   revalidatePath("/dashboard/reverse-pickup");
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard");

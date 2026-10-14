@@ -114,7 +114,7 @@ export const STATUS_FLOW: Record<string, { next: string; label: string } | null>
   DOCKET_REQUESTED:       null,  // Logistics assigns docket and advances to DOCKET_ASSIGNED
   DOCKET_ASSIGNED:        { next: "INSPECTED",             label: "Record Inspection" },
   INSPECTED:              { next: "PICKED_UP",             label: "Mark Picked Up" },
-  PICKED_UP:              { next: "RECEIVED_AT_WAREHOUSE", label: "Receive at Warehouse" },
+  PICKED_UP:              null,  // Warehouse receives the unit
   RECEIVED_AT_WAREHOUSE:  { next: "QC_CLEANED",             label: "Record Hardware QC" },
   QC_CLEANED:             { next: "QC_COMPLETED",          label: "Record Software QC" },
   QC_COMPLETED:           { next: "BLANCO_CLEARED",         label: "Record Blanco Clear" },
@@ -151,6 +151,18 @@ const WAREHOUSE_REACHED_STATUSES = new Set([
 export function hasReachedWarehouse(status: string): boolean {
   return WAREHOUSE_REACHED_STATUSES.has(status);
 }
+
+/** Statuses where a unit is inbound and still has to be received at a warehouse. */
+export const WAREHOUSE_RECEIVABLE_STATUSES: string[] = ["PICKED_UP", "IN_TRANSIT"];
+
+/** Every status from the moment a unit has reached a warehouse onward. */
+export const WAREHOUSE_RECEIVED_STATUSES: string[] = [...WAREHOUSE_REACHED_STATUSES];
+
+/** The whole warehouse-side reverse pipeline: inbound units plus received ones. */
+export const WAREHOUSE_PIPELINE_STATUSES: string[] = [
+  ...WAREHOUSE_RECEIVABLE_STATUSES,
+  ...WAREHOUSE_RECEIVED_STATUSES,
+];
 
 // All seedable categories for the DropdownOption table
 export const SEED_CATEGORIES: Record<string, { value: string; label: string }[]> = {

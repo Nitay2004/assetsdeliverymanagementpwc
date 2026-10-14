@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, FormEvent } from "react";
+import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, AlertTriangle, Check, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileText, Package, Circle, Loader2 } from "lucide-react";
@@ -8,7 +8,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   recordInspection,
   markAsPickedUp,
-  receiveAtWarehouse,
   recordCleanQc,
   recordPurgeQc,
   logHpCase,
@@ -16,14 +15,9 @@ import {
   recordBlancoPurge,
   uploadPodDocument,
   completeReversePickup,
-  getReversePickupDropdowns,
-  addReversePickupDropdownOption,
-  deleteReversePickupDropdownOption,
-  seedReversePickupDropdowns,
 } from "@/app/actions/reverse-pickup";
 import { getNextStatus, hasReachedWarehouse } from "@/lib/reverse-pickup-config";
 import { resolveStatus } from "@/lib/reverse-pickup-status";
-import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
 
 interface RequestData {
   id: string;
@@ -161,45 +155,6 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState<string | null>(null);
-  const [dropdownData, setDropdownData] = useState<{
-    warehouseLocation: string[];
-    partnerName: string[];
-    disposition: string[];
-    type: string[];
-    entity: string[];
-    imageType: string[];
-    reason: string[];
-    displayStatus: string[];
-    dependency: string[];
-    courierName: string[];
-    blanccoYesNo: string[];
-    allOptions: { id: string; category: string; value: string }[];
-  } | null>(null);
-
-  const [warehouseLocation, setWarehouseLocation] = useState("");
-
-  const loadDropdowns = useCallback(async () => {
-    let data = await getReversePickupDropdowns();
-    if (data.type.length === 0) {
-      await seedReversePickupDropdowns();
-      data = await getReversePickupDropdowns();
-    }
-    setDropdownData(data);
-  }, []);
-
-  useEffect(() => {
-    loadDropdowns();
-  }, [loadDropdowns]);
-
-  async function handleAdd(cat: string, val: string) {
-    await addReversePickupDropdownOption(cat, val);
-    await loadDropdowns();
-  }
-
-  async function handleDelete(id: string) {
-    await deleteReversePickupDropdownOption(id);
-    await loadDropdowns();
-  }
 
   const canManage = userRole === "ADMIN" || userRole === "REVERSE_PICKUP" || userRole === "WAREHOUSE" || userRole === "PROVISIONING";
 
@@ -240,7 +195,6 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
       const actionMap: Record<string, (fd: FormData) => Promise<void>> = {
         recordInspection,
         markAsPickedUp,
-        receiveAtWarehouse,
         recordCleanQc,
         recordPurgeQc,
         logHpCase,
@@ -943,57 +897,6 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                 </form>
               )}
 
-              {/* Receive at Warehouse */}
-              {effectiveStatus === "PICKED_UP" && (
-                <form action={async (formData) => handleAction("receiveAtWarehouse", formData)} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-foreground">
-                        Warehouse <span className="text-red-500">*</span>
-                      </label>
-                      <ManageableDropdown
-                        name="warehouseLocation"
-                        placeholder="Select warehouse..."
-                        value={warehouseLocation}
-                        onChange={setWarehouseLocation}
-                        options={dropdownData?.warehouseLocation ?? []}
-                        allOptions={dropdownData?.allOptions ?? []}
-                        category="warehouseLocation"
-                        onAdd={handleAdd}
-                        onDelete={handleDelete}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="receivedDate" className="text-sm font-medium text-foreground">Received Date</label>
-                      <input
-                        id="receivedDate"
-                        name="receivedDate"
-                        type="date"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="receivedBy" className="text-sm font-medium text-foreground">Received By</label>
-                      <input
-                        id="receivedBy"
-                        name="receivedBy"
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        placeholder="Person name"
-                      />
-                    </div>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isPending("receiveAtWarehouse")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {isPending("receiveAtWarehouse") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("receiveAtWarehouse") ? "Updating..." : "Receive at Warehouse"}
-                  </button>
-                </form>
-              )}
-
               {/* Record Hardware QC */}
               {effectiveStatus === "RECEIVED_AT_WAREHOUSE" && (
                 <form action={async (formData) => handleAction("recordCleanQc", formData)} className="space-y-4">
@@ -1319,6 +1222,23 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                   </button>
                 </form>
               )}
+        </div>
+      )}
+
+      {/* Receive-at-warehouse is done by the Warehouse team from their Reverse
+          tab, so this state is informational only here. */}
+      {effectiveStatus === "PICKED_UP" && (
+        <div className="rounded-xl glass shadow-sm p-6 space-y-4">
+          <div className="flex items-center gap-3 p-4 rounded-lg bg-cyan-50 border border-cyan-200">
+            <Warehouse className="size-5 text-cyan-600 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-cyan-800">Awaiting Warehouse</p>
+              <p className="text-xs text-cyan-700 mt-0.5">
+                The unit is on its way. The Warehouse team will record which warehouse it reaches,
+                the received date and who received it from their Reverse tab.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
