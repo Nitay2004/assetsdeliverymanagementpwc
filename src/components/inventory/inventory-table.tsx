@@ -145,6 +145,15 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(currentPage, totalPages);
 
+  function goToPage(page: number, size = pageSize) {
+    // Keep search + column filters when paging; replacing the whole query string
+    // used to clear them and show unfiltered rows.
+    const params = new URLSearchParams(window.location.search);
+    params.set("page", String(page));
+    params.set("limit", String(size));
+    router.push(`/dashboard/inventory?${params.toString()}`);
+  }
+
   const { toast } = useToast();
   const { showAlert } = useAlert();
 
@@ -411,7 +420,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
           <span>Rows per page:</span>
           <select
             value={pageSize}
-            onChange={(e) => { router.push(`/dashboard/inventory?page=1&limit=${e.target.value}`); }}
+            onChange={(e) => { goToPage(1, Number(e.target.value)); }}
             className="rounded-md border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
             {[10, 25, 50, 100].map(n => (
@@ -424,7 +433,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => router.push(`/dashboard/inventory?page=${safePage - 1}&limit=${pageSize}`)}
+            onClick={() => goToPage(safePage - 1)}
             disabled={safePage <= 1}
             className="flex h-8 w-8 items-center justify-center rounded-md border text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
@@ -434,7 +443,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
             Page {safePage} of {totalPages}
           </span>
           <button
-            onClick={() => router.push(`/dashboard/inventory?page=${safePage + 1}&limit=${pageSize}`)}
+            onClick={() => goToPage(safePage + 1)}
             disabled={safePage >= totalPages}
             className="flex h-8 w-8 items-center justify-center rounded-md border text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >

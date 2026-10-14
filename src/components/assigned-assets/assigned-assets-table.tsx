@@ -161,6 +161,14 @@ export function AssignedAssetsTable({
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(currentPage, totalPages);
 
+  function goToPage(page: number, size = pageSize) {
+    // Preserve search + column filters when paging instead of dropping them.
+    const params = new URLSearchParams(window.location.search);
+    params.set("page", String(page));
+    params.set("limit", String(size));
+    router.push(`/dashboard/assigned-assets?${params.toString()}`);
+  }
+
   return (
     <div className="relative">
       <div className="px-6 py-4 border-b">
@@ -315,9 +323,7 @@ export function AssignedAssetsTable({
           <select
             value={pageSize}
             onChange={(e) => {
-              router.push(
-                `/dashboard/assigned-assets?page=1&limit=${e.target.value}`
-              );
+              goToPage(1, Number(e.target.value));
             }}
             className="rounded-md border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
@@ -335,11 +341,7 @@ export function AssignedAssetsTable({
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={() =>
-              router.push(
-                `/dashboard/assigned-assets?page=${safePage - 1}&limit=${pageSize}`
-              )
-            }
+            onClick={() => goToPage(safePage - 1)}
             disabled={safePage <= 1}
             className="flex h-8 w-8 items-center justify-center rounded-md border text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
@@ -349,11 +351,7 @@ export function AssignedAssetsTable({
             Page {safePage} of {totalPages}
           </span>
           <button
-            onClick={() =>
-              router.push(
-                `/dashboard/assigned-assets?page=${safePage + 1}&limit=${pageSize}`
-              )
-            }
+            onClick={() => goToPage(safePage + 1)}
             disabled={safePage >= totalPages}
             className="flex h-8 w-8 items-center justify-center rounded-md border text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >

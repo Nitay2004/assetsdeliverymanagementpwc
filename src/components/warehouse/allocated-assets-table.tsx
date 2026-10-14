@@ -76,8 +76,13 @@ export function AllocatedAssetsTable({
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const safePage = Math.min(currentPage, totalPages);
 
-  function goToPage(page: number) {
-    router.push(`/dashboard/warehouse?page=${page}&limit=${pageSize}`);
+  function goToPage(page: number, size = pageSize) {
+    // Preserve the active search / column filters — rebuilding the query string
+    // from scratch used to wipe them and show unfiltered results after paging.
+    const params = new URLSearchParams(window.location.search);
+    params.set("page", String(page));
+    params.set("limit", String(size));
+    router.push(`/dashboard/warehouse?${params.toString()}`);
   }
 
   return (
@@ -200,7 +205,7 @@ export function AllocatedAssetsTable({
           <span>Rows per page:</span>
           <select
             value={pageSize}
-            onChange={(e) => { router.push(`/dashboard/warehouse?page=1&limit=${e.target.value}`); }}
+            onChange={(e) => { goToPage(1, Number(e.target.value)); }}
             className="rounded-md border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
             {[10, 25, 50, 100].map(n => (
