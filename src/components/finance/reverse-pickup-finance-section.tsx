@@ -176,8 +176,8 @@ export function ReversePickupFinanceSection({ requests, canManage, dcIdMap, reve
             E-Way Bill
           </button>
         </div>
-        <UrlDataTableFilter paramName="rsearch" placeholder="Search by request, serial, model, employee..." className="w-full sm:w-72" />
       </div>
+      <UrlDataTableFilter paramName="rsearch" placeholder="Search by request, serial, model, employee..." />
 
       {rows.length === 0 ? (
         <div className="p-8 rounded-xl glass text-center text-muted-foreground">

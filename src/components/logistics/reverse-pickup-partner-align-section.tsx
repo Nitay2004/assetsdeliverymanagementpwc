@@ -148,8 +148,8 @@ export function ReversePickupPartnerAlignSection({ requests, canManage, totalPen
         </span>
       </div>
 
-      <div className="px-6 py-3 border-b flex justify-end">
-        <UrlDataTableFilter paramName="asearch" placeholder="Search request, serial, model, employee, city..." className="w-full sm:w-72" />
+      <div className="px-6 py-3 border-b">
+        <UrlDataTableFilter paramName="asearch" placeholder="Search request, serial, model, employee, city..." />
       </div>
 
       <div className="overflow-x-auto">

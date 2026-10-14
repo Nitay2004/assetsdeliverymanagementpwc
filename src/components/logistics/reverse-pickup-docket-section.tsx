@@ -75,8 +75,8 @@ export function ReversePickupDocketSection({ requests, canManage, totalPending, 
         <h2 className="text-sm font-semibold text-orange-800">Reverse Pickup — Docket Requests</h2>
         <span className="ml-auto text-xs text-orange-600 font-medium">{pendingCount} pending</span>
       </div>
-      <div className="px-6 py-3 border-b flex justify-end">
-        <UrlDataTableFilter paramName="dsearch" placeholder="Search request, serial, model, employee, docket..." className="w-full sm:w-72" />
+      <div className="px-6 py-3 border-b">
+        <UrlDataTableFilter paramName="dsearch" placeholder="Search request, serial, model, employee, docket..." />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
