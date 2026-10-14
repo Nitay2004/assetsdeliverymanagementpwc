@@ -5,12 +5,13 @@ import { CheckCircle, Clock, Wrench, User, Upload } from "lucide-react";
 import Link from "next/link";
 import { ProvisioningTable } from "@/components/provisioning/provisioning-table";
 import { ProvisioningPagination } from "@/components/provisioning/provisioning-pagination";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 import { ProvisioningExportButton } from "@/components/provisioning/provisioning-export-button";
 import { QcWorkTable } from "@/components/provisioning/qc-work-table";
 import { HpCasesTable, type HpCaseItem } from "@/components/provisioning/hp-cases-table";
 import { ProvisioningTabs } from "@/components/provisioning/provisioning-tabs";
 import type { QcItem } from "@/components/qc/qc-panel";
-import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions, computeDistinctValues } from "@/lib/column-filters";
+import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES, ACTIVE_PROVISIONING_STATUSES, HANDED_OVER_STATUSES } from "@/lib/order-status";
 import type { Prisma } from "@prisma/client";
 
@@ -172,9 +173,13 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const engineers = engineerGroups.map(o => o.engineerName).filter(Boolean) as string[];
 
   const qcFilters = parseColumnFilters(searchParams, QC_FILTER_KEYS);
+  // The QC tab is "my tasks", so the query itself is scoped to the logged-in
+  // engineer and paged — previously the whole QC list was loaded and narrowed
+  // down on the client.
   const qcWhere: Prisma.InventoryItemWhereInput = {
     AND: {
       OR: [{ status: "QC_PENDING" }, { qcCompletedAt: { not: null } }],
+      qcEngineer: user ? user.name : "__no_user__",
       ...(qcFilters.serialNumber ? { serialNumber: { in: qcFilters.serialNumber } } : {}),
       ...(qcFilters.model ? { model: { in: qcFilters.model } } : {}),
       ...(qcFilters.employeeName ? { employeeName: { in: qcFilters.employeeName } } : {}),
@@ -184,10 +189,35 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     },
   };
 
-  const qcPendingItems = await prisma.inventoryItem.findMany({
-    where: qcWhere,
-    orderBy: [{ qcRequestedAt: "desc" }, { id: "desc" }],
-  });
+  const qcTotalCount = await prisma.inventoryItem.count({ where: qcWhere });
+  const qcTotalPages = Math.max(1, Math.ceil(qcTotalCount / limit));
+  const safeQcPage = Math.min(page, qcTotalPages);
+
+  const [qcPendingItems, qcSerialGroups, qcModelGroups, qcEmployeeGroups, qcWarehouseGroups, qcCleanGroups, qcPurgeGroups, qcBadgeCount] = await Promise.all([
+    prisma.inventoryItem.findMany({
+      where: qcWhere,
+      orderBy: [{ qcRequestedAt: "desc" }, { id: "desc" }],
+      skip: (safeQcPage - 1) * limit,
+      take: limit,
+    }),
+    // Filter dropdowns must cover the whole queue, not just the visible page.
+    prisma.inventoryItem.groupBy({ by: ["serialNumber"], where: qcWhere, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["model"], where: qcWhere, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["employeeName"], where: qcWhere, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["invoicingWarehouse"], where: qcWhere, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["qcCleanResult"], where: qcWhere, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["qcPurgeResult"], where: qcWhere, _count: { _all: true } }),
+    user ? prisma.inventoryItem.count({ where: { qcEngineer: user.name, status: "QC_PENDING" } }) : Promise.resolve(0),
+  ]);
+
+  const qcColumnFilterValues: Record<string, { value: string; count: number }[]> = {
+    serialNumber: qcSerialGroups.map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    model: qcModelGroups.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    employeeName: qcEmployeeGroups.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    invoicingWarehouse: qcWarehouseGroups.map(r => ({ value: r.invoicingWarehouse ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    qcCleanResult: qcCleanGroups.map(r => ({ value: r.qcCleanResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    qcPurgeResult: qcPurgeGroups.map(r => ({ value: r.qcPurgeResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+  };
 
   const serializedQc: QcItem[] = qcPendingItems.map(i => ({
     id: i.id,
@@ -216,18 +246,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     qcCompletedAt: safeISO(i.qcCompletedAt),
   }));
 
-  const myQcItems = user
-    ? serializedQc.filter(i => i.qcEngineer === user.name)
-    : [];
-
-  const qcColumnFilterValues = computeDistinctValues(serializedQc, {
-    serialNumber: r => r.serialNumber,
-    model: r => r.model,
-    employeeName: r => r.employeeName,
-    invoicingWarehouse: r => r.invoicingWarehouse,
-    qcCleanResult: r => r.qcCleanResult,
-    qcPurgeResult: r => r.qcPurgeResult,
-  });
+  const myQcItems = serializedQc;
 
   // Reverse-pickup laptops parked here after a QC stage failed, waiting for HP.
   const hpTotalCount = await prisma.reversePickupRequest.count({
@@ -329,10 +348,15 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
         </div>
       </div>
 
-      <ProvisioningTabs qcCount={myQcItems.filter(i => !i.qcCompletedAt).length} hpCount={hpTotalCount} />
+      <ProvisioningTabs qcCount={qcBadgeCount} hpCount={hpTotalCount} />
 
       {activeTab === "qc" ? (
-        <QcWorkTable items={myQcItems} columnFilterValues={qcColumnFilterValues} />
+        <>
+          <QcWorkTable items={myQcItems} totalCount={qcTotalCount} columnFilterValues={qcColumnFilterValues} />
+          {qcTotalCount > 0 && (
+            <PaginationBar basePath="/dashboard/provisioning" currentPage={safeQcPage} totalPages={qcTotalPages} totalCount={qcTotalCount} limit={limit} />
+          )}
+        </>
       ) : activeTab === "hp" ? (
         <>
           <HpCasesTable items={serializedHp} />

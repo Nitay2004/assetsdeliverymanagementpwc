@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ClipboardCheck, ArrowRight, CheckCheck } from "lucide-react";
 import { AssignQcEngineerModal } from "@/components/warehouse/assign-qc-engineer-modal";
 import { QcPanel, QcResultBadge, type QcItem } from "@/components/qc/qc-panel";
-import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig } from "@/components/shared/column-filter";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
 
 export { type QcItem } from "@/components/qc/qc-panel";
 
@@ -21,19 +21,23 @@ export function QcPendingTable({
   items,
   canManage,
   showQcPanel = false,
+  totalCount,
+  columnFilterValues,
 }: {
   items: QcItem[];
   canManage: boolean;
   showQcPanel?: boolean;
+  /** Whole queue size; `items` only holds the current page. */
+  totalCount?: number;
+  columnFilterValues?: Record<string, ColumnFilterValue[]>;
 }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [assignId, setAssignId] = useState<string | null>(null);
   const active = items.find(i => i.id === activeId) ?? null;
 
-  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(QC_PENDING_COLUMNS, items);
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, activeFilterCount } = useColumnFilters(QC_PENDING_COLUMNS, items, { distinctValues: columnFilterValues });
   const displayItems = columnFiltered;
-
-  if (items.length === 0) return null;
+  const count = totalCount ?? items.length;
 
   return (
     <div className="rounded-xl glass shadow-sm overflow-hidden">
@@ -44,7 +48,7 @@ export function QcPendingTable({
         <div>
           <h2 className="font-semibold text-foreground">QC Assignments — Assets Sent for QC</h2>
           <p className="text-xs text-muted-foreground">
-            {items.length} asset(s). Assign an engineer to start QC; handed-over assets are marked below.
+            {count} asset(s). Assign an engineer to start QC; handed-over assets are marked below.
           </p>
         </div>
       </div>
@@ -95,7 +99,7 @@ export function QcPendingTable({
             {displayItems.length === 0 && (
               <tr>
                 <td colSpan={canManage ? 7 : 6} className="px-4 py-8 text-center text-muted-foreground">
-                  No assets match the selected filters.
+                  {activeFilterCount > 0 ? "No assets match the current filters." : "No assets are currently sent for QC."}
                 </td>
               </tr>
             )}

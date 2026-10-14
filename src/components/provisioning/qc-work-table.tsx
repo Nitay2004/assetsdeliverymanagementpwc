@@ -14,14 +14,13 @@ const QC_WORK_COLUMNS: ColumnFilterConfig<QcItem>[] = [
   { key: "qcPurgeResult", getValue: r => r.qcPurgeResult },
 ];
 
-export function QcWorkTable({ items, columnFilterValues }: { items: QcItem[]; columnFilterValues?: Record<string, ColumnFilterValue[]> }) {
+export function QcWorkTable({ items, totalCount, columnFilterValues }: { items: QcItem[]; totalCount?: number; columnFilterValues?: Record<string, ColumnFilterValue[]> }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const active = items.find(i => i.id === activeId) ?? null;
 
-  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(QC_WORK_COLUMNS, items, { distinctValues: columnFilterValues });
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, activeFilterCount } = useColumnFilters(QC_WORK_COLUMNS, items, { distinctValues: columnFilterValues });
   const displayItems = columnFiltered;
-
-  if (items.length === 0) return null;
+  const count = totalCount ?? items.length;
 
   return (
     <div className="rounded-xl glass shadow-sm overflow-hidden">
@@ -32,7 +31,7 @@ export function QcWorkTable({ items, columnFilterValues }: { items: QcItem[]; co
         <div>
           <h2 className="font-semibold text-foreground">My QC Tasks — Assets Assigned to Me</h2>
           <p className="text-xs text-muted-foreground">
-            {items.length} asset(s) assigned for QC. Perform Clean &amp; Purge, then hand back to warehouse.
+            {count} asset(s) assigned for QC. Perform Clean &amp; Purge, then hand back to warehouse.
           </p>
         </div>
       </div>
@@ -83,7 +82,7 @@ export function QcWorkTable({ items, columnFilterValues }: { items: QcItem[]; co
             {displayItems.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
-                  No assets match the selected filters.
+                  {activeFilterCount > 0 ? "No assets match the current filters." : "No QC tasks assigned to you right now."}
                 </td>
               </tr>
             )}

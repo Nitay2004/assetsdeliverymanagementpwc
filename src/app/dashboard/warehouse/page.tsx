@@ -7,10 +7,14 @@ import { AllocatedAssetsTable } from "@/components/warehouse/allocated-assets-ta
 import { QcPendingTable } from "@/components/warehouse/qc-pending-table";
 import { WarehouseExportButton } from "@/components/warehouse/warehouse-export-button";
 import { WarehouseTabs } from "@/components/warehouse/warehouse-tabs";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import type { Prisma, OrderStatus } from "@prisma/client";
 
 const ALLOCATED_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity", "serialNumbers", "docketNumber", "dcNumber", "ewayBill", "status"];
+// The QC tab keeps its own keys; none of them collide with the allocation
+// table's params, so the two sub-tabs never filter each other.
+const QC_FILTER_KEYS = ["serialNumber", "model", "employeeName", "qcEngineer", "qcCleanResult", "qcPurgeResult"];
 
 function safeISO(date: Date | null | undefined): string | null {
   if (!date) return null;
@@ -50,7 +54,18 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
   if (columnFilters.totalQuantity) allocatedWhere.totalQuantity = { in: columnFilters.totalQuantity.map(Number) };
   andFilterConditions(allocatedWhere, collectBlankTokenConditions(columnFilters, { dcNumber: "dcNumber" }));
 
-  const [pendingOrders, totalAllocated, allocatedOrders, availableInventory, qcPendingItems] = await Promise.all([
+  const qcFilters = parseColumnFilters(searchParams, QC_FILTER_KEYS);
+  const qcWhere: Prisma.InventoryItemWhereInput = {
+    OR: [{ status: "QC_PENDING" }, { qcCompletedAt: { not: null } }],
+    ...(qcFilters.serialNumber ? { serialNumber: { in: qcFilters.serialNumber } } : {}),
+    ...(qcFilters.model ? { model: { in: qcFilters.model } } : {}),
+    ...(qcFilters.employeeName ? { employeeName: { in: qcFilters.employeeName } } : {}),
+    ...(qcFilters.qcEngineer ? { qcEngineer: { in: qcFilters.qcEngineer } } : {}),
+    ...(qcFilters.qcCleanResult ? { qcCleanResult: { in: qcFilters.qcCleanResult } } : {}),
+    ...(qcFilters.qcPurgeResult ? { qcPurgeResult: { in: qcFilters.qcPurgeResult } } : {}),
+  };
+
+  const [pendingOrders, totalAllocated, allocatedOrders, availableInventory] = await Promise.all([
     prisma.order.findMany({
       where: { status: "ORDER_PLACED" },
       include: {
@@ -77,15 +92,38 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
       where: { status: "AVAILABLE" },
       orderBy: [{ serialNumber: "asc" }, { id: "asc" }],
     }),
-    prisma.inventoryItem.findMany({
-      where: {
-        OR: [{ status: "QC_PENDING" }, { qcCompletedAt: { not: null } }],
-      },
-      orderBy: [{ qcRequestedAt: "desc" }, { id: "desc" }],
-    }),
   ]);
 
-  const qcPendingCount = qcPendingItems.filter(i => !i.qcCompletedAt).length;
+  // QC is its own paged queue now, so the total is counted up front and the
+  // rows are sliced rather than loading the whole assignment list.
+  const qcTotalCount = await prisma.inventoryItem.count({ where: qcWhere });
+  const qcTotalPages = Math.max(1, Math.ceil(qcTotalCount / limit));
+  const safeQcPage = Math.min(page, qcTotalPages);
+
+  const [qcPendingItems, qcSerialGroups, qcModelGroups, qcEmployeeGroups, qcEngineerGroups, qcCleanGroups, qcPurgeGroups, qcPendingCount] = await Promise.all([
+    prisma.inventoryItem.findMany({
+      where: qcWhere,
+      orderBy: [{ qcRequestedAt: "desc" }, { id: "desc" }],
+      skip: (safeQcPage - 1) * limit,
+      take: limit,
+    }),
+    prisma.inventoryItem.groupBy({ by: ["serialNumber"], where: qcWhere, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["model"], where: qcWhere, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["employeeName"], where: qcWhere, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["qcEngineer"], where: qcWhere, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["qcCleanResult"], where: qcWhere, _count: { _all: true } }),
+    prisma.inventoryItem.groupBy({ by: ["qcPurgeResult"], where: qcWhere, _count: { _all: true } }),
+    prisma.inventoryItem.count({ where: { status: "QC_PENDING", qcCompletedAt: null } }),
+  ]);
+
+  const qcColumnFilterValues: Record<string, { value: string; count: number }[]> = {
+    serialNumber: qcSerialGroups.map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    model: qcModelGroups.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    employeeName: qcEmployeeGroups.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    qcEngineer: qcEngineerGroups.map(r => ({ value: r.qcEngineer ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    qcCleanResult: qcCleanGroups.map(r => ({ value: r.qcCleanResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    qcPurgeResult: qcPurgeGroups.map(r => ({ value: r.qcPurgeResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+  };
 
   const serializedQc = qcPendingItems.map(i => ({
     id: i.id,
@@ -198,7 +236,12 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
           <QcPendingTable
             items={serializedQc}
             canManage={canManage}
+            totalCount={qcTotalCount}
+            columnFilterValues={qcColumnFilterValues}
           />
+          {qcTotalCount > 0 && (
+            <PaginationBar basePath="/dashboard/warehouse" currentPage={safeQcPage} totalPages={qcTotalPages} totalCount={qcTotalCount} limit={limit} />
+          )}
         </div>
       ) : (
         <>
