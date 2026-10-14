@@ -55,7 +55,6 @@ export function ReversePickupPartnerAlignSection({ requests, canManage, totalPen
   const router = useRouter();
   const [saving, setSaving] = useState<string | null>(null);
   const [partnerInputs, setPartnerInputs] = useState<Record<string, string>>({});
-  const [refInputs, setRefInputs] = useState<Record<string, string>>({});
   const [dd, setDd] = useState<DropdownData | null>(null);
 
   const pendingCount = totalPending ?? requests.length;
@@ -106,8 +105,6 @@ export function ReversePickupPartnerAlignSection({ requests, canManage, totalPen
       const fd = new FormData();
       fd.set("id", requestId);
       fd.set("partnerName", partnerName);
-      const ref = refInputs[requestId]?.trim();
-      if (ref) fd.set("partnerReference", ref);
       await assignPartner(fd);
       toast({
         title: "Partner Assigned",
@@ -115,11 +112,6 @@ export function ReversePickupPartnerAlignSection({ requests, canManage, totalPen
         variant: "success",
       });
       setPartnerInputs((prev) => {
-        const n = { ...prev };
-        delete n[requestId];
-        return n;
-      });
-      setRefInputs((prev) => {
         const n = { ...prev };
         delete n[requestId];
         return n;
@@ -163,7 +155,6 @@ export function ReversePickupPartnerAlignSection({ requests, canManage, totalPen
               <th className="px-6 py-4 font-semibold">Status</th>
               <ColumnFilterHeader label="Pickup Address" values={distinctValues.acity ?? []} selected={filters.acity ?? []} onApply={v => applyColumn("acity", v)} />
               {canManage && <th className="px-6 py-4 font-semibold">Partner Name</th>}
-              {canManage && <th className="px-6 py-4 font-semibold">Partner Ref.</th>}
               {canManage && <th className="px-6 py-4 font-semibold">Action</th>}
             </tr>
           </thead>
@@ -171,7 +162,7 @@ export function ReversePickupPartnerAlignSection({ requests, canManage, totalPen
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={canManage ? 9 : 6}
+                  colSpan={canManage ? 8 : 6}
                   className="px-6 py-8 text-center text-sm text-muted-foreground"
                 >
                   {activeFilterCount > 0 ? "No rows match the current filters." : "No requests pending for partner alignment."}
@@ -213,21 +204,6 @@ export function ReversePickupPartnerAlignSection({ requests, canManage, totalPen
                         onAdd={handleAdd}
                         onDelete={handleDelete}
                         required
-                      />
-                    </td>
-                  )}
-                  {canManage && (
-                    <td className="px-6 py-4">
-                      <input
-                        value={refInputs[r.id] ?? ""}
-                        onChange={(e) =>
-                          setRefInputs((prev) => ({
-                            ...prev,
-                            [r.id]: e.target.value,
-                          }))
-                        }
-                        className="w-36 rounded border border-input bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                        placeholder="Ref. # (optional)"
                       />
                     </td>
                   )}
