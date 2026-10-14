@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { updateItemWarranty } from "@/app/actions/warranty";
+import { InventoryStatusBadge } from "@/components/inventory/inventory-status-badge";
 import { useRouter } from "next/navigation";
 
 interface ItemData {
   id: string;
   serialNumber: string;
   model: string;
+  status: string;
   warrantyPeriod: string | null;
   warrantyEndPeriod: Date | null;
   servicesStartDate: Date | null;
@@ -61,6 +63,9 @@ export function WarrantyItemRow({ item, canManage, elementId }: { item: ItemData
     <tr id={elementId} className="hover:bg-muted/10 transition-colors scroll-mt-20">
       <td className="px-6 py-4 font-mono text-sm">{item.serialNumber}</td>
       <td className="px-6 py-4">{item.model}</td>
+      <td className="px-6 py-4">
+        <InventoryStatusBadge status={item.status} />
+      </td>
       <td className="px-6 py-4">{item.warrantyPeriod ?? "—"}</td>
       <td className="px-6 py-4">{formatDate(item.warrantyEndPeriod) || "—"}</td>
       <td className="px-6 py-4">{formatDate(item.servicesStartDate) || "—"}</td>

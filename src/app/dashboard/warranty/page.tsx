@@ -105,7 +105,15 @@ export default async function WarrantyPage(props: { searchParams: Promise<Record
       </div>
 
       <WarrantyItemTable
-        items={items}
+        items={items.map(i => ({
+          id: i.id,
+          serialNumber: i.serialNumber,
+          model: i.model,
+          status: i.status,
+          warrantyPeriod: i.warrantyPeriod,
+          warrantyEndPeriod: i.warrantyEndPeriod,
+          servicesStartDate: i.servicesStartDate,
+        }))}
         canManage={canManage}
         selectedId={selectedId}
         totalCount={totalCount}

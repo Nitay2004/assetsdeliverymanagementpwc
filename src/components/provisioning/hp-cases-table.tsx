@@ -6,6 +6,7 @@ import { Headset, CheckCircle, Loader2, X, AlertTriangle, ExternalLink } from "l
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { resolveHpCase } from "@/app/actions/reverse-pickup";
+import { ReverseStatusBadge } from "@/components/reverse-pickup/reverse-status-badge";
 import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig } from "@/components/shared/column-filter";
 
 export interface HpCaseItem {
@@ -13,6 +14,7 @@ export interface HpCaseItem {
   requestNumber: string;
   serialNumber: string;
   model: string;
+  status: string;
   employeeName: string;
   warehouseLocation: string | null;
   qcCleanResult: string | null;
@@ -126,6 +128,7 @@ export function HpCasesTable({ items }: { items: HpCaseItem[] }) {
                 selected={Array.from(filters["model"] ?? [])}
                 onApply={(v) => applyColumn("model", v)}
               />
+              <th className="px-4 py-3 font-semibold">Status</th>
               <ColumnFilterHeader
                 label="Employee"
                 values={distinctValues.employeeName ?? []}
@@ -164,7 +167,7 @@ export function HpCasesTable({ items }: { items: HpCaseItem[] }) {
           <tbody className="divide-y">
             {displayItems.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={12} className="px-4 py-8 text-center text-muted-foreground">
                   No cases match the selected filters.
                 </td>
               </tr>
@@ -182,6 +185,7 @@ export function HpCasesTable({ items }: { items: HpCaseItem[] }) {
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">{item.serialNumber}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{item.model}</td>
+                <td className="px-4 py-3 whitespace-nowrap"><ReverseStatusBadge status={item.status} /></td>
                 <td className="px-4 py-3 whitespace-nowrap">{item.employeeName || "—"}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{item.warehouseLocation || "—"}</td>
                 <td className="px-4 py-3 whitespace-nowrap font-medium">{item.hpCaseNumber}</td>

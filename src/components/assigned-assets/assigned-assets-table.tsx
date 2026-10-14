@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, ArrowLeftRight } from "lucide-react";
 import { getInventoryItem } from "@/app/actions/inventory";
 import { InventoryDetailDrawer } from "@/components/inventory/inventory-detail-drawer";
+import { InventoryStatusBadge } from "@/components/inventory/inventory-status-badge";
 import { UrlDataTableFilter } from "@/components/shared/data-table-filter";
 import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
 
@@ -190,6 +191,7 @@ export function AssignedAssetsTable({
                 selected={Array.from(filters["model"] ?? [])}
                 onApply={(v) => applyColumn("model", v)}
               />
+              <th className="px-4 py-4 font-semibold">Status</th>
               <ColumnFilterHeader
                 label="Employee Name"
                 values={distinctValues.employeeName ?? []}
@@ -228,7 +230,7 @@ export function AssignedAssetsTable({
             {displayItems.length === 0 ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="px-6 py-8 text-center text-muted-foreground"
                 >
                   {items.length === 0 ? "No allocated assets found." : "No assets match the selected filters."}
@@ -254,6 +256,9 @@ export function AssignedAssetsTable({
                       {item.serialNumber}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap">{item.model}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <InventoryStatusBadge status={item.status} />
+                    </td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       {empName || "—"}
                     </td>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Cpu, HardDrive, ArrowRight } from "lucide-react";
 import { QcResultBadge } from "@/components/qc/qc-panel";
+import { ReverseStatusBadge } from "@/components/reverse-pickup/reverse-status-badge";
 import { ReverseQcPanel, type ReverseQcPanelItem } from "@/components/provisioning/reverse-qc-panel";
 import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
 
@@ -96,6 +97,7 @@ export function ReverseQcTable({
                 selected={Array.from(filters["rqcmodel"] ?? [])}
                 onApply={(v) => applyColumn("rqcmodel", v)}
               />
+              <th className="px-4 py-3 font-semibold">Status</th>
               <ColumnFilterHeader
                 label="Employee"
                 values={distinctValues.rqcemployee ?? []}
@@ -126,7 +128,7 @@ export function ReverseQcTable({
           <tbody className="divide-y">
             {filteredRows.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                   {activeFilterCount > 0
                     ? "No units match the current filters."
                     : `No reverse units assigned to you in ${isHardware ? "Hardware" : "Software"} QC.`}
@@ -140,6 +142,7 @@ export function ReverseQcTable({
                   <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">{item.requestNumber}</td>
                   <td className="px-4 py-3 font-medium whitespace-nowrap">{item.serialNumber}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{item.model || "—"}</td>
+                  <td className="px-4 py-3 whitespace-nowrap"><ReverseStatusBadge status={item.status} /></td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.employeeName || "—"}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{item.warehouseLocation || "—"}</td>
                   <td className="px-4 py-3"><QcResultBadge result={item.qcCleanResult} /></td>

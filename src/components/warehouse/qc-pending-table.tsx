@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ClipboardCheck, ArrowRight, CheckCheck } from "lucide-react";
 import { AssignQcEngineerModal } from "@/components/warehouse/assign-qc-engineer-modal";
 import { QcPanel, QcResultBadge, type QcItem } from "@/components/qc/qc-panel";
+import { InventoryStatusBadge } from "@/components/inventory/inventory-status-badge";
 import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
 
 export { type QcItem } from "@/components/qc/qc-panel";
@@ -68,6 +69,7 @@ export function QcPendingTable({
                 selected={Array.from(filters["model"] ?? [])}
                 onApply={(v) => applyColumn("model", v)}
               />
+              <th className="px-4 py-3 font-semibold">Status</th>
               <ColumnFilterHeader
                 label="Employee Name"
                 values={distinctValues.employeeName ?? []}
@@ -98,7 +100,7 @@ export function QcPendingTable({
           <tbody className="divide-y">
             {displayItems.length === 0 && (
               <tr>
-                <td colSpan={canManage ? 7 : 6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={canManage ? 8 : 7} className="px-4 py-8 text-center text-muted-foreground">
                   {activeFilterCount > 0 ? "No assets match the current filters." : "No assets are currently sent for QC."}
                 </td>
               </tr>
@@ -112,6 +114,7 @@ export function QcPendingTable({
                 >
                   <td className="px-4 py-3 font-medium whitespace-nowrap">{item.serialNumber}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{item.model}</td>
+                  <td className="px-4 py-3 whitespace-nowrap"><InventoryStatusBadge status={item.status} /></td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.employeeName || "—"}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{item.qcEngineer || "—"}</td>
                   <td className="px-4 py-3"><QcResultBadge result={item.qcCleanResult} /></td>

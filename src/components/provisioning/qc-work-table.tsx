@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ClipboardCheck, CheckCheck, UserCog } from "lucide-react";
 import { QcPanel, QcResultBadge, type QcItem } from "@/components/qc/qc-panel";
+import { InventoryStatusBadge } from "@/components/inventory/inventory-status-badge";
 import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
 
 const QC_WORK_COLUMNS: ColumnFilterConfig<QcItem>[] = [
@@ -51,6 +52,7 @@ export function QcWorkTable({ items, totalCount, columnFilterValues }: { items: 
                 selected={Array.from(filters["model"] ?? [])}
                 onApply={(v) => applyColumn("model", v)}
               />
+              <th className="px-4 py-3 font-semibold">Status</th>
               <ColumnFilterHeader
                 label="Employee Name"
                 values={distinctValues.employeeName ?? []}
@@ -81,7 +83,7 @@ export function QcWorkTable({ items, totalCount, columnFilterValues }: { items: 
           <tbody className="divide-y">
             {displayItems.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
                   {activeFilterCount > 0 ? "No assets match the current filters." : "No QC tasks assigned to you right now."}
                 </td>
               </tr>
@@ -95,6 +97,7 @@ export function QcWorkTable({ items, totalCount, columnFilterValues }: { items: 
                 >
                   <td className="px-4 py-3 font-medium whitespace-nowrap">{item.serialNumber}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{item.model}</td>
+                  <td className="px-4 py-3 whitespace-nowrap"><InventoryStatusBadge status={item.status} /></td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.employeeName || "—"}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{item.invoicingWarehouse || "—"}</td>
                   <td className="px-4 py-3"><QcResultBadge result={item.qcCleanResult} /></td>

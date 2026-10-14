@@ -11,6 +11,7 @@ interface ItemData {
   id: string;
   serialNumber: string;
   model: string;
+  status: string;
   warrantyPeriod: string | null;
   warrantyEndPeriod: Date | null;
   servicesStartDate: Date | null;
@@ -75,6 +76,7 @@ export function WarrantyItemTable({
                   selected={Array.from(filters["model"] ?? [])}
                   onApply={(v) => applyColumn("model", v)}
                 />
+                <th className="px-6 py-4 font-semibold">Status</th>
                 <ColumnFilterHeader
                   label="Warranty Period"
                   values={distinctValues.warrantyPeriod ?? []}
@@ -93,7 +95,7 @@ export function WarrantyItemTable({
               ))}
               {filteredItems.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
                     {activeFilterCount > 0
                       ? "No items match the current filters."
                       : searchQuery

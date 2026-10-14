@@ -278,6 +278,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     requestNumber: r.requestNumber,
     serialNumber: r.serialNumber,
     model: r.model,
+    status: r.status,
     employeeName: r.employeeName,
     warehouseLocation: r.warehouseLocation,
     qcCleanResult: r.qcCleanResult,
