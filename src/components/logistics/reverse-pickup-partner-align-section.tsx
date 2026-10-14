@@ -12,6 +12,8 @@ import {
   seedReversePickupDropdowns,
 } from "@/app/actions/reverse-pickup";
 import { ManageableDropdown } from "@/components/inventory/manageable-dropdown";
+import { ColumnFilterHeader, useColumnFilters, type ColumnFilterConfig } from "@/components/shared/column-filter";
+import { UrlDataTableFilter } from "@/components/shared/data-table-filter";
 
 interface RpRequest {
   id: string;
@@ -37,9 +39,18 @@ interface Props {
   canManage: boolean;
   /** Full queue size; `requests` only holds the current page. */
   totalPending?: number;
+  columnFilterValues?: Record<string, { value: string; count: number }[]>;
 }
 
-export function ReversePickupPartnerAlignSection({ requests, canManage, totalPending }: Props) {
+// Only the columns that are worth narrowing by get a filter header; request and
+// serial numbers stay in the free-text search.
+const FILTER_COLUMNS: ColumnFilterConfig<RpRequest>[] = [
+  { key: "amodel", getValue: r => r.model },
+  { key: "aemployee", getValue: r => r.employeeName },
+  { key: "acity", getValue: r => r.city },
+];
+
+export function ReversePickupPartnerAlignSection({ requests, canManage, totalPending, columnFilterValues }: Props) {
   const { toast } = useToast();
   const router = useRouter();
   const [saving, setSaving] = useState<string | null>(null);
@@ -48,6 +59,11 @@ export function ReversePickupPartnerAlignSection({ requests, canManage, totalPen
   const [dd, setDd] = useState<DropdownData | null>(null);
 
   const pendingCount = totalPending ?? requests.length;
+  const { filteredRows: rows, distinctValues, filters, applyColumn, activeFilterCount } = useColumnFilters(
+    FILTER_COLUMNS,
+    requests,
+    { distinctValues: columnFilterValues, pageParam: "rpage" },
+  );
 
   const loadDd = useCallback(async () => {
     let data = await getReversePickupDropdowns();
@@ -132,33 +148,37 @@ export function ReversePickupPartnerAlignSection({ requests, canManage, totalPen
         </span>
       </div>
 
+      <div className="px-6 py-3 border-b flex justify-end">
+        <UrlDataTableFilter paramName="asearch" placeholder="Search request, serial, model, employee, city..." className="w-full sm:w-72" />
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40">
             <tr>
               <th className="px-6 py-4 font-semibold">Request #</th>
               <th className="px-6 py-4 font-semibold">Serial #</th>
-              <th className="px-6 py-4 font-semibold">Model</th>
-              <th className="px-6 py-4 font-semibold">Employee</th>
+              <ColumnFilterHeader label="Model" values={distinctValues.amodel ?? []} selected={filters.amodel ?? []} onApply={v => applyColumn("amodel", v)} />
+              <ColumnFilterHeader label="Employee" values={distinctValues.aemployee ?? []} selected={filters.aemployee ?? []} onApply={v => applyColumn("aemployee", v)} />
               <th className="px-6 py-4 font-semibold">Status</th>
-              <th className="px-6 py-4 font-semibold">Pickup Address</th>
+              <ColumnFilterHeader label="Pickup Address" values={distinctValues.acity ?? []} selected={filters.acity ?? []} onApply={v => applyColumn("acity", v)} />
               {canManage && <th className="px-6 py-4 font-semibold">Partner Name</th>}
               {canManage && <th className="px-6 py-4 font-semibold">Partner Ref.</th>}
               {canManage && <th className="px-6 py-4 font-semibold">Action</th>}
             </tr>
           </thead>
           <tbody className="divide-y">
-            {requests.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td
                   colSpan={canManage ? 9 : 6}
                   className="px-6 py-8 text-center text-sm text-muted-foreground"
                 >
-                  No requests pending for partner alignment.
+                  {activeFilterCount > 0 ? "No rows match the current filters." : "No requests pending for partner alignment."}
                 </td>
               </tr>
             ) : (
-              requests.map((r) => (
+              rows.map((r) => (
                 <tr key={r.id} className="hover:bg-muted/10 transition-colors">
                   <td className="px-6 py-4 font-mono text-xs font-semibold text-indigo-600">
                     {r.requestNumber}

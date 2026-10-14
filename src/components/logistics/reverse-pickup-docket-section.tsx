@@ -5,6 +5,8 @@ import { ArrowUpRight, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { assignReversePickupDocket } from "@/app/actions/reverse-pickup";
+import { ColumnFilterHeader, useColumnFilters, type ColumnFilterConfig } from "@/components/shared/column-filter";
+import { UrlDataTableFilter } from "@/components/shared/data-table-filter";
 
 interface RpRequest {
   id: string;
@@ -24,14 +26,27 @@ interface Props {
   canManage: boolean;
   /** Pending-to-assign across the whole queue; `requests` only holds one page. */
   totalPending?: number;
+  columnFilterValues?: Record<string, { value: string; count: number }[]>;
 }
 
-export function ReversePickupDocketSection({ requests, canManage, totalPending }: Props) {
+const FILTER_COLUMNS: ColumnFilterConfig<RpRequest>[] = [
+  { key: "dmodel", getValue: r => r.model },
+  { key: "demployee", getValue: r => r.employeeName },
+  { key: "dcity", getValue: r => r.city },
+  { key: "dstatus", getValue: r => r.status },
+];
+
+export function ReversePickupDocketSection({ requests, canManage, totalPending, columnFilterValues }: Props) {
   const { toast } = useToast();
   const router = useRouter();
   const [saving, setSaving] = useState<string | null>(null);
   const [docketInputs, setDocketInputs] = useState<Record<string, string>>({});
   const pendingCount = totalPending ?? requests.filter(r => r.status === "DOCKET_REQUESTED").length;
+  const { filteredRows: rows, distinctValues, filters, applyColumn, activeFilterCount } = useColumnFilters(
+    FILTER_COLUMNS,
+    requests,
+    { distinctValues: columnFilterValues, pageParam: "rpage" },
+  );
 
   async function handleAssign(requestId: string) {
     const docketNumber = docketInputs[requestId];
@@ -60,22 +75,32 @@ export function ReversePickupDocketSection({ requests, canManage, totalPending }
         <h2 className="text-sm font-semibold text-orange-800">Reverse Pickup — Docket Requests</h2>
         <span className="ml-auto text-xs text-orange-600 font-medium">{pendingCount} pending</span>
       </div>
+      <div className="px-6 py-3 border-b flex justify-end">
+        <UrlDataTableFilter paramName="dsearch" placeholder="Search request, serial, model, employee, docket..." className="w-full sm:w-72" />
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-muted-foreground uppercase bg-muted/40">
             <tr>
               <th className="px-6 py-4 font-semibold">Request #</th>
               <th className="px-6 py-4 font-semibold">Serial #</th>
-              <th className="px-6 py-4 font-semibold">Model</th>
-              <th className="px-6 py-4 font-semibold">Employee</th>
-              <th className="px-6 py-4 font-semibold">Status</th>
-              <th className="px-6 py-4 font-semibold">Pickup Address</th>
+              <ColumnFilterHeader label="Model" values={distinctValues.dmodel ?? []} selected={filters.dmodel ?? []} onApply={v => applyColumn("dmodel", v)} />
+              <ColumnFilterHeader label="Employee" values={distinctValues.demployee ?? []} selected={filters.demployee ?? []} onApply={v => applyColumn("demployee", v)} />
+              <ColumnFilterHeader label="Status" values={distinctValues.dstatus ?? []} selected={filters.dstatus ?? []} onApply={v => applyColumn("dstatus", v)} />
+              <ColumnFilterHeader label="Pickup Address" values={distinctValues.dcity ?? []} selected={filters.dcity ?? []} onApply={v => applyColumn("dcity", v)} />
               {canManage && <th className="px-6 py-4 font-semibold">Docket #</th>}
               {canManage && <th className="px-6 py-4 font-semibold">Action</th>}
             </tr>
           </thead>
           <tbody className="divide-y">
-            {requests.map(r => {
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={canManage ? 8 : 6} className="px-6 py-8 text-center text-sm text-muted-foreground">
+                  {activeFilterCount > 0 ? "No rows match the current filters." : "No reverse pickup docket requests pending."}
+                </td>
+              </tr>
+            )}
+            {rows.map(r => {
               const assigned = r.status === "DOCKET_ASSIGNED";
               return (
               <tr key={r.id} className="hover:bg-muted/10 transition-colors">

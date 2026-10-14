@@ -14,10 +14,14 @@ import { ForwardReverseTabs } from "@/components/shared/forward-reverse-tabs";
 import { getCorrectOrderPage } from "@/lib/order-page";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
-import type { Prisma, OrderStatus } from "@prisma/client";
+import type { Prisma, OrderStatus, ReversePickupStatus } from "@prisma/client";
 
 const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
 const LOGISTICS_FILTER_KEYS = ["clientName", "dcNumber", "deliveryLocation", "totalQuantity", "serialNumber", "dockets", "ewayBill", "status"];
+// Each reverse queue owns its filter params so a filter set on one queue never
+// follows the user into the other.
+const ALIGN_FILTER_KEYS = ["amodel", "aemployee", "acity"];
+const DOCKET_FILTER_KEYS = ["dmodel", "demployee", "dcity", "dstatus"];
 
 export default async function LogisticsPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const searchParams = await props.searchParams;
@@ -170,7 +174,7 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
 
   // Queue membership is the request status. Each queue is counted and paged on
   // its own so the badges reflect the whole queue, not just the visible page.
-  const rpAlignWhere: Prisma.ReversePickupRequestWhereInput = {
+  const rpAlignBaseWhere: Prisma.ReversePickupRequestWhereInput = {
     status: {
       in: [
         "REQUESTED",
@@ -182,28 +186,89 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
       ],
     },
   };
-  const rpDocketWhere: Prisma.ReversePickupRequestWhereInput = {
+  const rpDocketBaseWhere: Prisma.ReversePickupRequestWhereInput = {
     // Stays in the list once the docket is assigned so the row does not vanish
     // right after logistics hits save.
     status: { in: ["DOCKET_REQUESTED", "DOCKET_ASSIGNED"] },
   };
 
-  const [alignCount, docketCount, docketPending] = await Promise.all([
-    prisma.reversePickupRequest.count({ where: rpAlignWhere }),
-    prisma.reversePickupRequest.count({ where: rpDocketWhere }),
+  // Badges count the whole queue; filters only narrow what is listed.
+  const [alignCount, docketQueueCount, docketPending] = await Promise.all([
+    prisma.reversePickupRequest.count({ where: rpAlignBaseWhere }),
+    prisma.reversePickupRequest.count({ where: rpDocketBaseWhere }),
     prisma.reversePickupRequest.count({ where: { status: "DOCKET_REQUESTED" } }),
   ]);
 
-  const reverseTotalCount = isDocketQueue ? docketCount : alignCount;
+  const alignColumnFilters = parseColumnFilters(searchParams, ALIGN_FILTER_KEYS);
+  const docketColumnFilters = parseColumnFilters(searchParams, DOCKET_FILTER_KEYS);
+  const alignSearch = typeof searchParams.asearch === "string" ? searchParams.asearch.trim() : "";
+  const docketSearch = typeof searchParams.dsearch === "string" ? searchParams.dsearch.trim() : "";
+
+  const rpAlignWhere: Prisma.ReversePickupRequestWhereInput = { ...rpAlignBaseWhere };
+  if (alignSearch) {
+    rpAlignWhere.OR = [
+      { requestNumber: { contains: alignSearch, mode: "insensitive" } },
+      { serialNumber: { contains: alignSearch, mode: "insensitive" } },
+      { model: { contains: alignSearch, mode: "insensitive" } },
+      { employeeName: { contains: alignSearch, mode: "insensitive" } },
+      { city: { contains: alignSearch, mode: "insensitive" } },
+    ];
+  }
+  if (alignColumnFilters.amodel) rpAlignWhere.model = { in: alignColumnFilters.amodel };
+  if (alignColumnFilters.aemployee) rpAlignWhere.employeeName = { in: alignColumnFilters.aemployee };
+  if (alignColumnFilters.acity) rpAlignWhere.city = { in: alignColumnFilters.acity };
+
+  const rpDocketWhere: Prisma.ReversePickupRequestWhereInput = { ...rpDocketBaseWhere };
+  if (docketSearch) {
+    rpDocketWhere.OR = [
+      { requestNumber: { contains: docketSearch, mode: "insensitive" } },
+      { serialNumber: { contains: docketSearch, mode: "insensitive" } },
+      { model: { contains: docketSearch, mode: "insensitive" } },
+      { employeeName: { contains: docketSearch, mode: "insensitive" } },
+      { city: { contains: docketSearch, mode: "insensitive" } },
+      { docketNumber: { contains: docketSearch, mode: "insensitive" } },
+    ];
+  }
+  if (docketColumnFilters.dmodel) rpDocketWhere.model = { in: docketColumnFilters.dmodel };
+  if (docketColumnFilters.demployee) rpDocketWhere.employeeName = { in: docketColumnFilters.demployee };
+  if (docketColumnFilters.dcity) rpDocketWhere.city = { in: docketColumnFilters.dcity };
+  if (docketColumnFilters.dstatus) rpDocketWhere.status = { in: docketColumnFilters.dstatus as ReversePickupStatus[] };
+
+  const reverseWhere = isDocketQueue ? rpDocketWhere : rpAlignWhere;
+  const reverseTotalCount = await prisma.reversePickupRequest.count({ where: reverseWhere });
   const reverseTotalPages = Math.max(1, Math.ceil(reverseTotalCount / rlimit));
   const safeRPage = Math.min(rpage, reverseTotalPages);
 
   const rpRequests = await prisma.reversePickupRequest.findMany({
-    where: isDocketQueue ? rpDocketWhere : rpAlignWhere,
+    where: reverseWhere,
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     skip: (safeRPage - 1) * rlimit,
     take: rlimit,
   });
+
+  // Filter dropdown values for the active queue only.
+  const reverseColumnFilterValues: Record<string, { value: string; count: number }[]> = {};
+  if (isDocketQueue) {
+    const [dModel, dEmployee, dCity, dStatus] = await Promise.all([
+      prisma.reversePickupRequest.groupBy({ by: ["model"], where: rpDocketWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: rpDocketWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["city"], where: rpDocketWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["status"], where: rpDocketWhere, _count: { _all: true } }),
+    ]);
+    reverseColumnFilterValues.dmodel = dModel.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
+    reverseColumnFilterValues.demployee = dEmployee.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
+    reverseColumnFilterValues.dcity = dCity.map(r => ({ value: r.city ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
+    reverseColumnFilterValues.dstatus = dStatus.map(r => ({ value: r.status ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
+  } else {
+    const [aModel, aEmployee, aCity] = await Promise.all([
+      prisma.reversePickupRequest.groupBy({ by: ["model"], where: rpAlignWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: rpAlignWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["city"], where: rpAlignWhere, _count: { _all: true } }),
+    ]);
+    reverseColumnFilterValues.amodel = aModel.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
+    reverseColumnFilterValues.aemployee = aEmployee.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
+    reverseColumnFilterValues.acity = aCity.map(r => ({ value: r.city ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value));
+  }
 
   // Both queues expose the same row shape, so the date serialization lives in
   // one place instead of drifting between two near-identical maps.
@@ -350,7 +415,7 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
           {reverseSubTab === "align" ? (
             alignCount > 0 ? (
               <>
-                <ReversePickupPartnerAlignSection requests={serializedRp} canManage={canManage} totalPending={alignCount} />
+                <ReversePickupPartnerAlignSection requests={serializedRp} canManage={canManage} totalPending={alignCount} columnFilterValues={reverseColumnFilterValues} />
                 <PaginationBar basePath="/dashboard/logistics" currentPage={safeRPage} totalPages={reverseTotalPages} totalCount={reverseTotalCount} limit={rlimit} pageParam="rpage" limitParam="rlimit" />
               </>
             ) : (
@@ -358,9 +423,9 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
                 No requests pending for partner alignment.
               </div>
             )
-          ) : docketCount > 0 ? (
+          ) : docketQueueCount > 0 ? (
             <>
-              <ReversePickupDocketSection requests={serializedRp} canManage={canManage} totalPending={docketPending} />
+              <ReversePickupDocketSection requests={serializedRp} canManage={canManage} totalPending={docketPending} columnFilterValues={reverseColumnFilterValues} />
               <PaginationBar basePath="/dashboard/logistics" currentPage={safeRPage} totalPages={reverseTotalPages} totalCount={reverseTotalCount} limit={rlimit} pageParam="rpage" limitParam="rlimit" />
             </>
           ) : (
