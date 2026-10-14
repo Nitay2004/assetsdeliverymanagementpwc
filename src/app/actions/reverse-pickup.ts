@@ -103,6 +103,113 @@ export async function getReversePickupRequest(id: string) {
   return prisma.reversePickupRequest.findUnique({ where: { id } });
 }
 
+// ─── Reverse pickup eligibility ───
+//
+// A reverse pickup may only be raised for an asset that is actually out with a
+// user (ALLOCATED) and has delivery evidence, and only while no other request
+// for the same serial is still open. This is the single source of truth for
+// those rules: the create action and the form's live inline check both go
+// through it, so the reason shown to the operator is exactly the reason the
+// server would reject the request.
+
+const TERMINAL_REVERSE_PICKUP_STATUSES = ["COMPLETED", "PICKUP_CANCELLED", "DUPLICATE"] as const;
+
+// Returns serial -> reason for every serial that may NOT be picked up. Serials
+// that are fine are simply absent from the map.
+async function getReversePickupBlockReasons(serials: string[]): Promise<Map<string, string>> {
+  const blocked = new Map<string, string>();
+  const unique = [...new Set(serials.map((s) => s.trim()).filter(Boolean))];
+  if (unique.length === 0) return blocked;
+
+  const [activeRpRows, inventoryRows] = await Promise.all([
+    prisma.reversePickupRequest.findMany({
+      where: {
+        serialNumber: { in: unique },
+        status: { notIn: [...TERMINAL_REVERSE_PICKUP_STATUSES] },
+      },
+      select: { serialNumber: true, requestNumber: true, status: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.inventoryItem.findMany({
+      where: { serialNumber: { in: unique } },
+      select: { id: true, serialNumber: true, status: true },
+    }),
+  ]);
+
+  const inventoryBySerial = new Map(inventoryRows.map((i) => [i.serialNumber, i]));
+  // Newest first, so the first row seen per serial is the current open request.
+  const activeRpBySerial = new Map<string, { requestNumber: string; status: string }>();
+  for (const row of activeRpRows) {
+    if (!activeRpBySerial.has(row.serialNumber)) activeRpBySerial.set(row.serialNumber, row);
+  }
+
+  for (const serial of unique) {
+    // Duplicate guard: while any request for this serial is still open, no
+    // second one may be raised. The serial can only be requested again after
+    // the open request reaches a terminal state (came back / cancelled).
+    const activeRp = activeRpBySerial.get(serial);
+    if (activeRp) {
+      blocked.set(
+        serial,
+        `A reverse pickup request is already open for this serial (${activeRp.requestNumber}, status: ${activeRp.status}). Complete or cancel it before raising another one.`
+      );
+      continue;
+    }
+
+    const inventoryItem = inventoryBySerial.get(serial);
+    if (!inventoryItem) {
+      blocked.set(
+        serial,
+        "Serial number not found in inventory. Reverse pickup can only be raised for an asset that is deployed and delivered to a user."
+      );
+      continue;
+    }
+
+    // Only an asset that is out with a user (ALLOCATED) may be picked up.
+    // Anything still in inventory — NEW/AVAILABLE/QC_PENDING/DEFECTIVE/RETIRED —
+    // is in our hands or in provisioning, so there is nothing to collect.
+    if (inventoryItem.status !== "ALLOCATED") {
+      blocked.set(
+        serial,
+        `Asset is in inventory (status: ${inventoryItem.status.toLowerCase().replace(/_/g, " ")}), not deployed to a user. Reverse pickup can only be raised for an asset that is deployed and delivered.`
+      );
+      continue;
+    }
+
+    // Allocated alone is not enough: an asset can be allocated to an order that
+    // has not shipped yet (or parked in provisioning). Require delivery evidence.
+    const delivered = await hasPriorDelivery(inventoryItem.id, serial);
+    if (!delivered) {
+      blocked.set(
+        serial,
+        "Asset is allocated but has no record of being delivered to a user. Reverse pickup can only be raised for an asset that has been delivered."
+      );
+    }
+  }
+
+  return blocked;
+}
+
+// Live check used by the form: as soon as a serial is typed, the form asks
+// whether a request could actually be created for it and shows the reason when
+// it could not. Takes the serials currently on the form so the office table can
+// be checked in a single round trip.
+export async function checkReversePickupEligibility(
+  serials: string[]
+): Promise<Record<string, { ok: boolean; message: string }>> {
+  const user = await getSession();
+  if (!user) throw new Error("Unauthorized");
+  requirePermission(user, "reverse-pickup", "canView");
+
+  const unique = [...new Set((serials ?? []).map((s) => (s ?? "").trim()).filter(Boolean))];
+  if (unique.length === 0) return {};
+
+  const blocked = await getReversePickupBlockReasons(unique);
+  return Object.fromEntries(
+    unique.map((serial) => [serial, { ok: !blocked.has(serial), message: blocked.get(serial) ?? "" }])
+  );
+}
+
 export async function createReversePickupRequest(formData: FormData) {
   const user = await getSession();
   if (!user) throw new Error("Unauthorized");
@@ -228,67 +335,17 @@ export async function createReversePickupRequest(formData: FormData) {
     throw new Error("Serial number is required");
   }
 
-  // A request is only "open" while it is not in one of these states, so one of
-  // them is what lets a serial be picked up again later. Only real enum members
-  // may be listed here: the ReversePickupStatus enum has no CANCELLED/REJECTED
-  // values (a cancelled pickup is PICKUP_CANCELLED), and passing them made Prisma
-  // reject the whole query with a validation error before any check could run.
-  const terminalStatuses = ["COMPLETED", "PICKUP_CANCELLED", "DUPLICATE"] as const;
-
   // The office flow submits several serials in one field, joined by ", " — every
   // serial must pass the same guards before the single request row is created.
   const serialsToValidate = serial.split(",").map((s) => s.trim()).filter(Boolean);
 
-  const [activeRpRows, inventoryRows] = await Promise.all([
-    prisma.reversePickupRequest.findMany({
-      where: {
-        serialNumber: { in: serialsToValidate },
-        status: { notIn: [...terminalStatuses] },
-      },
-      select: { serialNumber: true, requestNumber: true, status: true },
-    }),
-    prisma.inventoryItem.findMany({
-      where: { serialNumber: { in: serialsToValidate } },
-      select: { id: true, serialNumber: true, status: true },
-    }),
-  ]);
-  const inventoryBySerial = new Map(inventoryRows.map((i) => [i.serialNumber, i]));
-
-  for (const s of serialsToValidate) {
-    // Duplicate guard: while any request for this serial is still open, no
-    // second one may be raised. The serial can only be requested again after
-    // the open request reaches a terminal state (came back / cancelled).
-    const activeRp = activeRpRows.find((r) => r.serialNumber === s);
-    if (activeRp) {
-      throw new Error(
-        `Reverse pickup request already exists for serial number ${s} (request ${activeRp.requestNumber}, status: ${activeRp.status}). Cannot raise another request until this one is completed or cancelled.`
-      );
-    }
-
-    const inventoryItem = inventoryBySerial.get(s);
-    if (!inventoryItem) {
-      throw new Error(
-        `Serial number ${s} was not found in inventory. Reverse pickup can only be raised for an asset that is deployed and delivered to a user.`
-      );
-    }
-
-    // Only an asset that is out with a user (ALLOCATED) may be picked up.
-    // Anything still in inventory — NEW/AVAILABLE/QC_PENDING/DEFECTIVE/RETIRED —
-    // is either in our hands or in provisioning, so there is nothing to pick up.
-    if (inventoryItem.status !== "ALLOCATED") {
-      throw new Error(
-        `Asset ${s} is in inventory (status: ${inventoryItem.status}), not deployed. Reverse pickup can only be raised for an asset that is deployed and delivered to a user.`
-      );
-    }
-
-    // Allocated alone is not enough: an asset can be allocated to an order that
-    // has not shipped yet (or parked in provisioning). Require delivery evidence.
-    const delivered = await hasPriorDelivery(inventoryItem.id, s);
-    if (!delivered) {
-      throw new Error(
-        `Asset ${s} is allocated but has no record of being delivered to a user. Reverse pickup can only be raised for an asset that has been delivered.`
-      );
-    }
+  const blocked = await getReversePickupBlockReasons(serialsToValidate);
+  const firstBlocked = serialsToValidate.find((s) => blocked.has(s));
+  if (firstBlocked) {
+    const reason = blocked.get(firstBlocked) ?? "Reverse pickup cannot be raised for this serial.";
+    // Name the serial when several share one field (office flow); for a single
+    // serial the field the user typed into already makes it obvious.
+    throw new Error(serialsToValidate.length > 1 ? `Serial ${firstBlocked}: ${reason}` : reason);
   }
 
   // The number is read-then-write, so two engineers submitting at the same

@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { ArrowLeft, Loader2, Plus, Trash2, Users, Upload } from "lucide-react";
+import { ArrowLeft, AlertCircle, CheckCircle2, Loader2, Plus, Trash2, Users, Upload } from "lucide-react";
 import Link from "next/link";
-import { createReversePickupRequest, getReversePickupDropdowns, addReversePickupDropdownOption, deleteReversePickupDropdownOption, seedReversePickupDropdowns, lookupInventoryBySerial } from "@/app/actions/reverse-pickup";
+import { createReversePickupRequest, getReversePickupDropdowns, addReversePickupDropdownOption, deleteReversePickupDropdownOption, seedReversePickupDropdowns, lookupInventoryBySerial, checkReversePickupEligibility } from "@/app/actions/reverse-pickup";
 import { calculateCutoff } from "@/lib/cutoff-utils";
 import {
   calculateExpectedDeliveryDate,
@@ -40,9 +40,9 @@ type DropdownData = {
   allOptions: { id: string; category: string; value: string }[];
 };
 
-function ManualInput({ name, label, type = "text", placeholder, required, colSpan, value, onChange }: {
+function ManualInput({ name, label, type = "text", placeholder, required, colSpan, value, onChange, hint }: {
   name: string; label: string; type?: string; placeholder?: string; required?: boolean; colSpan?: boolean;
-  value?: string; onChange?: (val: string) => void;
+  value?: string; onChange?: (val: string) => void; hint?: React.ReactNode;
 }) {
   return (
     <div className={colSpan ? "space-y-1.5 md:col-span-2" : "space-y-1.5"}>
@@ -62,7 +62,27 @@ function ManualInput({ name, label, type = "text", placeholder, required, colSpa
           value={value} onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         />
       )}
+      {hint}
     </div>
+  );
+}
+
+// Shown under a serial number field once the live eligibility check has run:
+// green when a request could be created, red with the exact reason when it
+// could not (open request, not in inventory, not deployed, no delivery record).
+function SerialCheckHint({ check }: { check?: { ok: boolean; message: string } }) {
+  if (!check) return null;
+  if (check.ok) {
+    return (
+      <p className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+        <CheckCircle2 className="size-3.5 shrink-0" /> Eligible for reverse pickup
+      </p>
+    );
+  }
+  return (
+    <p className="flex items-start gap-1 text-xs font-medium text-red-500">
+      <AlertCircle className="mt-px size-3.5 shrink-0" /> <span>{check.message}</span>
+    </p>
   );
 }
 
@@ -130,6 +150,9 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
   const [pickupDate, setPickupDate] = useState("");
   const [type, setType] = useState(initialData?.type || "");
   const [officeUsers, setOfficeUsers] = useState<OfficeUser[]>([emptyOfficeUser()]);
+  // Live eligibility per serial, keyed by the serial string so a result for an
+  // old value never shows under a newly typed one.
+  const [serialChecks, setSerialChecks] = useState<Record<string, { ok: boolean; message: string }>>({});
 
   // Office pickups bundle several users on one request. Every per-asset field of
   // each user is saved on this single request as its own comma-separated list,
@@ -149,6 +172,13 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
   const officeContacts = joinOffice("contact");
   const officeEmployeeIds = joinOffice("employeeId");
   // officeLastWorkingDays removed (not in schema)
+
+  // Current serials the live check has marked ineligible. Used to disable the
+  // submit button and to keep the inline reason visible until it is fixed.
+  const blockedSerials = (isOffice
+    ? officeUsers.map((u) => u.serialNumber.trim())
+    : [serialNumber.trim()]
+  ).filter((s) => serialChecks[s] && !serialChecks[s].ok);
 
   // Frozen for the life of the form so the mirrored SLA start cannot drift as
   // days pass while the operator is filling the form in.
@@ -303,6 +333,35 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
     }, 500);
     return () => clearTimeout(timer);
   }, [serialNumber]);
+
+  // Live eligibility: as soon as a serial is entered, show whether a request
+  // could actually be created for it and why not. Every current serial is
+  // checked in one round trip; the debounce keeps typing from firing a query
+  // per keystroke and the minimum length avoids flagging half-typed serials.
+  useEffect(() => {
+    const serials = (isOffice
+      ? officeUsers.map((u) => u.serialNumber.trim())
+      : [serialNumber.trim()]
+    ).filter((s) => s.length >= 4);
+
+    // Nothing to check: results are keyed by serial, so entries for serials
+    // that are no longer on the form simply stop matching and never show.
+    if (serials.length === 0) return;
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const result = await checkReversePickupEligibility(serials);
+        if (!cancelled) setSerialChecks(result);
+      } catch {
+        // Ignore check errors — the server still validates on submit.
+      }
+    }, 700);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isOffice, serialNumber, officeUsers]);
 
   // Pincode auto-fetch city/state
   useEffect(() => {
@@ -463,6 +522,7 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
                     </td>
                     <td className="px-2 py-1.5 align-top">
                       <input type="text" value={u.serialNumber} onChange={e => updateOfficeUser(idx, "serialNumber", e.target.value)} placeholder="SN-12345" className="flex h-10 w-full min-w-[140px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+                      <SerialCheckHint check={serialChecks[u.serialNumber.trim()]} />
                     </td>
                     <td className="px-2 py-1.5 align-top">
                       <input type="text" value={u.model} onChange={e => updateOfficeUser(idx, "model", e.target.value)} placeholder="HP EliteBook" className="flex h-10 w-full min-w-[150px] rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
@@ -513,7 +573,7 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
           <h2 className="text-lg font-semibold text-foreground">Asset Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <ManualInput name="model" label="Laptop Model" required placeholder="e.g. HP EliteBook" value={model} onChange={setModel} />
-            <ManualInput name="serialNumber" label="Serial Number" required placeholder="SN-12345" value={serialNumber} onChange={setSerialNumber} />
+            <ManualInput name="serialNumber" label="Serial Number" required placeholder="SN-12345" value={serialNumber} onChange={setSerialNumber} hint={<SerialCheckHint check={serialChecks[serialNumber.trim()]} />} />
             <DDField name="entity" label="Entity" category="entity" dd={dd} onAdd={handleAdd} onDelete={handleDelete} value={entity} onChange={setEntity} />
             <DDField name="imageType" label="Image Type" category="imageType" dd={dd} onAdd={handleAdd} onDelete={handleDelete} value={imageType} onChange={setImageType} />
             <ManualInput name="accessories" label="Accessories" placeholder="Charger, mouse, etc." colSpan value={accessories} onChange={setAccessories} />
@@ -607,7 +667,8 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
         </Link>
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || blockedSerials.length > 0}
+          title={blockedSerials.length > 0 ? "Fix the highlighted serial number before creating the request" : undefined}
           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed active:translate-y-press"
         >
           {pending && <Loader2 className="size-4 animate-spin" />}
