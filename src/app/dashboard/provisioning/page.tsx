@@ -7,15 +7,18 @@ import { ProvisioningTable } from "@/components/provisioning/provisioning-table"
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { ProvisioningExportButton } from "@/components/provisioning/provisioning-export-button";
 import { QcWorkTable } from "@/components/provisioning/qc-work-table";
+import { ReverseQcTable } from "@/components/provisioning/reverse-qc-table";
 import { HpCasesTable, type HpCaseItem } from "@/components/provisioning/hp-cases-table";
 import { ProvisioningTabs } from "@/components/provisioning/provisioning-tabs";
-import type { QcItem } from "@/components/qc/qc-panel";
+import { type QcItem } from "@/components/qc/qc-panel";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES, ACTIVE_PROVISIONING_STATUSES, HANDED_OVER_STATUSES } from "@/lib/order-status";
 import type { Prisma } from "@prisma/client";
 
 const PROVISIONING_FILTER_KEYS = ["serialNumber", "model", "imageType", "stickerColour", "clientName", "engineerName", "warehouseLocation", "provisioningLocation", "assetStatus"];
 const QC_FILTER_KEYS = ["serialNumber", "model", "employeeName", "invoicingWarehouse", "qcCleanResult", "qcPurgeResult"];
+// Reverse QC sub-tabs are namespaced with `rqc` prefix
+const REVERSE_QC_FILTER_KEYS = ["rqcserial", "rqcmodel", "rqcemployee", "rqcwarehouse", "rqcclean", "rqcpurge"];
 
 function safeISO(date: Date | null | undefined): string | null {
   if (!date) return null;
@@ -27,12 +30,16 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const searchParams = await props.searchParams;
   const page = Math.max(1, parseInt(typeof searchParams.page === "string" ? searchParams.page : "1", 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(typeof searchParams.limit === "string" ? searchParams.limit : "25", 10) || 25));
+  const rqcPage = Math.max(1, parseInt(typeof searchParams.rqcpage === "string" ? searchParams.rqcpage : "1", 10) || 1);
+  const rqcLimit = Math.min(100, Math.max(1, parseInt(typeof searchParams.rqclimit === "string" ? searchParams.rqclimit : "25", 10) || 25));
   const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
   const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
   const selectedEngineer = typeof searchParams.engineer === "string" ? searchParams.engineer : "";
-  const activeTab = typeof searchParams.tab === "string" && (searchParams.tab === "qc" || searchParams.tab === "hp")
-    ? searchParams.tab
-    : "provisioning";
+  const rawTab = typeof searchParams.tab === "string" ? searchParams.tab : "";
+  const activeTab = rawTab === "qc" || rawTab === "hp" || rawTab === "reverseqc" ? rawTab : "provisioning";
+  const rqcSubTab = (typeof searchParams.rqc === "string" && (searchParams.rqc === "hardware" || searchParams.rqc === "software"))
+    ? searchParams.rqc
+    : "hardware";
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "PROVISIONING"));
 
@@ -279,6 +286,141 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     hpCaseRemarks: r.hpCaseRemarks,
   }));
 
+  // Reverse QC — hardware & software QC queues for reverse pickup units
+  const rqcFilters = parseColumnFilters(searchParams, REVERSE_QC_FILTER_KEYS);
+
+  const hwWhere: Prisma.ReversePickupRequestWhereInput = {
+    status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED"] },
+  };
+  if (rqcFilters.rqcserial) hwWhere.serialNumber = { in: rqcFilters.rqcserial };
+  if (rqcFilters.rqcmodel) hwWhere.model = { in: rqcFilters.rqcmodel };
+  if (rqcFilters.rqcemployee) hwWhere.employeeName = { in: rqcFilters.rqcemployee };
+  if (rqcFilters.rqcwarehouse) hwWhere.warehouseLocation = { in: rqcFilters.rqcwarehouse };
+  if (rqcFilters.rqcclean) hwWhere.qcCleanResult = { in: rqcFilters.rqcclean };
+  if (rqcFilters.rqcpurge) hwWhere.qcPurgeResult = { in: rqcFilters.rqcpurge };
+
+  const swWhere: Prisma.ReversePickupRequestWhereInput = {
+    status: { in: ["QC_CLEANED", "QC_COMPLETED"] },
+  };
+  if (rqcFilters.rqcserial) swWhere.serialNumber = { in: rqcFilters.rqcserial };
+  if (rqcFilters.rqcmodel) swWhere.model = { in: rqcFilters.rqcmodel };
+  if (rqcFilters.rqcemployee) swWhere.employeeName = { in: rqcFilters.rqcemployee };
+  if (rqcFilters.rqcwarehouse) swWhere.warehouseLocation = { in: rqcFilters.rqcwarehouse };
+  if (rqcFilters.rqcclean) swWhere.qcCleanResult = { in: rqcFilters.rqcclean };
+  if (rqcFilters.rqcpurge) swWhere.qcPurgeResult = { in: rqcFilters.rqcpurge };
+
+  const [
+    reverseQcHardwareTotal, reverseQcSoftwareTotal,
+    reverseQcHardwareRows, reverseQcSoftwareRows,
+    rqcSerialGroups, rqcModelGroups, rqcEmployeeGroups,
+    rqcWarehouseGroups, rqcCleanGroups, rqcPurgeGroups,
+  ] = await Promise.all([
+    prisma.reversePickupRequest.count({ where: hwWhere }),
+    prisma.reversePickupRequest.count({ where: swWhere }),
+    activeTab === "reverseqc" && rqcSubTab === "hardware"
+      ? prisma.reversePickupRequest.findMany({
+          where: hwWhere,
+          select: {
+            id: true, requestNumber: true, serialNumber: true, model: true,
+            employeeName: true, status: true, warehouseLocation: true,
+            qcCleanResult: true, qcCleanRemarks: true, qcCleanDate: true, qcCleanBy: true,
+            qcPurgeResult: true, qcPurgeRemarks: true, qcPurgeDate: true, qcPurgeBy: true,
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          skip: (rqcPage - 1) * rqcLimit,
+          take: rqcLimit,
+        })
+      : Promise.resolve([]),
+    activeTab === "reverseqc" && rqcSubTab === "software"
+      ? prisma.reversePickupRequest.findMany({
+          where: swWhere,
+          select: {
+            id: true, requestNumber: true, serialNumber: true, model: true,
+            employeeName: true, status: true, warehouseLocation: true,
+            qcCleanResult: true, qcCleanRemarks: true, qcCleanDate: true, qcCleanBy: true,
+            qcPurgeResult: true, qcPurgeRemarks: true, qcPurgeDate: true, qcPurgeBy: true,
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          skip: (rqcPage - 1) * rqcLimit,
+          take: rqcLimit,
+        })
+      : Promise.resolve([]),
+    prisma.reversePickupRequest.groupBy({ by: ["serialNumber"], where: { status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED"] } }, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["model"], where: { status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED"] } }, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: { status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED"] } }, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["warehouseLocation"], where: { status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED"] } }, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["qcCleanResult"], where: { status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED"] } }, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["qcPurgeResult"], where: { status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED"] } }, _count: { _all: true } }),
+  ]);
+
+  const reverseQcColumnFilterValues: Record<string, { value: string; count: number }[]> = {
+    rqcserial: rqcSerialGroups.map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rqcmodel: rqcModelGroups.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rqcemployee: rqcEmployeeGroups.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rqcwarehouse: rqcWarehouseGroups.map(r => ({ value: r.warehouseLocation ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rqcclean: rqcCleanGroups.map(r => ({ value: r.qcCleanResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rqcpurge: rqcPurgeGroups.map(r => ({ value: r.qcPurgeResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+  };
+
+  const serializedReverseQcHardware = reverseQcHardwareRows.map(r => ({
+    id: r.id,
+    requestNumber: r.requestNumber,
+    serialNumber: r.serialNumber,
+    model: r.model,
+    employeeName: r.employeeName,
+    status: r.status,
+    warehouseLocation: r.warehouseLocation,
+    emailId: null,
+    mobileNumber: null,
+    city: null,
+    state: null,
+    invoicingWarehouse: r.warehouseLocation,
+    qcLocation: null,
+    qcRequestedAt: null,
+    qcEngineer: null,
+    qcAssignedAt: null,
+    qcCleanResult: r.qcCleanResult,
+    qcCleanRemarks: r.qcCleanRemarks,
+    qcCleanDate: safeISO(r.qcCleanDate),
+    qcCleanBy: r.qcCleanBy,
+    qcPurgeResult: r.qcPurgeResult,
+    qcPurgeRemarks: r.qcPurgeRemarks,
+    qcPurgeDate: safeISO(r.qcPurgeDate),
+    qcPurgeBy: r.qcPurgeBy,
+  }));
+
+  const serializedReverseQcSoftware = reverseQcSoftwareRows.map(r => ({
+    id: r.id,
+    requestNumber: r.requestNumber,
+    serialNumber: r.serialNumber,
+    model: r.model,
+    employeeName: r.employeeName,
+    status: r.status,
+    warehouseLocation: r.warehouseLocation,
+    emailId: null,
+    mobileNumber: null,
+    city: null,
+    state: null,
+    invoicingWarehouse: r.warehouseLocation,
+    qcLocation: null,
+    qcRequestedAt: null,
+    qcEngineer: null,
+    qcAssignedAt: null,
+    qcCleanResult: r.qcCleanResult,
+    qcCleanRemarks: r.qcCleanRemarks,
+    qcCleanDate: safeISO(r.qcCleanDate),
+    qcCleanBy: r.qcCleanBy,
+    qcPurgeResult: r.qcPurgeResult,
+    qcPurgeRemarks: r.qcPurgeRemarks,
+    qcPurgeDate: safeISO(r.qcPurgeDate),
+    qcPurgeBy: r.qcPurgeBy,
+  }));
+
+  const reverseQcHardwareTotalPages = Math.max(1, Math.ceil(reverseQcHardwareTotal / rqcLimit));
+  const reverseQcSoftwareTotalPages = Math.max(1, Math.ceil(reverseQcSoftwareTotal / rqcLimit));
+  const safeReverseQcHardwarePage = Math.min(rqcPage, reverseQcHardwareTotalPages);
+  const safeReverseQcSoftwarePage = Math.min(rqcPage, reverseQcSoftwareTotalPages);
+
   // Split orders into: active (needs provisioning work), handed over to logistics,
   // and later stages (packing, dispatch, delivery, RTO, etc). All stay visible.
   const activeOrders = orders.filter(o => ACTIVE_PROVISIONING_STATUSES.includes(o.status));
@@ -350,9 +492,60 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
         </div>
       </div>
 
-      <ProvisioningTabs qcCount={qcBadgeCount} hpCount={hpTotalCount} />
+      <ProvisioningTabs
+        qcCount={qcBadgeCount}
+        hpCount={hpTotalCount}
+        reverseQcHardwareCount={reverseQcHardwareTotal}
+        reverseQcSoftwareCount={reverseQcSoftwareTotal}
+      />
 
-      {activeTab === "qc" ? (
+      {activeTab === "reverseqc" ? (
+        <div className="space-y-4">
+          {rqcSubTab === "hardware" ? (
+            <>
+              <ReverseQcTable
+                items={serializedReverseQcHardware}
+                subTab="hardware"
+                totalCount={reverseQcHardwareTotal}
+                columnFilterValues={reverseQcColumnFilterValues}
+                canManage={canManage}
+              />
+              {reverseQcHardwareTotal > 0 && (
+                <PaginationBar
+                  basePath="/dashboard/provisioning"
+                  currentPage={safeReverseQcHardwarePage}
+                  totalPages={reverseQcHardwareTotalPages}
+                  totalCount={reverseQcHardwareTotal}
+                  limit={rqcLimit}
+                  pageParam="rqcpage"
+                  limitParam="rqclimit"
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <ReverseQcTable
+                items={serializedReverseQcSoftware}
+                subTab="software"
+                totalCount={reverseQcSoftwareTotal}
+                columnFilterValues={reverseQcColumnFilterValues}
+                canManage={canManage}
+              />
+              {reverseQcSoftwareTotal > 0 && (
+                <PaginationBar
+                  basePath="/dashboard/provisioning"
+                  currentPage={safeReverseQcSoftwarePage}
+                  totalPages={reverseQcSoftwareTotalPages}
+                  totalCount={reverseQcSoftwareTotal}
+                  limit={rqcLimit}
+                  pageParam="rqcpage"
+                  limitParam="rqclimit"
+                />
+              )}
+            </>
+          )}
+        </div>
+      ) : activeTab === "qc" ? (
         <>
           <QcWorkTable items={myQcItems} totalCount={qcTotalCount} columnFilterValues={qcColumnFilterValues} />
           {qcTotalCount > 0 && (
