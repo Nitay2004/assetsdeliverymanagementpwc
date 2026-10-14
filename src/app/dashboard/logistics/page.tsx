@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Package, Truck, ClipboardList, FileText, Hash } from "lucide-react";
 import { LogisticsTable } from "@/components/logistics/logistics-table";
 import { ReversePickupDocketSection } from "@/components/logistics/reverse-pickup-docket-section";
@@ -224,8 +225,29 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
   const safePage = Math.min(page, totalPages);
   const activeTab = searchParams.tab === "reverse" ? "reverse" : "forward";
+
+  // Reverse work is two queues: align a pickup partner first, then assign the
+  // docket. `rtab` tracks which queue the reverse tab is showing.
+  const reverseSubTab = searchParams.rtab === "docket" ? "docket" : "align";
+  const alignPending = serializedRpPartnerAlign.length;
   // Badge = docket still to assign, not the ones already assigned.
-  const reversePending = serializedRp.filter(r => r.status === "DOCKET_REQUESTED").length;
+  const docketPending = serializedRp.filter(r => r.status === "DOCKET_REQUESTED").length;
+  // The top-level Reverse badge covers both queues, matching what the tab holds.
+  const reversePending = alignPending + docketPending;
+
+  // Sub-tab links keep search / filters / reverse state and only reset the page,
+  // so switching queues never silently drops the active view.
+  const subTabHref = (rtab: "align" | "docket") => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(searchParams)) {
+      if (typeof value === "string") params.set(key, value);
+    }
+    params.set("tab", "reverse");
+    params.set("rtab", rtab);
+    params.delete("page");
+    params.delete("selected");
+    return `/dashboard/logistics?${params.toString()}`;
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -298,18 +320,48 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
 
           <PaginationBar basePath="/dashboard/logistics" currentPage={safePage} totalPages={totalPages} totalCount={totalCount} limit={limit} />
         </>
-      ) : (serializedRpPartnerAlign.length > 0 || serializedRp.length > 0) ? (
-        <>
-          {serializedRpPartnerAlign.length > 0 && (
-            <ReversePickupPartnerAlignSection requests={serializedRpPartnerAlign} canManage={canManage} />
-          )}
-          {serializedRp.length > 0 && (
-            <ReversePickupDocketSection requests={serializedRp} canManage={canManage} />
-          )}
-        </>
       ) : (
-        <div className="p-8 rounded-xl glass text-center text-muted-foreground">
-          No reverse pickup requests pending.
+        <div className="space-y-4">
+          <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+            <Link
+              href={subTabHref("align")}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${reverseSubTab === "align" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Pickup Alignment
+              {alignPending > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                  {alignPending}
+                </span>
+              )}
+            </Link>
+            <Link
+              href={subTabHref("docket")}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${reverseSubTab === "docket" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Dockets
+              {docketPending > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700">
+                  {docketPending}
+                </span>
+              )}
+            </Link>
+          </div>
+
+          {reverseSubTab === "align" ? (
+            serializedRpPartnerAlign.length > 0 ? (
+              <ReversePickupPartnerAlignSection requests={serializedRpPartnerAlign} canManage={canManage} />
+            ) : (
+              <div className="p-8 rounded-xl glass text-center text-muted-foreground">
+                No requests pending for partner alignment.
+              </div>
+            )
+          ) : serializedRp.length > 0 ? (
+            <ReversePickupDocketSection requests={serializedRp} canManage={canManage} />
+          ) : (
+            <div className="p-8 rounded-xl glass text-center text-muted-foreground">
+              No reverse pickup docket requests pending.
+            </div>
+          )}
         </div>
       )}
     </div>
