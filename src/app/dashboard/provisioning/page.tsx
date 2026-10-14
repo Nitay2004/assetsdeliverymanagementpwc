@@ -7,14 +7,15 @@ import { ProvisioningTable } from "@/components/provisioning/provisioning-table"
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { ProvisioningExportButton } from "@/components/provisioning/provisioning-export-button";
 import { QcWorkTable } from "@/components/provisioning/qc-work-table";
-import { ReverseQcTable } from "@/components/provisioning/reverse-qc-table";
+import { ReverseQcTable, type ReverseQcItem } from "@/components/provisioning/reverse-qc-table";
 import { HpCasesTable, type HpCaseItem } from "@/components/provisioning/hp-cases-table";
 import { ProvisioningTabs } from "@/components/provisioning/provisioning-tabs";
 import { ReverseQcSubTabs } from "@/components/provisioning/reverse-qc-sub-tabs";
 import { type QcItem } from "@/components/qc/qc-panel";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES, ACTIVE_PROVISIONING_STATUSES, HANDED_OVER_STATUSES } from "@/lib/order-status";
-import type { Prisma } from "@prisma/client";
+import { REVERSE_QC_HARDWARE_STATUSES, REVERSE_QC_SOFTWARE_STATUSES } from "@/lib/reverse-pickup-config";
+import type { Prisma, ReversePickupStatus } from "@prisma/client";
 
 const PROVISIONING_FILTER_KEYS = ["serialNumber", "model", "imageType", "stickerColour", "clientName", "engineerName", "warehouseLocation", "provisioningLocation", "assetStatus"];
 const QC_FILTER_KEYS = ["serialNumber", "model", "employeeName", "invoicingWarehouse", "qcCleanResult", "qcPurgeResult"];
@@ -287,11 +288,17 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     hpCaseRemarks: r.hpCaseRemarks,
   }));
 
-  // Reverse QC — hardware & software QC queues for reverse pickup units
+  // Reverse QC — the engineer's own queue. A unit only appears here after the
+  // warehouse has assigned this engineer, so both sub-tab queues are scoped to
+  // the logged-in user. Hardware QC runs first (RECEIVED_AT_WAREHOUSE), then the
+  // unit moves to Software QC (QC_CLEANED). The two sets are disjoint, so a unit
+  // is never in both queues at once.
   const rqcFilters = parseColumnFilters(searchParams, REVERSE_QC_FILTER_KEYS);
+  const rqcEngineer = user ? user.name : "__no_user__";
 
   const hwWhere: Prisma.ReversePickupRequestWhereInput = {
-    status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED"] },
+    status: { in: REVERSE_QC_HARDWARE_STATUSES as ReversePickupStatus[] },
+    qcEngineer: rqcEngineer,
   };
   if (rqcFilters.rqcserial) hwWhere.serialNumber = { in: rqcFilters.rqcserial };
   if (rqcFilters.rqcmodel) hwWhere.model = { in: rqcFilters.rqcmodel };
@@ -301,7 +308,8 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   if (rqcFilters.rqcpurge) hwWhere.qcPurgeResult = { in: rqcFilters.rqcpurge };
 
   const swWhere: Prisma.ReversePickupRequestWhereInput = {
-    status: { in: ["QC_CLEANED", "QC_COMPLETED"] },
+    status: { in: REVERSE_QC_SOFTWARE_STATUSES as ReversePickupStatus[] },
+    qcEngineer: rqcEngineer,
   };
   if (rqcFilters.rqcserial) swWhere.serialNumber = { in: rqcFilters.rqcserial };
   if (rqcFilters.rqcmodel) swWhere.model = { in: rqcFilters.rqcmodel };
@@ -309,6 +317,13 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   if (rqcFilters.rqcwarehouse) swWhere.warehouseLocation = { in: rqcFilters.rqcwarehouse };
   if (rqcFilters.rqcclean) swWhere.qcCleanResult = { in: rqcFilters.rqcclean };
   if (rqcFilters.rqcpurge) swWhere.qcPurgeResult = { in: rqcFilters.rqcpurge };
+
+  // Distinct values for the filter dropdowns cover this engineer's whole reverse
+  // QC worklist (both stages), not just the current page.
+  const rqcScopeWhere: Prisma.ReversePickupRequestWhereInput = {
+    qcEngineer: rqcEngineer,
+    status: { in: [...REVERSE_QC_HARDWARE_STATUSES, ...REVERSE_QC_SOFTWARE_STATUSES] as ReversePickupStatus[] },
+  };
 
   const [
     reverseQcHardwareTotal, reverseQcSoftwareTotal,
@@ -324,6 +339,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
           select: {
             id: true, requestNumber: true, serialNumber: true, model: true,
             employeeName: true, status: true, warehouseLocation: true,
+            qcEngineer: true, qcAssignedAt: true, qcLocation: true,
             qcCleanResult: true, qcCleanRemarks: true, qcCleanDate: true, qcCleanBy: true,
             qcPurgeResult: true, qcPurgeRemarks: true, qcPurgeDate: true, qcPurgeBy: true,
           },
@@ -338,6 +354,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
           select: {
             id: true, requestNumber: true, serialNumber: true, model: true,
             employeeName: true, status: true, warehouseLocation: true,
+            qcEngineer: true, qcAssignedAt: true, qcLocation: true,
             qcCleanResult: true, qcCleanRemarks: true, qcCleanDate: true, qcCleanBy: true,
             qcPurgeResult: true, qcPurgeRemarks: true, qcPurgeDate: true, qcPurgeBy: true,
           },
@@ -346,12 +363,12 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
           take: rqcLimit,
         })
       : Promise.resolve([]),
-    prisma.reversePickupRequest.groupBy({ by: ["serialNumber"], where: { status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED"] } }, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["model"], where: { status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED"] } }, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: { status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED"] } }, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["warehouseLocation"], where: { status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED"] } }, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["qcCleanResult"], where: { status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED"] } }, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["qcPurgeResult"], where: { status: { in: ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED", "QC_COMPLETED"] } }, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["serialNumber"], where: rqcScopeWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["model"], where: rqcScopeWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: rqcScopeWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["warehouseLocation"], where: rqcScopeWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["qcCleanResult"], where: rqcScopeWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["qcPurgeResult"], where: rqcScopeWhere, _count: { _all: true } }),
   ]);
 
   const reverseQcColumnFilterValues: Record<string, { value: string; count: number }[]> = {
@@ -363,7 +380,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     rqcpurge: rqcPurgeGroups.map(r => ({ value: r.qcPurgeResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
   };
 
-  const serializedReverseQcHardware = reverseQcHardwareRows.map(r => ({
+  const serializedReverseQcHardware: ReverseQcItem[] = reverseQcHardwareRows.map(r => ({
     id: r.id,
     requestNumber: r.requestNumber,
     serialNumber: r.serialNumber,
@@ -371,15 +388,8 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     employeeName: r.employeeName,
     status: r.status,
     warehouseLocation: r.warehouseLocation,
-    emailId: null,
-    mobileNumber: null,
-    city: null,
-    state: null,
-    invoicingWarehouse: r.warehouseLocation,
-    qcLocation: null,
-    qcRequestedAt: null,
-    qcEngineer: null,
-    qcAssignedAt: null,
+    qcEngineer: r.qcEngineer,
+    qcAssignedAt: safeISO(r.qcAssignedAt),
     qcCleanResult: r.qcCleanResult,
     qcCleanRemarks: r.qcCleanRemarks,
     qcCleanDate: safeISO(r.qcCleanDate),
@@ -390,7 +400,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     qcPurgeBy: r.qcPurgeBy,
   }));
 
-  const serializedReverseQcSoftware = reverseQcSoftwareRows.map(r => ({
+  const serializedReverseQcSoftware: ReverseQcItem[] = reverseQcSoftwareRows.map(r => ({
     id: r.id,
     requestNumber: r.requestNumber,
     serialNumber: r.serialNumber,
@@ -398,15 +408,8 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     employeeName: r.employeeName,
     status: r.status,
     warehouseLocation: r.warehouseLocation,
-    emailId: null,
-    mobileNumber: null,
-    city: null,
-    state: null,
-    invoicingWarehouse: r.warehouseLocation,
-    qcLocation: null,
-    qcRequestedAt: null,
-    qcEngineer: null,
-    qcAssignedAt: null,
+    qcEngineer: r.qcEngineer,
+    qcAssignedAt: safeISO(r.qcAssignedAt),
     qcCleanResult: r.qcCleanResult,
     qcCleanRemarks: r.qcCleanRemarks,
     qcCleanDate: safeISO(r.qcCleanDate),

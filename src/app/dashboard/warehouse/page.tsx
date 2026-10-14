@@ -6,11 +6,13 @@ import { PendingAllocationsTable } from "@/components/warehouse/pending-allocati
 import { AllocatedAssetsTable } from "@/components/warehouse/allocated-assets-table";
 import { QcPendingTable } from "@/components/warehouse/qc-pending-table";
 import { WarehouseReverseTable } from "@/components/warehouse/warehouse-reverse-table";
+import { WarehouseBlancoTable } from "@/components/warehouse/warehouse-blanco-table";
+import { WarehouseReverseSubTabs } from "@/components/warehouse/warehouse-reverse-sub-tabs";
 import { WarehouseExportButton } from "@/components/warehouse/warehouse-export-button";
 import { WarehouseTabs } from "@/components/warehouse/warehouse-tabs";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
-import { WAREHOUSE_PIPELINE_STATUSES, WAREHOUSE_RECEIVABLE_STATUSES } from "@/lib/reverse-pickup-config";
+import { WAREHOUSE_PIPELINE_SUB_STATUSES, WAREHOUSE_BLANCO_STATUSES, WAREHOUSE_RECEIVABLE_STATUSES } from "@/lib/reverse-pickup-config";
 import type { Prisma, OrderStatus, ReversePickupStatus } from "@prisma/client";
 
 const ALLOCATED_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity", "serialNumbers", "docketNumber", "dcNumber", "ewayBill", "status"];
@@ -19,7 +21,7 @@ const ALLOCATED_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity"
 const QC_FILTER_KEYS = ["serialNumber", "model", "employeeName", "qcEngineer", "qcCleanResult", "qcPurgeResult"];
 // The Reverse tab is namespaced with an `r` prefix so its filters never collide
 // with the allocation (`status`) or QC (`serialNumber`) tabs.
-const REVERSE_FILTER_KEYS = ["rrequest", "rserial", "rmodel", "remployee", "rstatus", "rwarehouse", "rclean", "rpurge"];
+const REVERSE_FILTER_KEYS = ["rrequest", "rserial", "rmodel", "remployee", "rstatus", "rwarehouse", "rqcengineer", "rclean", "rpurge"];
 
 function safeISO(date: Date | null | undefined): string | null {
   if (!date) return null;
@@ -36,6 +38,9 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
   const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
   const tabParam = typeof searchParams.tab === "string" ? searchParams.tab : "";
   const activeTab = tabParam === "qc" ? "qc" : tabParam === "reverse" ? "reverse" : "provisioning";
+  // The Reverse tab has two sub-tabs of its own: the receiving/QC pipeline and
+  // the Blanco queue. They page independently of the rest of the page.
+  const reverseSubTab = searchParams.rtab === "blanco" ? "blanco" : "pipeline";
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "WAREHOUSE"));
 
@@ -74,15 +79,18 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
   };
 
   const reverseFilters = parseColumnFilters(searchParams, REVERSE_FILTER_KEYS);
+  // The pipeline sub-tab covers inbound + receiving + QC; the Blanco sub-tab
+  // covers everything that passed QC and is moving through Blancco.
+  const reverseSubStatuses = reverseSubTab === "blanco" ? WAREHOUSE_BLANCO_STATUSES : WAREHOUSE_PIPELINE_SUB_STATUSES;
   const reverseWhere: Prisma.ReversePickupRequestWhereInput = {
-    status: { in: WAREHOUSE_PIPELINE_STATUSES as ReversePickupStatus[] },
+    status: { in: reverseSubStatuses as ReversePickupStatus[] },
     ...(reverseFilters.rrequest ? { requestNumber: { in: reverseFilters.rrequest } } : {}),
     ...(reverseFilters.rserial ? { serialNumber: { in: reverseFilters.rserial } } : {}),
     ...(reverseFilters.rmodel ? { model: { in: reverseFilters.rmodel } } : {}),
     ...(reverseFilters.remployee ? { employeeName: { in: reverseFilters.remployee } } : {}),
     ...(reverseFilters.rstatus ? { status: { in: reverseFilters.rstatus as ReversePickupStatus[] } } : {}),
   };
-  andFilterConditions(reverseWhere, collectBlankTokenConditions(reverseFilters, { rwarehouse: "warehouseLocation", rclean: "qcCleanResult", rpurge: "qcPurgeResult" }));
+  andFilterConditions(reverseWhere, collectBlankTokenConditions(reverseFilters, { rwarehouse: "warehouseLocation", rqcengineer: "qcEngineer", rclean: "qcCleanResult", rpurge: "qcPurgeResult" }));
 
   const [pendingOrders, totalAllocated, allocatedOrders, availableInventory] = await Promise.all([
     prisma.order.findMany({
@@ -182,8 +190,8 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     reverseRequests, reversePendingCount,
     reverseRequestGroups, reverseSerialGroups, reverseModelGroups,
     reverseEmployeeGroups, reverseStatusGroups, reverseWarehouseGroups,
-    reverseCleanGroups, reversePurgeGroups,
-    warehouseLocationOptions,
+    reverseQcEngineerGroups, reverseCleanGroups, reversePurgeGroups,
+    warehouseLocationOptions, pipelineStageCount, blancoStageCount,
   ] = await Promise.all([
     prisma.reversePickupRequest.findMany({
       where: reverseWhere,
@@ -191,6 +199,7 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
         id: true, requestNumber: true, serialNumber: true, model: true,
         employeeName: true, status: true, warehouseLocation: true,
         receivedDate: true, receivedBy: true,
+        qcEngineer: true, qcAssignedAt: true, qcLocation: true,
         qcCleanResult: true, qcPurgeResult: true, qcResult: true,
       },
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
@@ -206,9 +215,12 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: reverseWhere, _count: { _all: true } }),
     prisma.reversePickupRequest.groupBy({ by: ["status"], where: reverseWhere, _count: { _all: true } }),
     prisma.reversePickupRequest.groupBy({ by: ["warehouseLocation"], where: reverseWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["qcEngineer"], where: reverseWhere, _count: { _all: true } }),
     prisma.reversePickupRequest.groupBy({ by: ["qcCleanResult"], where: reverseWhere, _count: { _all: true } }),
     prisma.reversePickupRequest.groupBy({ by: ["qcPurgeResult"], where: reverseWhere, _count: { _all: true } }),
     prisma.dropdownOption.findMany({ where: { category: "warehouseLocation" }, orderBy: { value: "asc" } }),
+    prisma.reversePickupRequest.count({ where: { status: { in: WAREHOUSE_PIPELINE_SUB_STATUSES as ReversePickupStatus[] } } }),
+    prisma.reversePickupRequest.count({ where: { status: { in: WAREHOUSE_BLANCO_STATUSES as ReversePickupStatus[] } } }),
   ]);
 
   const reverseColumnFilterValues: Record<string, { value: string; count: number }[]> = {
@@ -218,6 +230,7 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     remployee: reverseEmployeeGroups.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
     rstatus: reverseStatusGroups.map(r => ({ value: r.status ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
     rwarehouse: reverseWarehouseGroups.map(r => ({ value: r.warehouseLocation ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rqcengineer: reverseQcEngineerGroups.map(r => ({ value: r.qcEngineer ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
     rclean: reverseCleanGroups.map(r => ({ value: r.qcCleanResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
     rpurge: reversePurgeGroups.map(r => ({ value: r.qcPurgeResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
   };
@@ -232,6 +245,9 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     warehouseLocation: r.warehouseLocation,
     receivedDate: safeISO(r.receivedDate),
     receivedBy: r.receivedBy,
+    qcEngineer: r.qcEngineer,
+    qcAssignedAt: safeISO(r.qcAssignedAt),
+    qcLocation: r.qcLocation,
     qcCleanResult: r.qcCleanResult,
     qcPurgeResult: r.qcPurgeResult,
     qcResult: r.qcResult,
@@ -315,14 +331,25 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
 
       {activeTab === "reverse" ? (
         <div className="space-y-4">
-          <WarehouseReverseTable
-            items={serializedReverse}
-            canManage={canManage}
-            warehouseLocations={warehouseLocations}
-            totalCount={reverseTotalCount}
-            pendingReceiptCount={reversePendingCount}
-            columnFilterValues={reverseColumnFilterValues}
-          />
+          <WarehouseReverseSubTabs pipelineCount={pipelineStageCount} blancoCount={blancoStageCount} />
+          {reverseSubTab === "blanco" ? (
+            <WarehouseBlancoTable
+              items={serializedReverse}
+              canManage={canManage}
+              warehouseLocations={warehouseLocations}
+              totalCount={reverseTotalCount}
+              columnFilterValues={reverseColumnFilterValues}
+            />
+          ) : (
+            <WarehouseReverseTable
+              items={serializedReverse}
+              canManage={canManage}
+              warehouseLocations={warehouseLocations}
+              totalCount={reverseTotalCount}
+              pendingReceiptCount={reversePendingCount}
+              columnFilterValues={reverseColumnFilterValues}
+            />
+          )}
           {reverseTotalCount > 0 && (
             <PaginationBar
               basePath="/dashboard/warehouse"

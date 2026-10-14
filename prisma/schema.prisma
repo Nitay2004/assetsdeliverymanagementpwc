@@ -518,6 +518,11 @@ model ReversePickupRequest {
   receivedDate          DateTime?            @map("received_date") @db.Date
   receivedBy            String?              @map("received_by")
 
+  // ── QC Assignment (Warehouse assigns a QC engineer; the engineer records QC) ──
+  qcEngineer            String?              @map("qc_engineer")
+  qcAssignedAt          DateTime?            @map("qc_assigned_at")
+  qcLocation            String?              @map("qc_location")
+
   // ── QC ──
   qcRemarks             String?              @map("qc_remarks")
   qcDate                DateTime?            @map("qc_date") @db.Date
@@ -594,6 +599,7 @@ model ReversePickupRequest {
   @@index([serialNumber])
   @@index([docketNumber])
   @@index([employeeName])
+  @@index([qcEngineer])
   @@map("reverse_pickup_requests")
 }
 

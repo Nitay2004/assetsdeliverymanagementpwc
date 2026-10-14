@@ -20,6 +20,7 @@ export function ReverseQcSubTabs({
   function go(sub: SubTab) {
     const p = new URLSearchParams(searchParams.toString());
     p.delete("page");
+    p.delete("rqcpage");
     p.delete("engineer");
     p.delete("selected");
     if (sub === "hardware") p.delete("rqctab");

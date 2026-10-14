@@ -38,6 +38,17 @@ function requireModuleEditOrReversePickup(
   if (!canOwn && !canReversePickup) throw new Error("Permission denied");
 }
 
+// QC and HP-case recording moved out of the Warehouse Reverse tab: the warehouse
+// assigns a QC engineer and the engineer works the queue from the Provisioning
+// module, so their provisioning edit grant must be accepted alongside warehouse.
+function requireReverseQcWork(user: { permissions: unknown; role: string } | null): void {
+  if (!user) throw new Error("Unauthorized");
+  const canWarehouse = canModuleAction(user.permissions, user.role, "warehouse", "canEdit");
+  const canProvisioning = canModuleAction(user.permissions, user.role, "provisioning", "canEdit");
+  const canReversePickup = canModuleAction(user.permissions, user.role, "reverse-pickup", "canEdit");
+  if (!canWarehouse && !canProvisioning && !canReversePickup) throw new Error("Permission denied");
+}
+
 const RPU_NUMBER = /^RPU-([0-9]+)$/;
 
 async function nextReversePickupRequestNumber(): Promise<string> {
@@ -634,6 +645,46 @@ export async function receiveAtWarehouse(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+// Receiving the unit is the Warehouse team's job, but QC is not recorded here
+// any more: the warehouse assigns a QC engineer and the engineer works the queue
+// from the Provisioning module. This records that assignment.
+export async function assignReverseQcEngineer(formData: FormData) {
+  const user = await getSession();
+  requireModuleEditOrReversePickup(user, "warehouse");
+
+  const id = formData.get("id") as string;
+  const qcEngineer = ((formData.get("qcEngineer") as string) || "").trim();
+  const qcLocation = (formData.get("qcLocation") as string) || null;
+  const warehouseLocation = (formData.get("warehouseLocation") as string) || null;
+
+  if (!id) throw new Error("Request ID is required.");
+  if (!qcEngineer) throw new Error("QC engineer name is required.");
+
+  const request = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: { status: true },
+  });
+  if (!request) throw new Error("Reverse pickup request not found.");
+  // Assignment only makes sense once the unit is physically at the warehouse and
+  // before the engineer has started recording QC.
+  if (request.status !== "RECEIVED_AT_WAREHOUSE") {
+    throw new Error("A QC engineer can only be assigned while the unit is awaiting QC at the warehouse.");
+  }
+
+  await prisma.reversePickupRequest.update({
+    where: { id },
+    data: {
+      qcEngineer,
+      qcAssignedAt: new Date(),
+      qcLocation,
+      ...(warehouseLocation ? { warehouseLocation } : {}),
+    },
+  });
+
+  revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard/provisioning");
+}
+
 // Overall QC result is derived from both stages: FAIL if either stage failed,
 // PASS only when both passed, otherwise still pending.
 function deriveQcResult(...stageResults: (string | null | undefined)[]) {
@@ -647,9 +698,9 @@ function deriveQcResult(...stageResults: (string | null | undefined)[]) {
 
 export async function recordCleanQc(formData: FormData) {
   const user = await getSession();
-  // Hardware QC is recorded by the Warehouse team from their Reverse tab, so the
-  // owning module's edit grant is accepted alongside reverse-pickup:canEdit.
-  requireModuleEditOrReversePickup(user, "warehouse");
+  // Hardware QC is recorded by the assigned QC engineer from their "my tasks"
+  // queue (Provisioning module), so accept the provisioning edit grant too.
+  requireReverseQcWork(user);
 
   const id = formData.get("id") as string;
   const qcCleanResult = formData.get("qcCleanResult") as string;
@@ -661,7 +712,7 @@ export async function recordCleanQc(formData: FormData) {
 
   const existing = await prisma.reversePickupRequest.findUnique({
     where: { id },
-    select: { qcPurgeResult: true },
+    select: { qcPurgeResult: true, qcEngineer: true },
   });
 
   await prisma.reversePickupRequest.update({
@@ -671,7 +722,9 @@ export async function recordCleanQc(formData: FormData) {
       qcCleanResult,
       qcCleanRemarks: qcCleanRemarks || null,
       qcCleanDate,
-      qcCleanBy: qcCleanBy || null,
+      // The engineer who recorded it, falling back to the assigned engineer or
+      // the acting user.
+      qcCleanBy: qcCleanBy || existing?.qcEngineer || user?.name || null,
       qcResult: deriveQcResult(qcCleanResult, existing?.qcPurgeResult),
     },
   });
@@ -683,8 +736,9 @@ export async function recordCleanQc(formData: FormData) {
 
 export async function recordPurgeQc(formData: FormData) {
   const user = await getSession();
-  // Software QC is recorded by the Warehouse team from their Reverse tab.
-  requireModuleEditOrReversePickup(user, "warehouse");
+  // Software QC is recorded by the assigned QC engineer from their "my tasks"
+  // queue (Provisioning module).
+  requireReverseQcWork(user);
 
   const id = formData.get("id") as string;
   const qcPurgeResult = formData.get("qcPurgeResult") as string;
@@ -696,7 +750,7 @@ export async function recordPurgeQc(formData: FormData) {
 
   const existing = await prisma.reversePickupRequest.findUnique({
     where: { id },
-    select: { qcCleanResult: true },
+    select: { qcCleanResult: true, qcEngineer: true },
   });
 
   await prisma.reversePickupRequest.update({
@@ -706,7 +760,7 @@ export async function recordPurgeQc(formData: FormData) {
       qcPurgeResult,
       qcPurgeRemarks: qcPurgeRemarks || null,
       qcPurgeDate,
-      qcPurgeBy: qcPurgeBy || null,
+      qcPurgeBy: qcPurgeBy || existing?.qcEngineer || user?.name || null,
       qcResult: deriveQcResult(existing?.qcCleanResult, qcPurgeResult),
     },
   });
@@ -721,9 +775,10 @@ export async function recordPurgeQc(formData: FormData) {
 // state the asset just sat at QC with nothing recording why it could not move.
 export async function logHpCase(formData: FormData) {
   const user = await getSession();
+  // Logged by the QC engineer when a QC stage fails in their "my tasks" queue
+  // (Provisioning module), or by the warehouse team from the Reverse tab.
+  requireReverseQcWork(user);
   if (!user) throw new Error("Unauthorized");
-  // Logged by the Warehouse team when a QC stage fails on their Reverse tab.
-  requireModuleEditOrReversePickup(user, "warehouse");
 
   const id = formData.get("id") as string;
   const hpCaseNumber = ((formData.get("hpCaseNumber") as string) || "").trim();
@@ -808,6 +863,7 @@ export async function resolveHpCase(formData: FormData) {
 
   revalidatePath("/dashboard/reverse-pickup");
   revalidatePath("/dashboard/provisioning");
+  revalidatePath("/dashboard/warehouse");
 }
 
 export async function recordBlancoClear(formData: FormData) {

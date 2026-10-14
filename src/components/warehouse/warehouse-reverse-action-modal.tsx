@@ -2,25 +2,19 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { X, Loader2, Warehouse, Cpu, HardDrive, Eraser, AlertTriangle, Package, type LucideIcon } from "lucide-react";
+import { X, Loader2, Warehouse, Eraser, Package, type LucideIcon } from "lucide-react";
 import {
   receiveAtWarehouse,
-  recordCleanQc,
-  recordPurgeQc,
   recordBlancoClear,
   recordBlancoPurge,
-  logHpCase,
   completeReversePickup,
 } from "@/app/actions/reverse-pickup";
 import { useToast } from "@/hooks/use-toast";
 
 export type WarehouseReverseAction =
   | "receive"
-  | "cleanQc"
-  | "purgeQc"
   | "blancoClear"
   | "blancoPurge"
-  | "logHp"
   | "complete";
 
 export interface WarehouseReverseActionItem {
@@ -48,11 +42,8 @@ const LABEL = "text-sm font-medium text-foreground";
 
 const ACTION_META: Record<WarehouseReverseAction, { title: string; cta: string; button: string; icon: LucideIcon }> = {
   receive: { title: "Receive at Warehouse", cta: "Mark Received", button: "bg-cyan-600 hover:bg-cyan-700", icon: Warehouse },
-  cleanQc: { title: "Record Hardware QC", cta: "Record Hardware QC", button: "bg-indigo-600 hover:bg-indigo-700", icon: Cpu },
-  purgeQc: { title: "Record Software QC", cta: "Record Software QC", button: "bg-violet-600 hover:bg-violet-700", icon: HardDrive },
   blancoClear: { title: "Record Blanco Clear", cta: "Record Blanco Clear", button: "bg-sky-600 hover:bg-sky-700", icon: Eraser },
   blancoPurge: { title: "Record Blanco Purge", cta: "Record Blanco Purge", button: "bg-teal-600 hover:bg-teal-700", icon: Eraser },
-  logHp: { title: "Log Case with HP", cta: "Log Case with HP", button: "bg-amber-600 hover:bg-amber-700", icon: AlertTriangle },
   complete: { title: "Move Back to Inventory", cta: "Move to Inventory", button: "bg-emerald-600 hover:bg-emerald-700", icon: Package },
 };
 
@@ -68,14 +59,13 @@ export function WarehouseReverseActionModal({ item, action, warehouseLocations, 
   const [date, setDate] = useState(today);
   const [performedBy, setPerformedBy] = useState("");
   const [remarks, setRemarks] = useState("");
-  const [hpCaseNumber, setHpCaseNumber] = useState("");
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [certificateDate, setCertificateDate] = useState(today);
 
   if (!open) return null;
 
   const meta = ACTION_META[action];
-  const requiresResult = action === "cleanQc" || action === "purgeQc" || action === "blancoClear" || action === "blancoPurge";
+  const requiresResult = action === "blancoClear" || action === "blancoPurge";
   const Icon = meta.icon;
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -86,10 +76,6 @@ export function WarehouseReverseActionModal({ item, action, warehouseLocations, 
     }
     if (requiresResult && !result) {
       toast({ title: "Validation", description: "Result is required.", variant: "error" });
-      return;
-    }
-    if (action === "logHp" && !hpCaseNumber.trim()) {
-      toast({ title: "Validation", description: "HP case number is required.", variant: "error" });
       return;
     }
     if (action === "blancoPurge" && !certificateFile) {
@@ -108,20 +94,6 @@ export function WarehouseReverseActionModal({ item, action, warehouseLocations, 
         fd.set("receivedBy", receivedBy);
         await receiveAtWarehouse(fd);
         toast({ title: "Received at warehouse", description: `${item.serialNumber} marked as received at ${warehouse}.`, variant: "success" });
-      } else if (action === "cleanQc") {
-        fd.set("qcCleanResult", result);
-        fd.set("qcCleanDate", date);
-        fd.set("qcCleanBy", performedBy);
-        fd.set("qcCleanRemarks", remarks);
-        await recordCleanQc(fd);
-        toast({ title: "Hardware QC recorded", description: `${item.serialNumber}: ${result}.`, variant: "success" });
-      } else if (action === "purgeQc") {
-        fd.set("qcPurgeResult", result);
-        fd.set("qcPurgeDate", date);
-        fd.set("qcPurgeBy", performedBy);
-        fd.set("qcPurgeRemarks", remarks);
-        await recordPurgeQc(fd);
-        toast({ title: "Software QC recorded", description: `${item.serialNumber}: ${result}.`, variant: "success" });
       } else if (action === "blancoClear") {
         fd.set("blancoClearResult", result);
         fd.set("blancoClearDate", date);
@@ -147,11 +119,6 @@ export function WarehouseReverseActionModal({ item, action, warehouseLocations, 
         fd.set("blancoCertificateDate", certificateDate);
         await recordBlancoPurge(fd);
         toast({ title: "Blanco Purge recorded", description: `${item.serialNumber}: ${result}.`, variant: "success" });
-      } else if (action === "logHp") {
-        fd.set("hpCaseNumber", hpCaseNumber.trim());
-        fd.set("hpCaseRemarks", remarks);
-        await logHpCase(fd);
-        toast({ title: "Case logged with HP", description: `${item.serialNumber} parked for HP resolution.`, variant: "success" });
       } else if (action === "complete") {
         await completeReversePickup(fd);
         toast({ title: "Moved to inventory", description: `${item.serialNumber} returned to inventory.`, variant: "success" });
@@ -246,19 +213,6 @@ export function WarehouseReverseActionModal({ item, action, warehouseLocations, 
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-
-            {action === "logHp" && (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label htmlFor="hpCaseNumber" className={LABEL}>HP Case Number <span className="text-red-500">*</span></label>
-                  <input id="hpCaseNumber" value={hpCaseNumber} onChange={e => setHpCaseNumber(e.target.value)} required className={INPUT} placeholder="HP case reference" />
-                </div>
-                <div className="space-y-1.5">
-                  <label htmlFor="remarks" className={LABEL}>Remarks</label>
-                  <textarea id="remarks" rows={2} value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Remarks..." className={TEXTAREA} />
-                </div>
               </div>
             )}
 

@@ -88,8 +88,8 @@ export const STATUS_LABELS: Record<string, string> = {
   RTO_CASE: "RTO Case",
   LOST_DEVICE: "Lost Device",
   RECEIVED_AT_WAREHOUSE: "At Warehouse",
-  QC_CLEANED: "Hardware QC",
-  QC_COMPLETED: "Software QC",
+  QC_CLEANED: "Hardware QC Done",
+  QC_COMPLETED: "Software QC Done",
   CASE_LOGGED_WITH_HP: "Case Logged with HP",
   DC_REQUESTED: "DC Requested",
   DC_GENERATED: "DC Generated",
@@ -168,6 +168,49 @@ export const WAREHOUSE_PIPELINE_STATUSES: string[] = [
 export const WAREHOUSE_OWNED_STATUSES: string[] = [
   "RECEIVED_AT_WAREHOUSE",
   "QC_CLEANED",
+  "QC_COMPLETED",
+  "BLANCO_CLEARED",
+  "BLANCO_PURGED",
+  "BLANCO_CERTIFIED",
+];
+
+/**
+ * Statuses where the Warehouse Reverse tab shows an action button: the unit is
+ * either being received or has come back from QC and moves through Blancco.
+ */
+export const WAREHOUSE_ACTION_STATUSES: string[] = [
+  "RECEIVED_AT_WAREHOUSE",
+  "QC_COMPLETED",
+  "BLANCO_CLEARED",
+  "BLANCO_PURGED",
+  "BLANCO_CERTIFIED",
+];
+
+/**
+ * Statuses recorded by the assigned QC engineer from their "my tasks" queue in
+ * the Provisioning module. The warehouse only assigns the engineer here.
+ */
+export const REVERSE_QC_STATUSES: string[] = ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED"];
+
+/** Engineer queue: units awaiting Hardware QC. */
+export const REVERSE_QC_HARDWARE_STATUSES: string[] = ["RECEIVED_AT_WAREHOUSE"];
+
+/** Engineer queue: units awaiting Software QC (Hardware QC already recorded). */
+export const REVERSE_QC_SOFTWARE_STATUSES: string[] = ["QC_CLEANED"];
+
+/**
+ * The Warehouse Reverse tab's default pipeline sub-tab: inbound units plus the
+ * ones still at (or just past) QC — before they come back for Blancco.
+ */
+export const WAREHOUSE_PIPELINE_SUB_STATUSES: string[] = [
+  ...WAREHOUSE_RECEIVABLE_STATUSES,
+  "RECEIVED_AT_WAREHOUSE",
+  "QC_CLEANED",
+  "CASE_LOGGED_WITH_HP",
+];
+
+/** The Warehouse Reverse tab's Blancco sub-tab: units that passed QC. */
+export const WAREHOUSE_BLANCO_STATUSES: string[] = [
   "QC_COMPLETED",
   "BLANCO_CLEARED",
   "BLANCO_PURGED",

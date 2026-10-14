@@ -792,10 +792,11 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               <div className="flex items-center gap-3 p-4 rounded-lg bg-cyan-50 border border-cyan-200">
                 <Warehouse className="size-5 text-cyan-600 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-cyan-800">Handled by the Warehouse team</p>
+                  <p className="text-sm font-semibold text-cyan-800">Handled by the Warehouse / QC team</p>
                   <p className="text-xs text-cyan-700 mt-0.5">
-                    Receiving, Hardware QC, Software QC, Blancco Clear/Purge and moving back to Inventory are
-                    recorded from the Warehouse module&apos;s Reverse tab.
+                    The warehouse receives the unit and assigns a QC engineer. The engineer records the Hardware and
+                    Software QC from the Provisioning module&apos;s Reverse QC tab; once both pass, the warehouse runs
+                    Blancco Clear/Purge and moves the unit back to Inventory from the Warehouse Reverse tab.
                   </p>
                 </div>
               </div>
