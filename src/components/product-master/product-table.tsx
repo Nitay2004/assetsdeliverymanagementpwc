@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { addProduct, updateProduct, deleteProduct } from "@/app/actions/product-master";
-import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig } from "@/components/shared/column-filter";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 
 interface Product {
   id: string;
@@ -29,7 +30,24 @@ const PRODUCT_COLUMNS: ColumnFilterConfig<Product>[] = [
   { key: "warranty", getValue: r => r.warranty },
 ];
 
-export function ProductTable({ products, canManage }: { products: Product[]; canManage: boolean }) {
+export function ProductTable({
+  products,
+  canManage,
+  totalCount,
+  currentPage,
+  totalPages,
+  limit,
+  columnFilterValues,
+}: {
+  products: Product[];
+  canManage: boolean;
+  /** Rows matching the filters across the catalogue; `products` is one page. */
+  totalCount?: number;
+  currentPage?: number;
+  totalPages?: number;
+  limit?: number;
+  columnFilterValues?: Record<string, ColumnFilterValue[]>;
+}) {
   const { toast } = useToast();
   const { showAlert } = useAlert();
   const router = useRouter();
@@ -37,7 +55,7 @@ export function ProductTable({ products, canManage }: { products: Product[]; can
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(PRODUCT_COLUMNS, products);
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, activeFilterCount } = useColumnFilters(PRODUCT_COLUMNS, products, { distinctValues: columnFilterValues });
   const visibleProducts = columnFiltered;
 
   const emptyForm = { make: "", model: "", partNo: "", description: "", hsnCode: "", gstRate: "", warranty: "" };
@@ -185,7 +203,7 @@ export function ProductTable({ products, canManage }: { products: Product[]; can
               {visibleProducts.length === 0 ? (
                 <tr>
                   <td colSpan={canManage ? 8 : 7} className="px-6 py-8 text-center text-muted-foreground text-sm">
-                    {products.length === 0 ? 'No products yet. Click "Add Product" to create one.' : "No products match the selected filters."}
+                    {activeFilterCount > 0 ? "No products match the current filters." : 'No products yet. Click "Add Product" to create one.'}
                   </td>
                 </tr>
               ) : (
@@ -237,6 +255,16 @@ export function ProductTable({ products, canManage }: { products: Product[]; can
           </div>
         )}
       </div>
+
+      {typeof totalCount === "number" && typeof currentPage === "number" && typeof totalPages === "number" && typeof limit === "number" && totalCount >= 0 && (
+        <PaginationBar
+          basePath="/dashboard/product-master"
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          limit={limit}
+        />
+      )}
 
       {/* Modal */}
       {showModal && (

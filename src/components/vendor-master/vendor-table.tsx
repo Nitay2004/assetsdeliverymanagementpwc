@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
 import { addVendor, updateVendor, deleteVendor } from "@/app/actions/vendor-master";
-import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig } from "@/components/shared/column-filter";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 
 interface Vendor {
   id: string;
@@ -29,7 +30,24 @@ const VENDOR_COLUMNS: ColumnFilterConfig<Vendor>[] = [
   { key: "gstNumber", getValue: r => r.gstNumber },
 ];
 
-export function VendorTable({ vendors, canManage }: { vendors: Vendor[]; canManage: boolean }) {
+export function VendorTable({
+  vendors,
+  canManage,
+  totalCount,
+  currentPage,
+  totalPages,
+  limit,
+  columnFilterValues,
+}: {
+  vendors: Vendor[];
+  canManage: boolean;
+  /** Rows matching the filters across all vendors; `vendors` is one page. */
+  totalCount?: number;
+  currentPage?: number;
+  totalPages?: number;
+  limit?: number;
+  columnFilterValues?: Record<string, ColumnFilterValue[]>;
+}) {
   const { toast } = useToast();
   const { showAlert } = useAlert();
   const router = useRouter();
@@ -38,7 +56,7 @@ export function VendorTable({ vendors, canManage }: { vendors: Vendor[]; canMana
   const [saving, setSaving] = useState(false);
   const [newGrn, setNewGrn] = useState<string | null>(null);
 
-  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(VENDOR_COLUMNS, vendors);
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, activeFilterCount } = useColumnFilters(VENDOR_COLUMNS, vendors, { distinctValues: columnFilterValues });
   const visibleVendors = columnFiltered;
 
   const emptyForm = { name: "", email: "", phone: "", address: "", contactPerson: "", gstNumber: "" };
@@ -181,7 +199,7 @@ export function VendorTable({ vendors, canManage }: { vendors: Vendor[]; canMana
               {visibleVendors.length === 0 ? (
                 <tr>
                   <td colSpan={canManage ? 7 : 6} className="px-6 py-8 text-center text-muted-foreground text-sm">
-                    {vendors.length === 0 ? 'No vendors yet. Click "Add Vendor" to create one.' : "No vendors match the selected filters."}
+                    {activeFilterCount > 0 ? "No vendors match the current filters." : 'No vendors yet. Click "Add Vendor" to create one.'}
                   </td>
                 </tr>
               ) : (
@@ -232,6 +250,16 @@ export function VendorTable({ vendors, canManage }: { vendors: Vendor[]; canMana
           </div>
         )}
       </div>
+
+      {typeof totalCount === "number" && typeof currentPage === "number" && typeof totalPages === "number" && typeof limit === "number" && (
+        <PaginationBar
+          basePath="/dashboard/vendor-master"
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          limit={limit}
+        />
+      )}
 
       {/* Modal */}
       {showModal && (

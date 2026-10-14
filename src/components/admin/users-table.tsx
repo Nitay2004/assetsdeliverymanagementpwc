@@ -30,7 +30,8 @@ import {
   type ModulePermission,
   type Permissions,
 } from "@/lib/permissions";
-import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig } from "@/components/shared/column-filter";
+import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
+import { PaginationBar } from "@/components/shared/pagination-bar";
 
 interface UserRow {
   id: string;
@@ -49,13 +50,32 @@ const USERS_COLUMNS: ColumnFilterConfig<UserRow>[] = [
   { key: "status", getValue: r => (r.isActive ? "Active" : "Inactive") },
 ];
 
-export function UsersTable({ users }: { users: UserRow[] }) {
+export function UsersTable({
+  users,
+  totalCount,
+  grandTotal,
+  currentPage,
+  totalPages,
+  limit,
+  columnFilterValues,
+}: {
+  users: UserRow[];
+  /** Rows matching the filters across all users; `users` is one page. */
+  totalCount?: number;
+  /** Total user count regardless of filters, used for the empty state. */
+  grandTotal?: number;
+  currentPage?: number;
+  totalPages?: number;
+  limit?: number;
+  columnFilterValues?: Record<string, ColumnFilterValue[]>;
+}) {
   const { toast } = useToast();
   const { showAlert } = useAlert();
   const router = useRouter();
 
-  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(USERS_COLUMNS, users);
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, activeFilterCount } = useColumnFilters(USERS_COLUMNS, users, { distinctValues: columnFilterValues });
   const visibleUsers = columnFiltered;
+  const showPager = typeof totalCount === "number" && typeof currentPage === "number" && typeof totalPages === "number" && typeof limit === "number";
 
   const [showCreate, setShowCreate] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
@@ -201,7 +221,7 @@ export function UsersTable({ users }: { users: UserRow[] }) {
             {visibleUsers.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  {users.length === 0 ? "No users yet." : "No users match the selected filters."}
+                  {(grandTotal ?? users.length) === 0 ? "No users yet." : activeFilterCount > 0 ? "No users match the current filters." : "No users match the selected filters."}
                 </td>
               </tr>
             )}
@@ -262,6 +282,16 @@ export function UsersTable({ users }: { users: UserRow[] }) {
           </tbody>
         </table>
       </div>
+
+      {showPager && (
+        <PaginationBar
+          basePath="/dashboard/admin/users"
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          limit={limit}
+        />
+      )}
 
       {/* Create Modal */}
       {showCreate && (
