@@ -9,9 +9,17 @@ interface PaginationBarProps {
   totalPages: number;
   totalCount: number;
   limit: number;
+  /**
+   * Query params this bar reads and writes. Defaults to the forward table's
+   * `page` / `limit`; tables that page independently (reverse queues sitting
+   * behind the same route) pass their own names so one table's page never
+   * moves another.
+   */
+  pageParam?: string;
+  limitParam?: string;
 }
 
-export function PaginationBar({ basePath, currentPage, totalPages, totalCount, limit }: PaginationBarProps) {
+export function PaginationBar({ basePath, currentPage, totalPages, totalCount, limit, pageParam = "page", limitParam = "limit" }: PaginationBarProps) {
   const searchParams = useSearchParams();
 
   // Keep every active view param (tab, sub-tab, search, filters) and only
@@ -19,8 +27,8 @@ export function PaginationBar({ basePath, currentPage, totalPages, totalCount, l
   // active sub-tab and land the user on a different table.
   function hrefWith(pageValue: number, limitValue: number | string) {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("page", String(pageValue));
-    params.set("limit", String(limitValue));
+    params.set(pageParam, String(pageValue));
+    params.set(limitParam, String(limitValue));
     params.delete("selected");
     return `${basePath}?${params.toString()}`;
   }

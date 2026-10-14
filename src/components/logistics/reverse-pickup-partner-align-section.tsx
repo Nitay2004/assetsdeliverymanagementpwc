@@ -35,9 +35,11 @@ interface DropdownData {
 interface Props {
   requests: RpRequest[];
   canManage: boolean;
+  /** Full queue size; `requests` only holds the current page. */
+  totalPending?: number;
 }
 
-export function ReversePickupPartnerAlignSection({ requests, canManage }: Props) {
+export function ReversePickupPartnerAlignSection({ requests, canManage, totalPending }: Props) {
   const { toast } = useToast();
   const router = useRouter();
   const [saving, setSaving] = useState<string | null>(null);
@@ -45,7 +47,7 @@ export function ReversePickupPartnerAlignSection({ requests, canManage }: Props)
   const [refInputs, setRefInputs] = useState<Record<string, string>>({});
   const [dd, setDd] = useState<DropdownData | null>(null);
 
-  const pendingCount = requests.length;
+  const pendingCount = totalPending ?? requests.length;
 
   const loadDd = useCallback(async () => {
     let data = await getReversePickupDropdowns();

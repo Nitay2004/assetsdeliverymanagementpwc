@@ -22,14 +22,16 @@ interface RpRequest {
 interface Props {
   requests: RpRequest[];
   canManage: boolean;
+  /** Pending-to-assign across the whole queue; `requests` only holds one page. */
+  totalPending?: number;
 }
 
-export function ReversePickupDocketSection({ requests, canManage }: Props) {
+export function ReversePickupDocketSection({ requests, canManage, totalPending }: Props) {
   const { toast } = useToast();
   const router = useRouter();
   const [saving, setSaving] = useState<string | null>(null);
   const [docketInputs, setDocketInputs] = useState<Record<string, string>>({});
-  const pendingCount = requests.filter(r => r.status === "DOCKET_REQUESTED").length;
+  const pendingCount = totalPending ?? requests.filter(r => r.status === "DOCKET_REQUESTED").length;
 
   async function handleAssign(requestId: string) {
     const docketNumber = docketInputs[requestId];

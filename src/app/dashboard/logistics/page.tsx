@@ -23,6 +23,10 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
   const searchParams = await props.searchParams;
   const page = Math.max(1, parseInt(typeof searchParams.page === "string" ? searchParams.page : "1", 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(typeof searchParams.limit === "string" ? searchParams.limit : "10", 10) || 10));
+  // The reverse queues share this route with the forward table, so they page on
+  // their own params: moving one table never moves the other.
+  const rpage = Math.max(1, parseInt(typeof searchParams.rpage === "string" ? searchParams.rpage : "1", 10) || 1);
+  const rlimit = Math.min(100, Math.max(1, parseInt(typeof searchParams.rlimit === "string" ? searchParams.rlimit : "10", 10) || 10));
   const selectedId = typeof searchParams.selected === "string" ? searchParams.selected : undefined;
   const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
   const user = await getSession();
@@ -158,23 +162,52 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
 
   const warehouses = await getWarehouses();
 
-  const rpPartnerAlignRequests = await prisma.reversePickupRequest.findMany({
-    where: {
-      status: {
-        in: [
-          "REQUESTED",
-          "PENDING",
-          "PWC_CONFIRMATION_AWAITED",
-          "GATEPASS_PENDING",
-          "ALIGN_FOR_PICKUP",
-          "ON_HOLD",
-        ],
-      },
+  const activeTab = searchParams.tab === "reverse" ? "reverse" : "forward";
+  // Reverse work is two queues: align a pickup partner first, then assign the
+  // docket. `rtab` tracks which queue the reverse tab is showing.
+  const reverseSubTab = searchParams.rtab === "docket" ? "docket" : "align";
+  const isDocketQueue = reverseSubTab === "docket";
+
+  // Queue membership is the request status. Each queue is counted and paged on
+  // its own so the badges reflect the whole queue, not just the visible page.
+  const rpAlignWhere: Prisma.ReversePickupRequestWhereInput = {
+    status: {
+      in: [
+        "REQUESTED",
+        "PENDING",
+        "PWC_CONFIRMATION_AWAITED",
+        "GATEPASS_PENDING",
+        "ALIGN_FOR_PICKUP",
+        "ON_HOLD",
+      ],
     },
+  };
+  const rpDocketWhere: Prisma.ReversePickupRequestWhereInput = {
+    // Stays in the list once the docket is assigned so the row does not vanish
+    // right after logistics hits save.
+    status: { in: ["DOCKET_REQUESTED", "DOCKET_ASSIGNED"] },
+  };
+
+  const [alignCount, docketCount, docketPending] = await Promise.all([
+    prisma.reversePickupRequest.count({ where: rpAlignWhere }),
+    prisma.reversePickupRequest.count({ where: rpDocketWhere }),
+    prisma.reversePickupRequest.count({ where: { status: "DOCKET_REQUESTED" } }),
+  ]);
+
+  const reverseTotalCount = isDocketQueue ? docketCount : alignCount;
+  const reverseTotalPages = Math.max(1, Math.ceil(reverseTotalCount / rlimit));
+  const safeRPage = Math.min(rpage, reverseTotalPages);
+
+  const rpRequests = await prisma.reversePickupRequest.findMany({
+    where: isDocketQueue ? rpDocketWhere : rpAlignWhere,
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    skip: (safeRPage - 1) * rlimit,
+    take: rlimit,
   });
 
-  const serializedRpPartnerAlign = rpPartnerAlignRequests.map((r) => ({
+  // Both queues expose the same row shape, so the date serialization lives in
+  // one place instead of drifting between two near-identical maps.
+  const serializedRp = rpRequests.map((r) => ({
     ...r,
     requestDateHp: r.requestDateHp ? r.requestDateHp.toISOString() : null,
     lastWorkingDay: r.lastWorkingDay ? r.lastWorkingDay.toISOString() : null,
@@ -195,45 +228,10 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
     updatedAt: r.updatedAt.toISOString(),
   }));
 
-  const rpDocketRequests = await prisma.reversePickupRequest.findMany({
-    // Stays in the list once the docket is assigned so the row does not vanish
-    // right after logistics hits save.
-    where: { status: { in: ["DOCKET_REQUESTED", "DOCKET_ASSIGNED"] } },
-    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-  });
-
-  const serializedRp = rpDocketRequests.map(r => ({
-    ...r,
-    requestDateHp: r.requestDateHp ? r.requestDateHp.toISOString() : null,
-    lastWorkingDay: r.lastWorkingDay ? r.lastWorkingDay.toISOString() : null,
-    inspectionDate: r.inspectionDate ? r.inspectionDate.toISOString() : null,
-    pickupDate: r.pickupDate ? r.pickupDate.toISOString() : null,
-    receivedDate: r.receivedDate ? r.receivedDate.toISOString() : null,
-    qcDate: r.qcDate ? r.qcDate.toISOString() : null,
-    blanccoDate: r.blanccoDate ? r.blanccoDate.toISOString() : null,
-    blancoCertificateDate: r.blancoCertificateDate ? r.blancoCertificateDate.toISOString() : null,
-    eta: r.eta ? r.eta.toISOString() : null,
-    futureDatePickup: r.futureDatePickup ? r.futureDatePickup.toISOString() : null,
-    slaStartDate: r.slaStartDate ? r.slaStartDate.toISOString() : null,
-    actualDeliveryPodDate: r.actualDeliveryPodDate ? r.actualDeliveryPodDate.toISOString() : null,
-    laptopAcceptanceDate: r.laptopAcceptanceDate ? r.laptopAcceptanceDate.toISOString() : null,
-    etaForUnitReceived: r.etaForUnitReceived ? r.etaForUnitReceived.toISOString() : null,
-    createdAt: r.createdAt.toISOString(),
-    updatedAt: r.updatedAt.toISOString(),
-  }));
-
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
   const safePage = Math.min(page, totalPages);
-  const activeTab = searchParams.tab === "reverse" ? "reverse" : "forward";
-
-  // Reverse work is two queues: align a pickup partner first, then assign the
-  // docket. `rtab` tracks which queue the reverse tab is showing.
-  const reverseSubTab = searchParams.rtab === "docket" ? "docket" : "align";
-  const alignPending = serializedRpPartnerAlign.length;
-  // Badge = docket still to assign, not the ones already assigned.
-  const docketPending = serializedRp.filter(r => r.status === "DOCKET_REQUESTED").length;
   // The top-level Reverse badge covers both queues, matching what the tab holds.
-  const reversePending = alignPending + docketPending;
+  const reversePending = alignCount + docketPending;
 
   // Sub-tab links keep search / filters / reverse state and only reset the page,
   // so switching queues never silently drops the active view.
@@ -246,6 +244,8 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
     params.set("rtab", rtab);
     params.delete("page");
     params.delete("selected");
+    // Each queue keeps its own page, so switching queens starts the new one at 1.
+    params.delete("rpage");
     return `/dashboard/logistics?${params.toString()}`;
   };
 
@@ -328,9 +328,9 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
               className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${reverseSubTab === "align" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               Pickup Alignment
-              {alignPending > 0 && (
+              {alignCount > 0 && (
                 <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
-                  {alignPending}
+                  {alignCount}
                 </span>
               )}
             </Link>
@@ -348,15 +348,21 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
           </div>
 
           {reverseSubTab === "align" ? (
-            serializedRpPartnerAlign.length > 0 ? (
-              <ReversePickupPartnerAlignSection requests={serializedRpPartnerAlign} canManage={canManage} />
+            alignCount > 0 ? (
+              <>
+                <ReversePickupPartnerAlignSection requests={serializedRp} canManage={canManage} totalPending={alignCount} />
+                <PaginationBar basePath="/dashboard/logistics" currentPage={safeRPage} totalPages={reverseTotalPages} totalCount={reverseTotalCount} limit={rlimit} pageParam="rpage" limitParam="rlimit" />
+              </>
             ) : (
               <div className="p-8 rounded-xl glass text-center text-muted-foreground">
                 No requests pending for partner alignment.
               </div>
             )
-          ) : serializedRp.length > 0 ? (
-            <ReversePickupDocketSection requests={serializedRp} canManage={canManage} />
+          ) : docketCount > 0 ? (
+            <>
+              <ReversePickupDocketSection requests={serializedRp} canManage={canManage} totalPending={docketPending} />
+              <PaginationBar basePath="/dashboard/logistics" currentPage={safeRPage} totalPages={reverseTotalPages} totalCount={reverseTotalCount} limit={rlimit} pageParam="rpage" limitParam="rlimit" />
+            </>
           ) : (
             <div className="p-8 rounded-xl glass text-center text-muted-foreground">
               No reverse pickup docket requests pending.
