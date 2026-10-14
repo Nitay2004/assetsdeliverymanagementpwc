@@ -4,9 +4,13 @@ import { useState } from "react";
 import { AllocateForm } from "@/components/warehouse/allocate-form";
 import { AdvanceProvisioningModal } from "@/components/warehouse/advance-provisioning-modal";
 import { BulkAdvanceModal } from "@/components/provisioning/bulk-advance-modal";
-import { AlertCircle, ChevronDown, ChevronRight, ArrowRight, CheckSquare } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, ArrowRight, CheckSquare } from "lucide-react";
 import { DataTableFilter, filterRows } from "@/components/shared/data-table-filter";
 import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig } from "@/components/shared/column-filter";
+
+// The pending queue is a bounded working set, so it pages on the client and the
+// search/filter interplay stays exact (no "filter only sees the current page").
+const PAGE_SIZE = 25;
 
 interface AvailableItem {
   id: string;
@@ -87,6 +91,7 @@ export function PendingAllocationsTable({ orders, availableItems, canManage }: P
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkAdvanceIds, setBulkAdvanceIds] = useState<string[] | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
 
   const searchFiltered = filterRows(orders, searchQuery, [
     "clientName", "deliveryLocation", "intermediary", "status",
@@ -96,8 +101,24 @@ export function PendingAllocationsTable({ orders, availableItems, canManage }: P
     return order.assets.some(a => a.inventoryItem?.serialNumber?.toLowerCase().includes(q));
   });
 
-  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn, clearColumn } = useColumnFilters(PENDING_ALLOCATIONS_COLUMNS, searchFiltered);
+  const { filteredRows: columnFiltered, distinctValues, filters, applyColumn } = useColumnFilters(PENDING_ALLOCATIONS_COLUMNS, searchFiltered);
   const filteredOrders = columnFiltered;
+
+  // Any change to search or a column filter restarts paging at the first page.
+  // Reset during render (the same pattern useColumnFilters uses) instead of in an
+  // effect, which the linter rejects and which would cascade renders.
+  const filterKey = `${searchQuery}|${JSON.stringify(filters)}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
+    setPage(1);
+  }
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageOrders = filteredOrders.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pageIds = pageOrders.map(o => o.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
 
   const toggleRow = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
@@ -112,11 +133,13 @@ export function PendingAllocationsTable({ orders, availableItems, canManage }: P
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === orders.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(orders.map(o => o.id)));
-    }
+    // Select-all applies to the rows on screen, not the whole filtered set.
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allPageSelected) pageIds.forEach(id => next.delete(id));
+      else pageIds.forEach(id => next.add(id));
+      return next;
+    });
   };
 
   const readyOrderIds = orders
@@ -178,7 +201,7 @@ export function PendingAllocationsTable({ orders, availableItems, canManage }: P
                     <input
                       type="checkbox"
                       className="accent-primary size-4"
-                      checked={selectedIds.size === orders.length && orders.length > 0}
+                      checked={allPageSelected}
                       onChange={toggleSelectAll}
                     />
                   </th>
@@ -249,7 +272,7 @@ export function PendingAllocationsTable({ orders, availableItems, canManage }: P
                   </td>
                 </tr>
               )}
-              {filteredOrders.map((order) => {
+              {pageOrders.map((order) => {
                 const pendingAssetCount = order.assets.filter(
                   (a) => a.inventoryItemId === null
                 ).length;
@@ -405,6 +428,38 @@ export function PendingAllocationsTable({ orders, availableItems, canManage }: P
           open={advanceOrderId !== null}
           onClose={() => setAdvanceOrderId(null)}
         />
+
+        {filteredOrders.length > 0 && (
+          <div className="flex items-center justify-between gap-4 border-t px-6 py-3 text-sm">
+            <p className="text-muted-foreground">
+              Showing{" "}
+              <span className="font-medium text-foreground">{(safePage - 1) * PAGE_SIZE + 1}</span>–
+              <span className="font-medium text-foreground">{Math.min(safePage * PAGE_SIZE, filteredOrders.length)}</span>{" "}
+              of <span className="font-medium text-foreground">{filteredOrders.length}</span> order(s)
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+                className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft className="size-3.5" />
+                Prev
+              </button>
+              <span className="text-xs text-muted-foreground">
+                Page {safePage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={safePage >= totalPages}
+                className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+                <ChevronRight className="size-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {bulkAdvanceIds && (
