@@ -10,6 +10,7 @@ import { QcWorkTable } from "@/components/provisioning/qc-work-table";
 import { ReverseQcTable } from "@/components/provisioning/reverse-qc-table";
 import { HpCasesTable, type HpCaseItem } from "@/components/provisioning/hp-cases-table";
 import { ProvisioningTabs } from "@/components/provisioning/provisioning-tabs";
+import { ReverseQcSubTabs } from "@/components/provisioning/reverse-qc-sub-tabs";
 import { type QcItem } from "@/components/qc/qc-panel";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES, ACTIVE_PROVISIONING_STATUSES, HANDED_OVER_STATUSES } from "@/lib/order-status";
@@ -37,8 +38,8 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const selectedEngineer = typeof searchParams.engineer === "string" ? searchParams.engineer : "";
   const rawTab = typeof searchParams.tab === "string" ? searchParams.tab : "";
   const activeTab = rawTab === "qc" || rawTab === "hp" || rawTab === "reverseqc" ? rawTab : "provisioning";
-  const rqcSubTab = (typeof searchParams.rqc === "string" && (searchParams.rqc === "hardware" || searchParams.rqc === "software"))
-    ? searchParams.rqc
+  const rqcSubTab = (typeof searchParams.rqctab === "string" && (searchParams.rqctab === "hardware" || searchParams.rqctab === "software"))
+    ? searchParams.rqctab
     : "hardware";
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "PROVISIONING"));
@@ -495,9 +496,15 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
       <ProvisioningTabs
         qcCount={qcBadgeCount}
         hpCount={hpTotalCount}
-        reverseQcHardwareCount={reverseQcHardwareTotal}
-        reverseQcSoftwareCount={reverseQcSoftwareTotal}
+        reverseQcCount={reverseQcHardwareTotal + reverseQcSoftwareTotal}
       />
+
+      {activeTab === "reverseqc" && (
+        <ReverseQcSubTabs
+          hardwareCount={reverseQcHardwareTotal}
+          softwareCount={reverseQcSoftwareTotal}
+        />
+      )}
 
       {activeTab === "reverseqc" ? (
         <div className="space-y-4">
