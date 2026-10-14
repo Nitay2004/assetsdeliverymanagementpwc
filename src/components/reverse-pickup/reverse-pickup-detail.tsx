@@ -6,7 +6,6 @@ import Link from "next/link";
 import { ArrowLeft, AlertTriangle, Check, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileText, Package, Circle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  assignPartner,
   requestDc,
   requestDocket,
   recordInspection,
@@ -180,7 +179,6 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
     allOptions: { id: string; category: string; value: string }[];
   } | null>(null);
 
-  const [partnerName, setPartnerName] = useState("");
   const [warehouseLocation, setWarehouseLocation] = useState("");
 
   const loadDropdowns = useCallback(async () => {
@@ -243,7 +241,6 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
     try {
       formData.append("id", request.id);
       const actionMap: Record<string, (fd: FormData) => Promise<void>> = {
-        assignPartner,
         requestDc,
         requestDocket,
         recordInspection,
@@ -905,42 +902,11 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
             </div>
           )}
 
-          {nextAction && (
+          {nextAction && effectiveStatus !== "REQUESTED" && (
             <div className="rounded-xl glass shadow-sm p-6 space-y-4">
               <h2 className="text-lg font-semibold text-foreground">
                 Next Step: {nextAction.label}
               </h2>
-
-              {/* Assign Partner */}
-              {effectiveStatus === "REQUESTED" && (
-                <form action={async (formData) => handleAction("assignPartner", formData)} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">
-                      Partner Name <span className="text-red-500">*</span>
-                    </label>
-                    <ManageableDropdown
-                      name="partnerName"
-                      placeholder="Select partner..."
-                      value={partnerName}
-                      onChange={setPartnerName}
-                      options={dropdownData?.partnerName ?? []}
-                      allOptions={dropdownData?.allOptions ?? []}
-                      category="partnerName"
-                      onAdd={handleAdd}
-                      onDelete={handleDelete}
-                      required
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isPending("assignPartner")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {isPending("assignPartner") ? <Loader2 className="size-4 animate-spin" /> : null}
-                    {isPending("assignPartner") ? "Assigning..." : "Assign Partner"}
-                  </button>
-                </form>
-              )}
 
               {/* Request DC from Finance */}
               {effectiveStatus === "PARTNER_ASSIGNED" && (
@@ -1411,6 +1377,24 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
                   </button>
                 </form>
               )}
+        </div>
+      )}
+
+      {/* Partner alignment is done by the Logistics team from their Align
+          Partner queue, so a fresh request has no action here until a partner
+          is aligned. Kept informational, matching the other "Awaiting ..." cards. */}
+      {effectiveStatus === "REQUESTED" && (
+        <div className="rounded-xl glass shadow-sm p-6 space-y-4">
+          <div className="flex items-center gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200">
+            <Truck className="size-5 text-blue-600 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-blue-800">Awaiting Logistics</p>
+              <p className="text-xs text-blue-700 mt-0.5">
+                Partner alignment is handled by the Logistics team. This request moves to Partner
+                Assigned once a pickup partner is aligned.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
