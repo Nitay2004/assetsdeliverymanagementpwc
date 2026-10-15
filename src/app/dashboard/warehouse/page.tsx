@@ -12,7 +12,7 @@ import { WarehouseExportButton } from "@/components/warehouse/warehouse-export-b
 import { WarehouseTabs } from "@/components/warehouse/warehouse-tabs";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
-import { WAREHOUSE_PIPELINE_SUB_STATUSES, WAREHOUSE_BLANCO_STATUSES, WAREHOUSE_RECEIVABLE_STATUSES, WAREHOUSE_PIPELINE_PENDING_STATUSES, WAREHOUSE_BLANCO_PENDING_STATUSES } from "@/lib/reverse-pickup-config";
+import { WAREHOUSE_PIPELINE_SUB_STATUSES, WAREHOUSE_BLANCO_STATUSES, WAREHOUSE_RECEIVABLE_STATUSES, warehousePipelineScope, warehouseBlancoScope } from "@/lib/reverse-pickup-config";
 import type { Prisma, OrderStatus, ReversePickupStatus } from "@prisma/client";
 
 const ALLOCATED_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity", "serialNumbers", "docketNumber", "dcNumber", "ewayBill", "status"];
@@ -79,13 +79,11 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
   };
 
   const reverseFilters = parseColumnFilters(searchParams, REVERSE_FILTER_KEYS);
-  // Both Reverse sub-tabs are sticky: the pipeline sub-tab covers the whole
-  // reverse pipeline from inbound onward and the Blanco sub-tab is a focused
-  // overlay from QC completion onward, so a warehouse action never makes a row
-  // disappear.
-  const reverseSubStatuses = reverseSubTab === "blanco" ? WAREHOUSE_BLANCO_STATUSES : WAREHOUSE_PIPELINE_SUB_STATUSES;
+  // Both Reverse sub-tabs are sticky (flag-based — see the scope builders in
+  // reverse-pickup-config), so a warehouse action never makes a row disappear.
+  const reverseSubScope = reverseSubTab === "blanco" ? warehouseBlancoScope() : warehousePipelineScope();
   const reverseWhere: Prisma.ReversePickupRequestWhereInput = {
-    status: { in: reverseSubStatuses as ReversePickupStatus[] },
+    ...reverseSubScope,
     ...(reverseFilters.rrequest ? { requestNumber: { in: reverseFilters.rrequest } } : {}),
     ...(reverseFilters.rserial ? { serialNumber: { in: reverseFilters.rserial } } : {}),
     ...(reverseFilters.rmodel ? { model: { in: reverseFilters.rmodel } } : {}),
@@ -223,11 +221,10 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     prisma.reversePickupRequest.groupBy({ by: ["qcCleanResult"], where: reverseWhere, _count: { _all: true } }),
     prisma.reversePickupRequest.groupBy({ by: ["qcPurgeResult"], where: reverseWhere, _count: { _all: true } }),
     prisma.dropdownOption.findMany({ where: { category: "warehouseLocation" }, orderBy: { value: "asc" } }),
-    // Sub-tab badges count only what still needs work; the tables themselves are
-    // sticky (WAREHOUSE_PIPELINE_SUB_STATUSES / WAREHOUSE_BLANCO_STATUSES), so a
-    // table can list more rows than its badge shows.
-    prisma.reversePickupRequest.count({ where: { status: { in: WAREHOUSE_PIPELINE_PENDING_STATUSES as ReversePickupStatus[] } } }),
-    prisma.reversePickupRequest.count({ where: { status: { in: WAREHOUSE_BLANCO_PENDING_STATUSES as ReversePickupStatus[] } } }),
+    // Sub-tab badges count only what still needs work; the table scopes below
+    // are sticky, so a table can list more rows than its badge shows.
+    prisma.reversePickupRequest.count({ where: { status: { in: WAREHOUSE_PIPELINE_SUB_STATUSES as ReversePickupStatus[] } } }),
+    prisma.reversePickupRequest.count({ where: { status: { in: WAREHOUSE_BLANCO_STATUSES as ReversePickupStatus[] } } }),
   ]);
 
   const reverseColumnFilterValues: Record<string, { value: string; count: number }[]> = {

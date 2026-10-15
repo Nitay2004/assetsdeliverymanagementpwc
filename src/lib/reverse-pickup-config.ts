@@ -1,3 +1,5 @@
+import type { Prisma, ReversePickupStatus } from "@prisma/client";
+
 export const TYPE_OPTIONS = [
   { value: "Internal", label: "Internal" },
   { value: "External", label: "External" },
@@ -188,16 +190,22 @@ export const WAREHOUSE_ACTION_STATUSES: string[] = [
 
 // ── Sticky queue scopes ──────────────────────────────────────────────────────
 //
-// Every reverse queue below is STICKY: it lists a unit from the moment the unit
-// enters that stage all the way to the end of the pipeline. Recording an action
-// therefore never makes a row disappear from the table it was sitting in — the
-// Status column shows how far the unit has since moved (see the same rule for
-// orders in lib/order-status.ts).
+// Every reverse queue below is STICKY: a unit is listed from the moment it
+// enters that stage until the end of the pipeline, and recording an action never
+// makes the row disappear from the table it was sitting in — the Status column
+// shows how far the unit has since moved (same rule as orders in
+// lib/order-status.ts).
 //
-// Because the scopes are nested supersets, a unit can legitimately appear in
-// more than one queue (e.g. a software-QC unit stays listed in the Hardware QC
-// queue as well). The action buttons in those tables are gated on the row's real
-// status, so a completed row never offers an action it should not.
+// The engineer scopes are nested supersets, so a unit can legitimately appear in
+// more than one queue (a software-QC unit stays listed in the Hardware QC queue
+// too). The action buttons in those tables are gated on the row's real status, so
+// a completed row never offers an action it should not.
+//
+// The warehouse scopes are flag-based rather than "later status" based: on the
+// reverse side most rows are imported and already sit on a terminal status
+// (COMPLETED) without ever passing through the warehouse, so a status superset
+// would flood those tables with legacy rows. A recorded timestamp proves the unit
+// really went through the stage and keeps it listed afterwards.
 
 /** Every status a unit passes through once it has reached a warehouse. */
 const POST_RECEIPT_STATUSES: string[] = [
@@ -256,56 +264,76 @@ export const REVERSE_BLANCO_PURGE_STATUSES: string[] = [
   "COMPLETED",
 ];
 
-// ── Pending (still-needs-work) sets ──────────────────────────────────────────
-//
-// Queue badges count only what is still waiting at that stage. The tables
-// themselves use the sticky scopes above, so a badge of "3" with 25 rows listed
-// means "3 still to do, 22 already recorded".
+// Engineer queue badges count only the units still waiting at that stage. The
+// queues themselves are sticky, so a badge of "3" with 25 rows listed means "3
+// still to do, 22 already recorded".
 
-/** Units still waiting to be received at a warehouse. */
-export const WAREHOUSE_PIPELINE_PENDING_STATUSES: string[] = [
+/** Engineer queues: units waiting on Hardware / Software QC. */
+export const REVERSE_QC_HARDWARE_PENDING_STATUSES: string[] = ["RECEIVED_AT_WAREHOUSE"];
+export const REVERSE_QC_SOFTWARE_PENDING_STATUSES: string[] = ["QC_CLEANED"];
+
+/** Units still parked with an open HP case. */
+export const HP_CASE_PENDING_STATUSES: string[] = ["CASE_LOGGED_WITH_HP"];
+
+/**
+ * The Warehouse Reverse tab's default pipeline sub-tab: inbound units plus the
+ * ones still at (or just past) QC — before they come back for Blancco. These are
+ * also the statuses its badge counts as "still needs work".
+ */
+export const WAREHOUSE_PIPELINE_SUB_STATUSES: string[] = [
   ...WAREHOUSE_RECEIVABLE_STATUSES,
   "RECEIVED_AT_WAREHOUSE",
   "QC_CLEANED",
   "CASE_LOGGED_WITH_HP",
 ];
 
-/** Units still waiting on a warehouse Blancco step (hand-over or move back). */
-export const WAREHOUSE_BLANCO_PENDING_STATUSES: string[] = [
-  "QC_COMPLETED",
-  "BLANCO_CLEARED",
-  "BLANCO_PURGED",
-  "BLANCO_CERTIFIED",
-];
-
-/** Engineer queues: units waiting on Hardware / Software QC. */
-export const REVERSE_QC_HARDWARE_PENDING_STATUSES: string[] = ["RECEIVED_AT_WAREHOUSE"];
-export const REVERSE_QC_SOFTWARE_PENDING_STATUSES: string[] = ["QC_CLEANED"];
-
-/** Units waiting on a Blanco hand-over (warehouse) or a Blanco step (engineer). */
-export const REVERSE_BLANCO_PENDING_STATUSES: string[] = ["QC_COMPLETED", "BLANCO_CLEARED"];
-
-/** Units still parked with an open HP case. */
-export const HP_CASE_PENDING_STATUSES: string[] = ["CASE_LOGGED_WITH_HP"];
-
-/**
- * The Warehouse Reverse tab's default pipeline sub-tab. Sticky: every unit from
- * the moment it enters the reverse pipeline (inbound) onward stays listed here.
- */
-export const WAREHOUSE_PIPELINE_SUB_STATUSES: string[] = [...WAREHOUSE_PIPELINE_STATUSES];
-
-/**
- * The Warehouse Reverse tab's Blancco sub-tab: a focused overlay of the same
- * rows from QC completion onward. Rows keep showing here after they move back to
- * inventory, so nothing is lost when the warehouse completes a unit.
- */
+/** The Warehouse Reverse tab's Blancco sub-tab: units that passed QC. */
 export const WAREHOUSE_BLANCO_STATUSES: string[] = [
   "QC_COMPLETED",
   "BLANCO_CLEARED",
   "BLANCO_PURGED",
   "BLANCO_CERTIFIED",
-  "COMPLETED",
 ];
+
+/**
+ * Sticky warehouse-pipeline where-clause: the stage statuses above plus any unit
+ * that has demonstrably been through the warehouse/QC bench, so a warehouse
+ * action never removes the row from the pipeline table.
+ *
+ * Only timestamps written by the reverse-pickup actions are used for this.
+ * `receivedBy` is deliberately NOT used: the CSV import filled it on 6k+ rows
+ * (3k of them still REQUESTED), so it proves nothing about the pipeline.
+ */
+export function warehousePipelineScope(): Prisma.ReversePickupRequestWhereInput {
+  return {
+    OR: [
+      { status: { in: WAREHOUSE_PIPELINE_SUB_STATUSES as ReversePickupStatus[] } },
+      { receivedDate: { not: null } },
+      { qcAssignedAt: { not: null } },
+      { qcCleanDate: { not: null } },
+      { qcPurgeDate: { not: null } },
+      { blancoSentAt: { not: null } },
+      { blancoClearDate: { not: null } },
+      { blancoPurgeDate: { not: null } },
+    ],
+  };
+}
+
+/**
+ * Sticky Blancco where-clause: the stage statuses above plus any unit whose
+ * Blancco steps were recorded, so a unit stays listed after the warehouse moves
+ * it back to inventory.
+ */
+export function warehouseBlancoScope(): Prisma.ReversePickupRequestWhereInput {
+  return {
+    OR: [
+      { status: { in: WAREHOUSE_BLANCO_STATUSES as ReversePickupStatus[] } },
+      { blancoSentAt: { not: null } },
+      { blancoClearDate: { not: null } },
+      { blancoPurgeDate: { not: null } },
+    ],
+  };
+}
 
 // All seedable categories for the DropdownOption table
 export const SEED_CATEGORIES: Record<string, { value: string; label: string }[]> = {
