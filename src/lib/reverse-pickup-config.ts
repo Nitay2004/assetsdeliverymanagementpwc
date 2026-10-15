@@ -186,46 +186,125 @@ export const WAREHOUSE_ACTION_STATUSES: string[] = [
   "BLANCO_CERTIFIED",
 ];
 
+// ── Sticky queue scopes ──────────────────────────────────────────────────────
+//
+// Every reverse queue below is STICKY: it lists a unit from the moment the unit
+// enters that stage all the way to the end of the pipeline. Recording an action
+// therefore never makes a row disappear from the table it was sitting in — the
+// Status column shows how far the unit has since moved (see the same rule for
+// orders in lib/order-status.ts).
+//
+// Because the scopes are nested supersets, a unit can legitimately appear in
+// more than one queue (e.g. a software-QC unit stays listed in the Hardware QC
+// queue as well). The action buttons in those tables are gated on the row's real
+// status, so a completed row never offers an action it should not.
+
+/** Every status a unit passes through once it has reached a warehouse. */
+const POST_RECEIPT_STATUSES: string[] = [
+  "RECEIVED_AT_WAREHOUSE",
+  "QC_CLEANED",
+  "QC_COMPLETED",
+  "CASE_LOGGED_WITH_HP",
+  "BLANCO_CLEARED",
+  "BLANCO_PURGED",
+  "BLANCO_CERTIFIED",
+  "COMPLETED",
+];
+
 /**
  * Statuses recorded by the assigned QC engineer from their "my tasks" queue in
  * the Provisioning module. The warehouse only assigns the engineer here.
  */
 export const REVERSE_QC_STATUSES: string[] = ["RECEIVED_AT_WAREHOUSE", "QC_CLEANED"];
 
-/** Engineer queue: units awaiting Hardware QC. */
-export const REVERSE_QC_HARDWARE_STATUSES: string[] = ["RECEIVED_AT_WAREHOUSE"];
-
-/** Engineer queue: units awaiting Software QC (Hardware QC already recorded). */
-export const REVERSE_QC_SOFTWARE_STATUSES: string[] = ["QC_CLEANED"];
+/** Engineer Hardware QC queue — everything from warehouse receipt onward. */
+export const REVERSE_QC_HARDWARE_STATUSES: string[] = [...POST_RECEIPT_STATUSES];
 
 /**
- * Engineer Blanco queue (the same engineer who did the QC also clears the unit).
- * A unit only appears here once the warehouse has handed it over
+ * Engineer Software QC queue. Sticky from Software QC onward, including units
+ * parked on an HP case (either QC stage can fail) and everything after Blancco.
+ */
+export const REVERSE_QC_SOFTWARE_STATUSES: string[] = [
+  "QC_CLEANED",
+  "QC_COMPLETED",
+  "CASE_LOGGED_WITH_HP",
+  "BLANCO_CLEARED",
+  "BLANCO_PURGED",
+  "BLANCO_CERTIFIED",
+  "COMPLETED",
+];
+
+/**
+ * Engineer Blanco Clear queue (the same engineer who did the QC also clears the
+ * unit). A unit only appears here once the warehouse has handed it over
  * (`blancoSentAt` set), so this status list is combined with that flag in the
  * provisioning query.
  */
-export const REVERSE_BLANCO_CLEAR_STATUSES: string[] = ["QC_COMPLETED"];
+export const REVERSE_BLANCO_CLEAR_STATUSES: string[] = [
+  "QC_COMPLETED",
+  "BLANCO_CLEARED",
+  "BLANCO_PURGED",
+  "BLANCO_CERTIFIED",
+  "COMPLETED",
+];
 
-/** Engineer queue: units whose Blanco Clear is done, awaiting Blanco Purge. */
-export const REVERSE_BLANCO_PURGE_STATUSES: string[] = ["BLANCO_CLEARED"];
+/** Engineer Blanco Purge queue — sticky from Blanco Clear onward. */
+export const REVERSE_BLANCO_PURGE_STATUSES: string[] = [
+  "BLANCO_CLEARED",
+  "BLANCO_PURGED",
+  "BLANCO_CERTIFIED",
+  "COMPLETED",
+];
 
-/**
- * The Warehouse Reverse tab's default pipeline sub-tab: inbound units plus the
- * ones still at (or just past) QC — before they come back for Blancco.
- */
-export const WAREHOUSE_PIPELINE_SUB_STATUSES: string[] = [
+// ── Pending (still-needs-work) sets ──────────────────────────────────────────
+//
+// Queue badges count only what is still waiting at that stage. The tables
+// themselves use the sticky scopes above, so a badge of "3" with 25 rows listed
+// means "3 still to do, 22 already recorded".
+
+/** Units still waiting to be received at a warehouse. */
+export const WAREHOUSE_PIPELINE_PENDING_STATUSES: string[] = [
   ...WAREHOUSE_RECEIVABLE_STATUSES,
   "RECEIVED_AT_WAREHOUSE",
   "QC_CLEANED",
   "CASE_LOGGED_WITH_HP",
 ];
 
-/** The Warehouse Reverse tab's Blancco sub-tab: units that passed QC. */
+/** Units still waiting on a warehouse Blancco step (hand-over or move back). */
+export const WAREHOUSE_BLANCO_PENDING_STATUSES: string[] = [
+  "QC_COMPLETED",
+  "BLANCO_CLEARED",
+  "BLANCO_PURGED",
+  "BLANCO_CERTIFIED",
+];
+
+/** Engineer queues: units waiting on Hardware / Software QC. */
+export const REVERSE_QC_HARDWARE_PENDING_STATUSES: string[] = ["RECEIVED_AT_WAREHOUSE"];
+export const REVERSE_QC_SOFTWARE_PENDING_STATUSES: string[] = ["QC_CLEANED"];
+
+/** Units waiting on a Blanco hand-over (warehouse) or a Blanco step (engineer). */
+export const REVERSE_BLANCO_PENDING_STATUSES: string[] = ["QC_COMPLETED", "BLANCO_CLEARED"];
+
+/** Units still parked with an open HP case. */
+export const HP_CASE_PENDING_STATUSES: string[] = ["CASE_LOGGED_WITH_HP"];
+
+/**
+ * The Warehouse Reverse tab's default pipeline sub-tab. Sticky: every unit from
+ * the moment it enters the reverse pipeline (inbound) onward stays listed here.
+ */
+export const WAREHOUSE_PIPELINE_SUB_STATUSES: string[] = [...WAREHOUSE_PIPELINE_STATUSES];
+
+/**
+ * The Warehouse Reverse tab's Blancco sub-tab: a focused overlay of the same
+ * rows from QC completion onward. Rows keep showing here after they move back to
+ * inventory, so nothing is lost when the warehouse completes a unit.
+ */
 export const WAREHOUSE_BLANCO_STATUSES: string[] = [
   "QC_COMPLETED",
   "BLANCO_CLEARED",
   "BLANCO_PURGED",
   "BLANCO_CERTIFIED",
+  "COMPLETED",
 ];
 
 // All seedable categories for the DropdownOption table

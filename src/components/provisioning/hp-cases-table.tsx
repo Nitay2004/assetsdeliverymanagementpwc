@@ -23,6 +23,9 @@ export interface HpCaseItem {
   hpCaseLoggedAt: string | null;
   hpCaseLoggedBy: string | null;
   hpCaseRemarks: string | null;
+  hpCaseResolvedAt: string | null;
+  hpCaseResolvedBy: string | null;
+  hpCaseResolvedRemarks: string | null;
 }
 
 function failedStage(item: Pick<HpCaseItem, "qcCleanResult">) {
@@ -56,11 +59,14 @@ export function HpCasesTable({ items }: { items: HpCaseItem[] }) {
 
   const { filteredRows, distinctValues, filters, applyColumn } = useColumnFilters(HP_COLUMNS, items);
   const displayItems = filteredRows;
+  // The list is sticky: a resolved case keeps showing with its status, so the
+  // header counts how many are still *open* rather than how many rows exist.
+  const openCount = items.filter(i => i.status === "CASE_LOGGED_WITH_HP" && !i.hpCaseResolvedAt).length;
 
   if (items.length === 0) {
     return (
       <div className="p-8 rounded-xl glass text-center text-muted-foreground">
-        No laptops are currently parked with an open HP case.
+        No laptops have been logged with HP yet.
       </div>
     );
   }
@@ -101,7 +107,8 @@ export function HpCasesTable({ items }: { items: HpCaseItem[] }) {
         <div>
           <h2 className="font-semibold text-foreground">HP Cases — Laptop Parked After QC Failure</h2>
           <p className="text-xs text-muted-foreground">
-            {items.length} asset(s) waiting on HP. Blancco stays blocked until a case is resolved.
+            {openCount} asset(s) waiting on HP · {items.length} case(s) logged. Blancco stays blocked until a case is
+            resolved — resolved cases keep showing here with their status.
           </p>
         </div>
       </div>
@@ -160,6 +167,7 @@ export function HpCasesTable({ items }: { items: HpCaseItem[] }) {
                 onApply={(v) => applyColumn("hpCaseLoggedBy", v)}
               />
               <th className="px-4 py-3 font-semibold">Logged On</th>
+              <th className="px-4 py-3 font-semibold">Resolved</th>
               <th className="px-4 py-3 font-semibold">Remarks</th>
               <th className="px-4 py-3 font-semibold text-right">Actions</th>
             </tr>
@@ -167,7 +175,7 @@ export function HpCasesTable({ items }: { items: HpCaseItem[] }) {
           <tbody className="divide-y">
             {displayItems.length === 0 && (
               <tr>
-                <td colSpan={12} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={13} className="px-4 py-8 text-center text-muted-foreground">
                   No cases match the selected filters.
                 </td>
               </tr>
@@ -197,19 +205,34 @@ export function HpCasesTable({ items }: { items: HpCaseItem[] }) {
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{item.hpCaseLoggedBy || "—"}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{formatDate(item.hpCaseLoggedAt)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                  {item.hpCaseResolvedAt
+                    ? `${formatDate(item.hpCaseResolvedAt)}${item.hpCaseResolvedBy ? ` · ${item.hpCaseResolvedBy}` : ""}`
+                    : "—"}
+                </td>
                 <td className="px-4 py-3 max-w-[260px]">
                   <p className="truncate text-muted-foreground" title={item.hpCaseRemarks ?? ""}>
                     {item.hpCaseRemarks || "—"}
                   </p>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-right">
-                  <button
-                    onClick={() => { setTarget(item); setRemarks(""); }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-green-700 transition-colors"
-                  >
-                    <CheckCircle className="size-3.5" />
-                    Resolved — send back to QC
-                  </button>
+                  {item.status === "CASE_LOGGED_WITH_HP" && !item.hpCaseResolvedAt ? (
+                    <button
+                      onClick={() => { setTarget(item); setRemarks(""); }}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-green-700 transition-colors"
+                    >
+                      <CheckCircle className="size-3.5" />
+                      Resolved — send back to QC
+                    </button>
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-800"
+                      title={item.hpCaseResolvedRemarks ?? undefined}
+                    >
+                      <CheckCircle className="size-3" />
+                      Case closed
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}

@@ -38,6 +38,25 @@ const REVERSE_QC_COLUMNS: ColumnFilterConfig<ReverseQcItem>[] = [
   { key: "rqcpurge", getValue: r => r.qcPurgeResult },
 ];
 
+/**
+ * The queue is sticky — a row stays listed after its stage is recorded — so the
+ * action has to be gated on where the unit actually is. `null` means the unit has
+ * already moved past this stage and there is nothing left to record here.
+ */
+function qcActionFor(item: ReverseQcItem, isHardware: boolean): "record" | "update" | null {
+  if (isHardware) {
+    if (item.status === "RECEIVED_AT_WAREHOUSE" && !item.qcCleanResult) return "record";
+    // Hardware QC done and the unit is still on the QC bench: allow a correction.
+    // Never once Software QC has been recorded — that would roll the status back.
+    if (item.status === "QC_CLEANED" && item.qcCleanResult && !item.qcPurgeResult) return "update";
+    return null;
+  }
+  if (item.status === "QC_CLEANED") return item.qcPurgeResult ? "update" : "record";
+  // Software QC recorded and the unit has not moved on to Blancco yet.
+  if (item.status === "QC_COMPLETED" && item.qcPurgeResult) return "update";
+  return null;
+}
+
 export function ReverseQcTable({
   items,
   subTab,
@@ -73,7 +92,7 @@ export function ReverseQcTable({
             Reverse QC — {isHardware ? "Hardware QC" : "Software QC"}
           </h2>
           <p className="text-xs text-muted-foreground">
-            {count} unit(s) assigned to you ·{" "}
+            {count} unit(s) in your queue ·{" "}
             {isHardware
               ? "Record the hardware check; if it fails, log the case with HP."
               : "Record the software purge; if it fails, log the case with HP."}
@@ -136,7 +155,7 @@ export function ReverseQcTable({
               </tr>
             )}
             {filteredRows.map(item => {
-              const done = isHardware ? !!item.qcCleanResult : !!item.qcPurgeResult;
+              const action = qcActionFor(item, isHardware);
               return (
                 <tr key={item.id} className="hover:bg-muted/10 transition-colors">
                   <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">{item.requestNumber}</td>
@@ -148,7 +167,9 @@ export function ReverseQcTable({
                   <td className="px-4 py-3"><QcResultBadge result={item.qcCleanResult} /></td>
                   <td className="px-4 py-3"><QcResultBadge result={item.qcPurgeResult} /></td>
                   <td className="px-4 py-3 whitespace-nowrap text-right">
-                    {canManage ? (
+                    {!canManage ? (
+                      <span className="text-xs text-muted-foreground">View only</span>
+                    ) : action ? (
                       <button
                         onClick={() => setActiveId(item.id)}
                         className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors ${
@@ -156,11 +177,16 @@ export function ReverseQcTable({
                         }`}
                       >
                         {isHardware ? <Cpu className="size-3.5" /> : <HardDrive className="size-3.5" />}
-                        {done ? "Update" : "Record"} {isHardware ? "Hardware" : "Software"} QC
+                        {action === "update" ? "Update" : "Record"} {isHardware ? "Hardware" : "Software"} QC
                         <ArrowRight className="size-3.5" />
                       </button>
                     ) : (
-                      <span className="text-xs text-muted-foreground">View only</span>
+                      <span
+                        className="text-xs text-muted-foreground"
+                        title="This stage is already recorded — the Status column shows where the unit is now."
+                      >
+                        —
+                      </span>
                     )}
                   </td>
                 </tr>

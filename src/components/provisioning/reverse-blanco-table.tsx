@@ -37,6 +37,16 @@ const REVERSE_BLANCO_COLUMNS: ColumnFilterConfig<ReverseBlancoItem>[] = [
   { key: "rblpurge", getValue: r => r.blancoPurgeResult },
 ];
 
+/**
+ * The queue is sticky — a row stays listed after each Blanco step — so the step
+ * offered has to be derived from the unit's real status.
+ */
+function blancoActionFor(item: ReverseBlancoItem): "clear" | "purge" | null {
+  if (item.status === "QC_COMPLETED") return "clear";
+  if (item.status === "BLANCO_CLEARED") return "purge";
+  return null;
+}
+
 export function ReverseBlancoTable({
   items,
   totalCount,
@@ -68,7 +78,7 @@ export function ReverseBlancoTable({
           <h2 className="font-semibold text-foreground">Reverse QC — Blanco</h2>
           <p className="text-xs text-muted-foreground">
             {count} unit(s) handed over to you for Blanco. Record Blanco Clear, then Blanco Purge with the
-            certificate. The warehouse moves the unit back to inventory once Purge is done.
+            certificate. The warehouse moves the unit back to inventory once Purge is done — the row stays listed here.
           </p>
         </div>
       </div>
@@ -129,8 +139,8 @@ export function ReverseBlancoTable({
               </tr>
             )}
             {filteredRows.map(item => {
-              const isClear = item.status !== "BLANCO_CLEARED";
-              const done = isClear ? !!item.blancoClearResult : !!item.blancoPurgeResult;
+              const stage = blancoActionFor(item);
+              const done = stage === "clear" ? !!item.blancoClearResult : !!item.blancoPurgeResult;
               return (
                 <tr key={item.id} className="hover:bg-muted/10 transition-colors">
                   <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">{item.requestNumber}</td>
@@ -143,19 +153,26 @@ export function ReverseBlancoTable({
                   <td className="px-4 py-3"><QcResultBadge result={item.blancoClearResult} /></td>
                   <td className="px-4 py-3"><QcResultBadge result={item.blancoPurgeResult} /></td>
                   <td className="px-4 py-3 whitespace-nowrap text-right">
-                    {canManage ? (
+                    {!canManage ? (
+                      <span className="text-xs text-muted-foreground">View only</span>
+                    ) : stage ? (
                       <button
                         onClick={() => setActiveId(item.id)}
                         className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors ${
-                          isClear ? "bg-sky-600 hover:bg-sky-700" : "bg-teal-600 hover:bg-teal-700"
+                          stage === "clear" ? "bg-sky-600 hover:bg-sky-700" : "bg-teal-600 hover:bg-teal-700"
                         }`}
                       >
-                        {isClear ? <Eraser className="size-3.5" /> : <ShieldCheck className="size-3.5" />}
-                        {done ? "Update" : "Record"} Blanco {isClear ? "Clear" : "Purge"}
+                        {stage === "clear" ? <Eraser className="size-3.5" /> : <ShieldCheck className="size-3.5" />}
+                        {done ? "Update" : "Record"} Blanco {stage === "clear" ? "Clear" : "Purge"}
                         <ArrowRight className="size-3.5" />
                       </button>
                     ) : (
-                      <span className="text-xs text-muted-foreground">View only</span>
+                      <span
+                        className="text-xs text-muted-foreground"
+                        title="Blanco is complete for this unit — the Status column shows where it is now."
+                      >
+                        —
+                      </span>
                     )}
                   </td>
                 </tr>

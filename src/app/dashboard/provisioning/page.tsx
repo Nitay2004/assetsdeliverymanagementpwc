@@ -15,7 +15,15 @@ import { ReverseQcSubTabs } from "@/components/provisioning/reverse-qc-sub-tabs"
 import { type QcItem } from "@/components/qc/qc-panel";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES, ACTIVE_PROVISIONING_STATUSES, HANDED_OVER_STATUSES } from "@/lib/order-status";
-import { REVERSE_QC_HARDWARE_STATUSES, REVERSE_QC_SOFTWARE_STATUSES, REVERSE_BLANCO_CLEAR_STATUSES, REVERSE_BLANCO_PURGE_STATUSES } from "@/lib/reverse-pickup-config";
+import {
+  REVERSE_QC_HARDWARE_STATUSES,
+  REVERSE_QC_SOFTWARE_STATUSES,
+  REVERSE_BLANCO_CLEAR_STATUSES,
+  REVERSE_BLANCO_PURGE_STATUSES,
+  REVERSE_QC_HARDWARE_PENDING_STATUSES,
+  REVERSE_QC_SOFTWARE_PENDING_STATUSES,
+  HP_CASE_PENDING_STATUSES,
+} from "@/lib/reverse-pickup-config";
 import type { Prisma, ReversePickupStatus } from "@prisma/client";
 
 const PROVISIONING_FILTER_KEYS = ["serialNumber", "model", "imageType", "stickerColour", "clientName", "engineerName", "warehouseLocation", "provisioningLocation", "assetStatus"];
@@ -261,16 +269,21 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
 
   const myQcItems = serializedQc;
 
-  // Reverse-pickup laptops parked here after a QC stage failed, waiting for HP.
-  const hpTotalCount = await prisma.reversePickupRequest.count({
-    where: { status: "CASE_LOGGED_WITH_HP" },
+  // Reverse-pickup laptops that have ever been parked with HP after a QC stage
+  // failed. Sticky: a resolved case keeps showing here with its status and
+  // resolution date, so the row never disappears when the case is closed. The
+  // HP badge counts only the cases that are still open.
+  const hpCaseWhere: Prisma.ReversePickupRequestWhereInput = { hpCaseNumber: { not: null } };
+  const hpTotalCount = await prisma.reversePickupRequest.count({ where: hpCaseWhere });
+  const hpPendingCount = await prisma.reversePickupRequest.count({
+    where: { status: { in: HP_CASE_PENDING_STATUSES as ReversePickupStatus[] } },
   });
   const hpTotalPages = Math.max(1, Math.ceil(hpTotalCount / limit));
   const safeHpPage = Math.min(page, hpTotalPages);
 
   const hpRows = activeTab === "hp"
     ? await prisma.reversePickupRequest.findMany({
-        where: { status: "CASE_LOGGED_WITH_HP" },
+        where: hpCaseWhere,
         orderBy: [{ hpCaseLoggedAt: "desc" }, { id: "desc" }],
         skip: (safeHpPage - 1) * limit,
         take: limit,
@@ -291,13 +304,17 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     hpCaseLoggedAt: safeISO(r.hpCaseLoggedAt),
     hpCaseLoggedBy: r.hpCaseLoggedBy,
     hpCaseRemarks: r.hpCaseRemarks,
+    hpCaseResolvedAt: safeISO(r.hpCaseResolvedAt),
+    hpCaseResolvedBy: r.hpCaseResolvedBy,
+    hpCaseResolvedRemarks: r.hpCaseResolvedRemarks,
   }));
 
   // Reverse QC — the engineer's own queue. A unit only appears here after the
   // warehouse has assigned this engineer, so both sub-tab queues are scoped to
   // the logged-in user. Hardware QC runs first (RECEIVED_AT_WAREHOUSE), then the
-  // unit moves to Software QC (QC_CLEANED). The two sets are disjoint, so a unit
-  // is never in both queues at once.
+  // unit moves to Software QC (QC_CLEANED). Both queues are sticky, so recording
+  // a stage never removes the row — a unit can show in more than one queue at a
+  // time and the Status column says where it actually is.
   const rqcFilters = parseColumnFilters(searchParams, REVERSE_QC_FILTER_KEYS);
   const rqcEngineer = user ? user.name : "__no_user__";
 
@@ -505,6 +522,26 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const reverseBlancoTotalPages = Math.max(1, Math.ceil(reverseBlancoTotal / rqcLimit));
   const safeReverseBlancoPage = Math.min(rqcPage, reverseBlancoTotalPages);
 
+  // Badge counts: only the units still waiting at each stage. The tables stay
+  // sticky, so a table can list more rows than its badge shows.
+  const [reverseQcHardwarePending, reverseQcSoftwarePending, reverseBlancoPending] = await Promise.all([
+    prisma.reversePickupRequest.count({
+      where: { qcEngineer: rqcEngineer, status: { in: REVERSE_QC_HARDWARE_PENDING_STATUSES as ReversePickupStatus[] } },
+    }),
+    prisma.reversePickupRequest.count({
+      where: { qcEngineer: rqcEngineer, status: { in: REVERSE_QC_SOFTWARE_PENDING_STATUSES as ReversePickupStatus[] } },
+    }),
+    prisma.reversePickupRequest.count({
+      where: {
+        qcEngineer: rqcEngineer,
+        OR: [
+          { status: "QC_COMPLETED", blancoSentAt: { not: null } },
+          { status: "BLANCO_CLEARED" },
+        ],
+      },
+    }),
+  ]);
+
   // Split orders into: active (needs provisioning work), handed over to logistics,
   // and later stages (packing, dispatch, delivery, RTO, etc). All stay visible.
   const activeOrders = orders.filter(o => ACTIVE_PROVISIONING_STATUSES.includes(o.status));
@@ -578,15 +615,15 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
 
       <ProvisioningTabs
         qcCount={qcBadgeCount}
-        hpCount={hpTotalCount}
-        reverseQcCount={reverseQcHardwareTotal + reverseQcSoftwareTotal + reverseBlancoTotal}
+        hpCount={hpPendingCount}
+        reverseQcCount={reverseQcHardwarePending + reverseQcSoftwarePending + reverseBlancoPending}
       />
 
       {activeTab === "reverseqc" && (
         <ReverseQcSubTabs
-          hardwareCount={reverseQcHardwareTotal}
-          softwareCount={reverseQcSoftwareTotal}
-          blancoCount={reverseBlancoTotal}
+          hardwareCount={reverseQcHardwarePending}
+          softwareCount={reverseQcSoftwarePending}
+          blancoCount={reverseBlancoPending}
         />
       )}
 
