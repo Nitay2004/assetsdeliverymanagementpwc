@@ -120,7 +120,9 @@ export async function sendToQc(id: string, formData: FormData) {
   const expectedDeliveryDate =
     parseDate(formData.get("expectedDeliveryDate") as string) ??
     parseDate(calculateExpectedDeliveryDate(slaStartDate, deliveryTatDays));
-  const actualDeliveryDate = parseDate(formData.get("actualDeliveryDate") as string);
+  // Actual Delivery Date is stamped by the delivery flow, never typed in here — keep
+  // whatever the item already carries so sending to QC can never wipe or overwrite it.
+  const actualDeliveryDate = existing.actualDeliveryDate;
   const slaStatus = calculateSlaStatus(actualDeliveryDate, expectedDeliveryDate);
   const laptopAcceptanceDate = parseDate(formData.get("laptopAcceptanceDate") as string);
   const adaptorAdded = (formData.get("adaptorAdded") as string) || null;

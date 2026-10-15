@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { calculateSlaStatus } from "@/lib/sla-utils";
 import { revalidatePath } from "next/cache";
 
 // NOT a "use server" file: this is a shared internal helper, not a server
@@ -119,6 +120,8 @@ export async function syncOrderTrackingStatus(orderId: string, orderStatus: stri
       where: { id: { in: itemIds } },
       select: {
         id: true,
+        expectedDeliveryDate: true,
+        actualDeliveryDate: true,
         outwardDate1: true,
         outwardDate2: true,
         outwardDate3: true,
@@ -128,7 +131,11 @@ export async function syncOrderTrackingStatus(orderId: string, orderStatus: stri
       },
     });
     for (const item of items) {
-      const dateToSet: Record<string, Date> = { deliveryDate: now };
+      // Actual Delivery Date is never typed by hand: it is stamped on the day the
+      // asset is delivered, and SLA Missed/Met is derived from it. If the order is
+      // marked delivered again later, keep the original stamp.
+      const actualDelivery = item.actualDeliveryDate ?? now;
+      const dateToSet: Record<string, Date> = { deliveryDate: now, actualDeliveryDate: actualDelivery };
       if (!item.outwardDate1) dateToSet.outwardDate1 = now;
       else if (!item.outwardDate2) dateToSet.outwardDate2 = now;
       else if (!item.outwardDate3) dateToSet.outwardDate3 = now;
@@ -137,7 +144,11 @@ export async function syncOrderTrackingStatus(orderId: string, orderStatus: stri
       else if (!item.outwardDate6) dateToSet.outwardDate6 = now;
       await prisma.inventoryItem.update({
         where: { id: item.id },
-        data: { trackingStatus, ...dateToSet },
+        data: {
+          trackingStatus,
+          ...dateToSet,
+          slaStatus: calculateSlaStatus(actualDelivery, item.expectedDeliveryDate),
+        },
       });
     }
     revalidatePath("/dashboard/inventory");

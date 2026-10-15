@@ -220,7 +220,12 @@ export function SendToQcModal({ open, onClose, item }: Props) {
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">Actual Delivery Date</label>
-                  <input name="actualDeliveryDate" type="date" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" onChange={(e) => fillSlaStatus(e.currentTarget.closest("form")!)} />
+                  <input
+                    name="actualDeliveryDate"
+                    type="date"
+                    readOnly
+                    className="w-full rounded-lg border px-3 py-2 text-sm bg-background cursor-not-allowed"
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2 mb-2">

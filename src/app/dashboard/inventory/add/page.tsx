@@ -233,6 +233,26 @@ export default function AddInventoryPage() {
                     );
                   }
 
+                  if (fieldName === "actualDeliveryDate") {
+                    return (
+                      <div key={f.label} className="space-y-1.5">
+                        <label htmlFor={fieldName} className="text-xs font-medium text-foreground">
+                          {f.label}
+                        </label>
+                        <input
+                          id={fieldName}
+                          name={fieldName}
+                          readOnly
+                          placeholder="Auto-filled on delivery"
+                          className="flex h-9 w-full cursor-not-allowed rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                        <span className="text-[10px] text-muted-foreground block leading-tight">
+                          Auto-filled when the asset is delivered.
+                        </span>
+                      </div>
+                    );
+                  }
+
                   if (fieldName === "slaStatus") {
                     return (
                       <div key={f.label} className="space-y-1.5">

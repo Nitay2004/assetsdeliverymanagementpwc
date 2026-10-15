@@ -22,9 +22,13 @@ function parseIntValue(value: string | null): number | null {
   return isNaN(n) ? null : n;
 }
 
-/** Derives Expected Delivery Date and SLA Missed/Met from the two dates. */
-function resolveSla(formData: FormData, existingExpected?: Date | null) {
-  const actualDeliveryDate = parseDate(formData.get("actualDeliveryDate") as string);
+/**
+ * Derives Expected Delivery Date and SLA Missed/Met from the two dates.
+ * Actual Delivery Date is system-managed — it is stamped by the delivery flow
+ * (order marked DELIVERED / POD upload / Pafex sync) and is never typable, so it
+ * is passed in rather than read from the form.
+ */
+function resolveSla(formData: FormData, existingActual?: Date | null, existingExpected?: Date | null) {
   const slaStartDate = parseDate(formData.get("slaStartDate") as string);
   const deliveryTatDays = parseIntValue(formData.get("deliveryTatDays") as string);
   const expectedDeliveryDate =
@@ -34,7 +38,7 @@ function resolveSla(formData: FormData, existingExpected?: Date | null) {
     null;
   return {
     expectedDeliveryDate,
-    slaStatus: calculateSlaStatus(actualDeliveryDate, expectedDeliveryDate),
+    slaStatus: calculateSlaStatus(existingActual ?? null, expectedDeliveryDate),
   };
 }
 
@@ -94,9 +98,9 @@ export async function addInventoryItem(formData: FormData) {
         odaLocation: normalizeOdaLocation(formData.get("odaLocation") as string),
         tat: (formData.get("tat") as string) || null,
         deliveryTatDays: parseIntValue(formData.get("deliveryTatDays") as string),
-        expectedDeliveryDate: resolveSla(formData, slaFallback).expectedDeliveryDate,
-        actualDeliveryDate: parseDate(formData.get("actualDeliveryDate") as string),
-        slaStatus: resolveSla(formData, slaFallback).slaStatus,
+        expectedDeliveryDate: resolveSla(formData, null, slaFallback).expectedDeliveryDate,
+        actualDeliveryDate: null,
+        slaStatus: resolveSla(formData, null, slaFallback).slaStatus,
         laptopAcceptanceDate: parseDate(formData.get("laptopAcceptanceDate") as string),
         invoicedQuantity: parseIntValue(formData.get("invoicedQuantity") as string),
         warrantyPeriod: (formData.get("warrantyPeriod") as string) || null,
@@ -168,6 +172,8 @@ export async function updateInventoryItem(id: string, formData: FormData) {
     effectiveStatus = "ALLOCATED";
   }
   const slaFallback = current?.expectedDeliveryDate ?? null;
+  // Actual Delivery Date is stamped by the delivery flow, never typed in the form.
+  const sla = resolveSla(formData, current?.actualDeliveryDate, slaFallback);
 
   // Editing the user must not silently erase the previous assignment: snapshot
   // it into history first (same pattern as returnItemToStock / reassignItem).
@@ -243,9 +249,9 @@ export async function updateInventoryItem(id: string, formData: FormData) {
         odaLocation: normalizeOdaLocation(formData.get("odaLocation") as string),
         tat: (formData.get("tat") as string) || null,
         deliveryTatDays: parseIntValue(formData.get("deliveryTatDays") as string),
-        expectedDeliveryDate: resolveSla(formData, slaFallback).expectedDeliveryDate,
-        actualDeliveryDate: parseDate(formData.get("actualDeliveryDate") as string),
-        slaStatus: resolveSla(formData, slaFallback).slaStatus,
+        expectedDeliveryDate: sla.expectedDeliveryDate,
+        actualDeliveryDate: current?.actualDeliveryDate ?? null,
+        slaStatus: sla.slaStatus,
         laptopAcceptanceDate: parseDate(formData.get("laptopAcceptanceDate") as string),
         invoicedQuantity: parseIntValue(formData.get("invoicedQuantity") as string),
         warrantyPeriod: (formData.get("warrantyPeriod") as string) || null,
@@ -620,8 +626,6 @@ export async function reassignItem(id: string, formData: FormData) {
   const expectedDeliveryDate =
     parseDate(formData.get("expectedDeliveryDate") as string) ??
     parseDate(calculateExpectedDeliveryDate(slaStartDate, tatDays));
-  const actualDeliveryDate = parseDate(formData.get("actualDeliveryDate") as string);
-  const slaStatus = calculateSlaStatus(actualDeliveryDate, expectedDeliveryDate);
   const laptopAcceptanceDate = parseDate(formData.get("laptopAcceptanceDate") as string);
   const adaptorAdded = (formData.get("adaptorAdded") as string) || null;
   const accessoryHeadsetMouse = (formData.get("accessoryHeadsetMouse") as string) || null;
@@ -630,6 +634,11 @@ export async function reassignItem(id: string, formData: FormData) {
   // Always save current assignment to history before applying the new one
   const existing = await prisma.inventoryItem.findUnique({ where: { id } });
   if (!existing) throw new Error("Item not found.");
+
+  // Actual Delivery Date is stamped by the delivery flow, never typed in here — keep
+  // whatever the item already carries so a reassignment can never wipe or overwrite it.
+  const actualDeliveryDate = existing.actualDeliveryDate;
+  const slaStatus = calculateSlaStatus(actualDeliveryDate, expectedDeliveryDate);
 
   // Save the current assignment data as a history record (preserving tracking status),
   // only if that user is not already recorded for this item.
