@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eraser, ArrowRight } from "lucide-react";
+import { Eraser, ArrowRight, Send } from "lucide-react";
 import { STATUS_LABELS } from "@/lib/reverse-pickup-config";
 import { WarehouseReverseActionModal, type WarehouseReverseAction, type WarehouseReverseActionItem } from "@/components/warehouse/warehouse-reverse-action-modal";
 import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
@@ -33,18 +33,32 @@ function ResultBadge({ value }: { value: string | null }) {
 
 type ActionPlan = { action: WarehouseReverseAction; label: string; className: string };
 
+// Blanco is recorded by the QC engineer, not the warehouse. The warehouse only
+// hands a QC-passed unit over ("Send for Blanco") and, once the engineer has
+// purged it, moves it back to inventory.
 function actionFor(item: WarehouseReverseItem): ActionPlan | null {
   switch (item.status) {
     case "QC_COMPLETED":
-      return { action: "blancoClear", label: "Blanco Clear", className: "bg-sky-600 hover:bg-sky-700" };
-    case "BLANCO_CLEARED":
-      return { action: "blancoPurge", label: "Blanco Purge", className: "bg-teal-600 hover:bg-teal-700" };
+      return item.blancoSentAt
+        ? null
+        : { action: "sendForBlanco", label: "Send for Blanco", className: "bg-sky-600 hover:bg-sky-700" };
     case "BLANCO_PURGED":
     case "BLANCO_CERTIFIED":
       return { action: "complete", label: "Move to Inventory", className: "bg-emerald-600 hover:bg-emerald-700" };
     default:
+      // BLANCO_CLEARED — the engineer is part-way through Blanco.
       return null;
   }
+}
+
+function pendingLabel(item: WarehouseReverseItem): string {
+  if (item.status === "QC_COMPLETED" && item.blancoSentAt) {
+    return item.qcEngineer ? `With ${item.qcEngineer} (Blanco Clear)` : "Sent for Blanco";
+  }
+  if (item.status === "BLANCO_CLEARED") {
+    return item.qcEngineer ? `With ${item.qcEngineer} (Blanco Purge)` : "Awaiting Blanco Purge";
+  }
+  return "—";
 }
 
 export function WarehouseBlancoTable({
@@ -77,7 +91,9 @@ export function WarehouseBlancoTable({
         <div>
           <h2 className="font-semibold text-foreground">Reverse — Blanco</h2>
           <p className="text-xs text-muted-foreground">
-            {totalCount} unit(s) back from QC. Record Blanco Clear, Blanco Purge and then move the unit back to inventory.
+            {totalCount} unit(s) cleared QC. Hand the unit over with <span className="font-medium">Send for Blanco</span> —
+            the QC engineer records Blanco Clear and Purge from their own queue in the Provisioning module. Once purged,
+            move the unit back to inventory here.
           </p>
         </div>
       </div>
@@ -129,13 +145,15 @@ export function WarehouseBlancoTable({
               />
               <th className="px-4 py-3 font-semibold">H/W QC</th>
               <th className="px-4 py-3 font-semibold">S/W QC</th>
+              <th className="px-4 py-3 font-semibold">Blanco Clear</th>
+              <th className="px-4 py-3 font-semibold">Blanco Purge</th>
               {canManage && <th className="px-4 py-3 font-semibold text-right">Action</th>}
             </tr>
           </thead>
           <tbody className="divide-y">
             {filteredRows.length === 0 && (
               <tr>
-                <td colSpan={canManage ? 10 : 9} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={canManage ? 12 : 11} className="px-4 py-8 text-center text-muted-foreground">
                   {activeFilterCount > 0
                     ? "No units match the current filters."
                     : "No units are ready for Blanco yet."}
@@ -159,6 +177,8 @@ export function WarehouseBlancoTable({
                   <td className="px-4 py-3 whitespace-nowrap">{item.qcEngineer || "—"}</td>
                   <td className="px-4 py-3 whitespace-nowrap"><ResultBadge value={item.qcCleanResult} /></td>
                   <td className="px-4 py-3 whitespace-nowrap"><ResultBadge value={item.qcPurgeResult} /></td>
+                  <td className="px-4 py-3 whitespace-nowrap"><ResultBadge value={item.blancoClearResult} /></td>
+                  <td className="px-4 py-3 whitespace-nowrap"><ResultBadge value={item.blancoPurgeResult} /></td>
                   {canManage && (
                     <td className="px-4 py-3 whitespace-nowrap text-right">
                       {plan ? (
@@ -166,11 +186,11 @@ export function WarehouseBlancoTable({
                           onClick={() => setDialog({ item, action: plan.action })}
                           className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors ${plan.className}`}
                         >
+                          {plan.action === "sendForBlanco" ? <Send className="size-3.5" /> : <ArrowRight className="size-3.5" />}
                           {plan.label}
-                          <ArrowRight className="size-3.5" />
                         </button>
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-xs text-muted-foreground">{pendingLabel(item)}</span>
                       )}
                     </td>
                   )}

@@ -41,17 +41,21 @@ export function AssignReverseQcModal({ item, open, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [dropdownData, setDropdownData] = useState<DropdownData | null>(null);
 
-  const [warehouseLocation, setWarehouseLocation] = useState("");
-  const [qcLocation, setQcLocation] = useState("");
-  const [engineerName, setEngineerName] = useState("");
+  // Auto-fetch: seed the fields from what the unit already carries — the
+  // warehouse location recorded when the unit was received, and the QC location
+  // from a previous assignment (falling back to the warehouse location when the
+  // unit has never been assigned). The modal is mounted fresh for each row (the
+  // table renders it behind `assignItem`), so initial state is all that is
+  // needed; nothing has to be reset.
+  const [warehouseLocation, setWarehouseLocation] = useState(item.warehouseLocation ?? "");
+  const [qcLocation, setQcLocation] = useState(item.qcLocation ?? item.warehouseLocation ?? "");
+  const [engineerName, setEngineerName] = useState(item.qcEngineer ?? "");
 
   const loadData = useCallback(async () => {
     const data = await getQcDropdowns();
     setDropdownData(data);
   }, []);
 
-  // The modal is mounted only while open (the table renders it behind
-  // `assignItem`), so the values can be seeded from the item directly.
   useEffect(() => {
     let active = true;
     void (async () => {

@@ -5,16 +5,14 @@ import { useRouter } from "next/navigation";
 import { X, Loader2, Warehouse, Eraser, Package, type LucideIcon } from "lucide-react";
 import {
   receiveAtWarehouse,
-  recordBlancoClear,
-  recordBlancoPurge,
+  sendForBlanco,
   completeReversePickup,
 } from "@/app/actions/reverse-pickup";
 import { useToast } from "@/hooks/use-toast";
 
 export type WarehouseReverseAction =
   | "receive"
-  | "blancoClear"
-  | "blancoPurge"
+  | "sendForBlanco"
   | "complete";
 
 export interface WarehouseReverseActionItem {
@@ -37,13 +35,11 @@ interface Props {
 const today = () => new Date().toISOString().slice(0, 10);
 
 const INPUT = "flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary";
-const TEXTAREA = "flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none";
 const LABEL = "text-sm font-medium text-foreground";
 
 const ACTION_META: Record<WarehouseReverseAction, { title: string; cta: string; button: string; icon: LucideIcon }> = {
   receive: { title: "Receive at Warehouse", cta: "Mark Received", button: "bg-cyan-600 hover:bg-cyan-700", icon: Warehouse },
-  blancoClear: { title: "Record Blanco Clear", cta: "Record Blanco Clear", button: "bg-sky-600 hover:bg-sky-700", icon: Eraser },
-  blancoPurge: { title: "Record Blanco Purge", cta: "Record Blanco Purge", button: "bg-teal-600 hover:bg-teal-700", icon: Eraser },
+  sendForBlanco: { title: "Send for Blanco", cta: "Send for Blanco", button: "bg-sky-600 hover:bg-sky-700", icon: Eraser },
   complete: { title: "Move Back to Inventory", cta: "Move to Inventory", button: "bg-emerald-600 hover:bg-emerald-700", icon: Package },
 };
 
@@ -55,31 +51,16 @@ export function WarehouseReverseActionModal({ item, action, warehouseLocations, 
   const [warehouse, setWarehouse] = useState(item.warehouseLocation ?? "");
   const [receivedDate, setReceivedDate] = useState(today);
   const [receivedBy, setReceivedBy] = useState("");
-  const [result, setResult] = useState("");
-  const [date, setDate] = useState(today);
-  const [performedBy, setPerformedBy] = useState("");
-  const [remarks, setRemarks] = useState("");
-  const [certificateFile, setCertificateFile] = useState<File | null>(null);
-  const [certificateDate, setCertificateDate] = useState(today);
 
   if (!open) return null;
 
   const meta = ACTION_META[action];
-  const requiresResult = action === "blancoClear" || action === "blancoPurge";
   const Icon = meta.icon;
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (action === "receive" && !warehouse) {
       toast({ title: "Validation", description: "Warehouse is required.", variant: "error" });
-      return;
-    }
-    if (requiresResult && !result) {
-      toast({ title: "Validation", description: "Result is required.", variant: "error" });
-      return;
-    }
-    if (action === "blancoPurge" && !certificateFile) {
-      toast({ title: "Validation", description: "Blancco certificate file is required.", variant: "error" });
       return;
     }
 
@@ -94,31 +75,9 @@ export function WarehouseReverseActionModal({ item, action, warehouseLocations, 
         fd.set("receivedBy", receivedBy);
         await receiveAtWarehouse(fd);
         toast({ title: "Received at warehouse", description: `${item.serialNumber} marked as received at ${warehouse}.`, variant: "success" });
-      } else if (action === "blancoClear") {
-        fd.set("blancoClearResult", result);
-        fd.set("blancoClearDate", date);
-        fd.set("blancoClearBy", performedBy);
-        fd.set("blancoClearRemarks", remarks);
-        await recordBlancoClear(fd);
-        toast({ title: "Blanco Clear recorded", description: `${item.serialNumber}: ${result}.`, variant: "success" });
-      } else if (action === "blancoPurge") {
-        const ext = certificateFile?.name.split(".").pop()?.toLowerCase() ?? "";
-        if (!["pdf", "jpg", "jpeg", "png"].includes(ext)) {
-          throw new Error("Only PDF, JPG, JPEG and PNG files are allowed.");
-        }
-        const up = new FormData();
-        up.set("file", certificateFile!);
-        const res = await fetch("/api/upload", { method: "POST", body: up });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Upload failed");
-        fd.set("blancoPurgeResult", result);
-        fd.set("blancoPurgeDate", date);
-        fd.set("blancoPurgeBy", performedBy);
-        fd.set("blancoPurgeRemarks", remarks);
-        fd.set("blancoCertificateUrl", data.url);
-        fd.set("blancoCertificateDate", certificateDate);
-        await recordBlancoPurge(fd);
-        toast({ title: "Blanco Purge recorded", description: `${item.serialNumber}: ${result}.`, variant: "success" });
+      } else if (action === "sendForBlanco") {
+        await sendForBlanco(fd);
+        toast({ title: "Sent for Blanco", description: `${item.serialNumber} handed over to the QC engineer for Blanco.`, variant: "success" });
       } else if (action === "complete") {
         await completeReversePickup(fd);
         toast({ title: "Moved to inventory", description: `${item.serialNumber} returned to inventory.`, variant: "success" });
@@ -176,43 +135,17 @@ export function WarehouseReverseActionModal({ item, action, warehouseLocations, 
               </div>
             )}
 
-            {requiresResult && (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label htmlFor="result" className={LABEL}>Result <span className="text-red-500">*</span></label>
-                  <select id="result" value={result} onChange={e => setResult(e.target.value)} required className={INPUT}>
-                    <option value="">Select result...</option>
-                    <option value="PASS">Pass</option>
-                    <option value="FAIL">Fail</option>
-                  </select>
+            {action === "sendForBlanco" && (
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-sky-50 border border-sky-200">
+                <Eraser className="size-5 text-sky-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-sky-800">Hand the unit over for Blanco</p>
+                  <p className="text-xs text-sky-700 mt-0.5">
+                    The QC engineer who cleared this unit records Blanco Clear and Purge from their own
+                    queue in the Provisioning module. Sending only hands the unit over — it does not
+                    record Blanco.
+                  </p>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label htmlFor="date" className={LABEL}>Date</label>
-                    <input id="date" type="date" value={date} onChange={e => setDate(e.target.value)} className={INPUT} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label htmlFor="performedBy" className={LABEL}>Performed By</label>
-                    <input id="performedBy" value={performedBy} onChange={e => setPerformedBy(e.target.value)} placeholder="Name" className={INPUT} />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label htmlFor="remarks" className={LABEL}>Remarks</label>
-                  <textarea id="remarks" rows={2} value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Remarks..." className={TEXTAREA} />
-                </div>
-                {action === "blancoPurge" && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label htmlFor="certificateFile" className={LABEL}>Blanco Certificate <span className="text-red-500">*</span></label>
-                      <input id="certificateFile" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setCertificateFile(e.target.files?.[0] || null)} className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm file:mr-2 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-blue-700" />
-                      <p className="text-xs text-muted-foreground">PDF, JPG, JPEG or PNG</p>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor="certificateDate" className={LABEL}>Certificate Date</label>
-                      <input id="certificateDate" type="date" value={certificateDate} onChange={e => setCertificateDate(e.target.value)} className={INPUT} />
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 

@@ -201,6 +201,8 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
         receivedDate: true, receivedBy: true,
         qcEngineer: true, qcAssignedAt: true, qcLocation: true,
         qcCleanResult: true, qcPurgeResult: true, qcResult: true,
+        blancoSentAt: true, blancoSentBy: true,
+        blancoClearResult: true, blancoPurgeResult: true,
       },
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip: (safeReversePage - 1) * rlimit,
@@ -251,6 +253,10 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
     qcCleanResult: r.qcCleanResult,
     qcPurgeResult: r.qcPurgeResult,
     qcResult: r.qcResult,
+    blancoSentAt: safeISO(r.blancoSentAt),
+    blancoSentBy: r.blancoSentBy,
+    blancoClearResult: r.blancoClearResult,
+    blancoPurgeResult: r.blancoPurgeResult,
   }));
 
   const warehouseLocations = warehouseLocationOptions.map(o => o.value);

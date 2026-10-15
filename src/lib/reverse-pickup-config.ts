@@ -199,6 +199,17 @@ export const REVERSE_QC_HARDWARE_STATUSES: string[] = ["RECEIVED_AT_WAREHOUSE"];
 export const REVERSE_QC_SOFTWARE_STATUSES: string[] = ["QC_CLEANED"];
 
 /**
+ * Engineer Blanco queue (the same engineer who did the QC also clears the unit).
+ * A unit only appears here once the warehouse has handed it over
+ * (`blancoSentAt` set), so this status list is combined with that flag in the
+ * provisioning query.
+ */
+export const REVERSE_BLANCO_CLEAR_STATUSES: string[] = ["QC_COMPLETED"];
+
+/** Engineer queue: units whose Blanco Clear is done, awaiting Blanco Purge. */
+export const REVERSE_BLANCO_PURGE_STATUSES: string[] = ["BLANCO_CLEARED"];
+
+/**
  * The Warehouse Reverse tab's default pipeline sub-tab: inbound units plus the
  * ones still at (or just past) QC — before they come back for Blancco.
  */

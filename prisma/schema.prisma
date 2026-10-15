@@ -553,6 +553,11 @@ model ReversePickupRequest {
   blancoPurgeDate       DateTime?            @map("blanco_purge_date") @db.Date
   blancoPurgeBy         String?              @map("blanco_purge_by")
 
+  // ── Blancco handover (Warehouse sends the unit on to the QC engineer, who
+  // then records Blanco from their own queue in the Provisioning module) ──
+  blancoSentAt          DateTime?            @map("blanco_sent_at")
+  blancoSentBy          String?              @map("blanco_sent_by")
+
   // ── Blancco ──
   blanccoYesNo          String?              @map("blancco_yes_no") // DD
   blanccoDate           DateTime?            @map("blancco_date") @db.Date

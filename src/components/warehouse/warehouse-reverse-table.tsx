@@ -23,6 +23,10 @@ export interface WarehouseReverseItem {
   qcCleanResult: string | null;
   qcPurgeResult: string | null;
   qcResult: string | null;
+  blancoSentAt: string | null;
+  blancoSentBy: string | null;
+  blancoClearResult: string | null;
+  blancoPurgeResult: string | null;
 }
 
 /** Statuses at which the unit is on its way and still needs to be received. */

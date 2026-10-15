@@ -866,10 +866,42 @@ export async function resolveHpCase(formData: FormData) {
   revalidatePath("/dashboard/warehouse");
 }
 
+// Blanco is recorded by the same QC engineer who did the QC, from their own
+// queue in the Provisioning module — so these actions accept the provisioning
+// edit grant. The warehouse only hands the unit over (sendForBlanco below).
+export async function sendForBlanco(formData: FormData) {
+  const user = await getSession();
+  // Handing the unit on to the QC engineer is the Warehouse team's job.
+  requireModuleEditOrReversePickup(user, "warehouse");
+
+  const id = formData.get("id") as string;
+  if (!id) throw new Error("Request ID is required.");
+
+  const request = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: { status: true, qcEngineer: true },
+  });
+  if (!request) throw new Error("Reverse pickup request not found.");
+  if (request.status !== "QC_COMPLETED") {
+    throw new Error("A unit can only be sent for Blanco once both QC stages have passed.");
+  }
+  if (!request.qcEngineer) {
+    throw new Error("No QC engineer is assigned to this unit.");
+  }
+
+  await prisma.reversePickupRequest.update({
+    where: { id },
+    data: { blancoSentAt: new Date(), blancoSentBy: user?.name || null },
+  });
+
+  revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard/provisioning");
+}
+
 export async function recordBlancoClear(formData: FormData) {
   const user = await getSession();
-  // Blancco Clear is recorded by the Warehouse team from their Reverse tab.
-  requireModuleEditOrReversePickup(user, "warehouse");
+  // Recorded by the assigned QC engineer from their Blanco queue.
+  requireReverseQcWork(user);
 
   const id = formData.get("id") as string;
   const result = formData.get("blancoClearResult") as string;
@@ -881,11 +913,14 @@ export async function recordBlancoClear(formData: FormData) {
 
   const existing = await prisma.reversePickupRequest.findUnique({
     where: { id },
-    select: { qcCleanResult: true, qcPurgeResult: true },
+    select: { status: true, qcCleanResult: true, qcPurgeResult: true, qcEngineer: true },
   });
 
   if (deriveQcResult(existing?.qcCleanResult, existing?.qcPurgeResult) !== "PASS") {
     throw new Error("Blancco Clear is blocked until both Hardware QC and Software QC pass.");
+  }
+  if (existing?.status !== "QC_COMPLETED") {
+    throw new Error("Blanco Clear can only be recorded once the unit has been sent for Blanco.");
   }
 
   await prisma.reversePickupRequest.update({
@@ -895,19 +930,19 @@ export async function recordBlancoClear(formData: FormData) {
       blancoClearResult: result,
       blancoClearRemarks: remarks || null,
       blancoClearDate: clearDate,
-      blancoClearBy: clearBy || null,
+      blancoClearBy: clearBy || existing?.qcEngineer || user?.name || null,
     },
   });
 
   revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard/provisioning");
   revalidatePath("/dashboard/reverse-pickup");
 }
 
 export async function recordBlancoPurge(formData: FormData) {
   const user = await getSession();
-  // Blancco Purge + certificate are recorded by the Warehouse team from their
-  // Reverse tab.
-  requireModuleEditOrReversePickup(user, "warehouse");
+  // Recorded by the assigned QC engineer from their Blanco queue.
+  requireReverseQcWork(user);
 
   const id = formData.get("id") as string;
   const result = formData.get("blancoPurgeResult") as string;
@@ -919,6 +954,15 @@ export async function recordBlancoPurge(formData: FormData) {
 
   if (!id || !result) throw new Error("Request ID and Blancco Purge result are required.");
 
+  const existing = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: { status: true, qcEngineer: true },
+  });
+
+  if (existing?.status !== "BLANCO_CLEARED") {
+    throw new Error("Blanco Purge can only be recorded after Blanco Clear has been done.");
+  }
+
   await prisma.reversePickupRequest.update({
     where: { id },
     data: {
@@ -926,13 +970,14 @@ export async function recordBlancoPurge(formData: FormData) {
       blancoPurgeResult: result,
       blancoPurgeRemarks: remarks || null,
       blancoPurgeDate: purgeDate,
-      blancoPurgeBy: purgeBy || null,
+      blancoPurgeBy: purgeBy || existing?.qcEngineer || user?.name || null,
       blancoCertificateUrl: blancoCertificateUrl || null,
       blancoCertificateDate,
     },
   });
 
   revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard/provisioning");
   revalidatePath("/dashboard/reverse-pickup");
 }
 

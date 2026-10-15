@@ -8,19 +8,23 @@ import { PaginationBar } from "@/components/shared/pagination-bar";
 import { ProvisioningExportButton } from "@/components/provisioning/provisioning-export-button";
 import { QcWorkTable } from "@/components/provisioning/qc-work-table";
 import { ReverseQcTable, type ReverseQcItem } from "@/components/provisioning/reverse-qc-table";
+import { ReverseBlancoTable, type ReverseBlancoItem } from "@/components/provisioning/reverse-blanco-table";
 import { HpCasesTable, type HpCaseItem } from "@/components/provisioning/hp-cases-table";
 import { ProvisioningTabs } from "@/components/provisioning/provisioning-tabs";
 import { ReverseQcSubTabs } from "@/components/provisioning/reverse-qc-sub-tabs";
 import { type QcItem } from "@/components/qc/qc-panel";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { ORDER_PIPELINE_STATUSES, ACTIVE_PROVISIONING_STATUSES, HANDED_OVER_STATUSES } from "@/lib/order-status";
-import { REVERSE_QC_HARDWARE_STATUSES, REVERSE_QC_SOFTWARE_STATUSES } from "@/lib/reverse-pickup-config";
+import { REVERSE_QC_HARDWARE_STATUSES, REVERSE_QC_SOFTWARE_STATUSES, REVERSE_BLANCO_CLEAR_STATUSES, REVERSE_BLANCO_PURGE_STATUSES } from "@/lib/reverse-pickup-config";
 import type { Prisma, ReversePickupStatus } from "@prisma/client";
 
 const PROVISIONING_FILTER_KEYS = ["serialNumber", "model", "imageType", "stickerColour", "clientName", "engineerName", "warehouseLocation", "provisioningLocation", "assetStatus"];
 const QC_FILTER_KEYS = ["serialNumber", "model", "employeeName", "invoicingWarehouse", "qcCleanResult", "qcPurgeResult"];
 // Reverse QC sub-tabs are namespaced with `rqc` prefix
 const REVERSE_QC_FILTER_KEYS = ["rqcserial", "rqcmodel", "rqcemployee", "rqcwarehouse", "rqcclean", "rqcpurge"];
+// The Blanco sub-tab keeps its own `rbl` namespace so its filters do not bleed
+// into the Hardware / Software QC sub-tabs.
+const REVERSE_BLANCO_FILTER_KEYS = ["rblserial", "rblmodel", "rblemployee", "rblwarehouse", "rblclear", "rblpurge"];
 
 function safeISO(date: Date | null | undefined): string | null {
   if (!date) return null;
@@ -39,7 +43,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const selectedEngineer = typeof searchParams.engineer === "string" ? searchParams.engineer : "";
   const rawTab = typeof searchParams.tab === "string" ? searchParams.tab : "";
   const activeTab = rawTab === "qc" || rawTab === "hp" || rawTab === "reverseqc" ? rawTab : "provisioning";
-  const rqcSubTab = (typeof searchParams.rqctab === "string" && (searchParams.rqctab === "hardware" || searchParams.rqctab === "software"))
+  const rqcSubTab = (typeof searchParams.rqctab === "string" && (searchParams.rqctab === "hardware" || searchParams.rqctab === "software" || searchParams.rqctab === "blanco"))
     ? searchParams.rqctab
     : "hardware";
   const user = await getSession();
@@ -319,6 +323,25 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   if (rqcFilters.rqcclean) swWhere.qcCleanResult = { in: rqcFilters.rqcclean };
   if (rqcFilters.rqcpurge) swWhere.qcPurgeResult = { in: rqcFilters.rqcpurge };
 
+  // Blanco queue: units the warehouse has handed over (blancoSentAt set) awaiting
+  // Clear, plus units already cleared awaiting Purge. A unit only shows here after
+  // the warehouse's "Send for Blanco".
+  const blancoBaseWhere: Prisma.ReversePickupRequestWhereInput = {
+    qcEngineer: rqcEngineer,
+    OR: [
+      { status: { in: REVERSE_BLANCO_CLEAR_STATUSES as ReversePickupStatus[] }, blancoSentAt: { not: null } },
+      { status: { in: REVERSE_BLANCO_PURGE_STATUSES as ReversePickupStatus[] } },
+    ],
+  };
+  const rblFilters = parseColumnFilters(searchParams, REVERSE_BLANCO_FILTER_KEYS);
+  const blancoWhere: Prisma.ReversePickupRequestWhereInput = { ...blancoBaseWhere };
+  if (rblFilters.rblserial) blancoWhere.serialNumber = { in: rblFilters.rblserial };
+  if (rblFilters.rblmodel) blancoWhere.model = { in: rblFilters.rblmodel };
+  if (rblFilters.rblemployee) blancoWhere.employeeName = { in: rblFilters.rblemployee };
+  if (rblFilters.rblwarehouse) blancoWhere.warehouseLocation = { in: rblFilters.rblwarehouse };
+  if (rblFilters.rblclear) blancoWhere.blancoClearResult = { in: rblFilters.rblclear };
+  if (rblFilters.rblpurge) blancoWhere.blancoPurgeResult = { in: rblFilters.rblpurge };
+
   // Distinct values for the filter dropdowns cover this engineer's whole reverse
   // QC worklist (both stages), not just the current page.
   const rqcScopeWhere: Prisma.ReversePickupRequestWhereInput = {
@@ -331,6 +354,9 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     reverseQcHardwareRows, reverseQcSoftwareRows,
     rqcSerialGroups, rqcModelGroups, rqcEmployeeGroups,
     rqcWarehouseGroups, rqcCleanGroups, rqcPurgeGroups,
+    reverseBlancoTotal, reverseBlancoRows,
+    rblSerialGroups, rblModelGroups, rblEmployeeGroups,
+    rblWarehouseGroups, rblClearGroups, rblPurgeGroups,
   ] = await Promise.all([
     prisma.reversePickupRequest.count({ where: hwWhere }),
     prisma.reversePickupRequest.count({ where: swWhere }),
@@ -370,6 +396,28 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     prisma.reversePickupRequest.groupBy({ by: ["warehouseLocation"], where: rqcScopeWhere, _count: { _all: true } }),
     prisma.reversePickupRequest.groupBy({ by: ["qcCleanResult"], where: rqcScopeWhere, _count: { _all: true } }),
     prisma.reversePickupRequest.groupBy({ by: ["qcPurgeResult"], where: rqcScopeWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.count({ where: blancoWhere }),
+    activeTab === "reverseqc" && rqcSubTab === "blanco"
+      ? prisma.reversePickupRequest.findMany({
+          where: blancoWhere,
+          select: {
+            id: true, requestNumber: true, serialNumber: true, model: true,
+            employeeName: true, status: true, warehouseLocation: true, qcLocation: true,
+            qcEngineer: true, blancoSentAt: true,
+            blancoClearResult: true, blancoClearRemarks: true, blancoClearBy: true,
+            blancoPurgeResult: true, blancoPurgeRemarks: true, blancoPurgeBy: true,
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          skip: (rqcPage - 1) * rqcLimit,
+          take: rqcLimit,
+        })
+      : Promise.resolve([]),
+    prisma.reversePickupRequest.groupBy({ by: ["serialNumber"], where: blancoBaseWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["model"], where: blancoBaseWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: blancoBaseWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["warehouseLocation"], where: blancoBaseWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["blancoClearResult"], where: blancoBaseWhere, _count: { _all: true } }),
+    prisma.reversePickupRequest.groupBy({ by: ["blancoPurgeResult"], where: blancoBaseWhere, _count: { _all: true } }),
   ]);
 
   const reverseQcColumnFilterValues: Record<string, { value: string; count: number }[]> = {
@@ -379,6 +427,15 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     rqcwarehouse: rqcWarehouseGroups.map(r => ({ value: r.warehouseLocation ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
     rqcclean: rqcCleanGroups.map(r => ({ value: r.qcCleanResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
     rqcpurge: rqcPurgeGroups.map(r => ({ value: r.qcPurgeResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+  };
+
+  const reverseBlancoColumnFilterValues: Record<string, { value: string; count: number }[]> = {
+    rblserial: rblSerialGroups.map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rblmodel: rblModelGroups.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rblemployee: rblEmployeeGroups.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rblwarehouse: rblWarehouseGroups.map(r => ({ value: r.warehouseLocation ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rblclear: rblClearGroups.map(r => ({ value: r.blancoClearResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    rblpurge: rblPurgeGroups.map(r => ({ value: r.blancoPurgeResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
   };
 
   const serializedReverseQcHardware: ReverseQcItem[] = reverseQcHardwareRows.map(r => ({
@@ -425,6 +482,28 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
   const reverseQcSoftwareTotalPages = Math.max(1, Math.ceil(reverseQcSoftwareTotal / rqcLimit));
   const safeReverseQcHardwarePage = Math.min(rqcPage, reverseQcHardwareTotalPages);
   const safeReverseQcSoftwarePage = Math.min(rqcPage, reverseQcSoftwareTotalPages);
+
+  const serializedReverseBlanco: ReverseBlancoItem[] = reverseBlancoRows.map(r => ({
+    id: r.id,
+    requestNumber: r.requestNumber,
+    serialNumber: r.serialNumber,
+    model: r.model,
+    employeeName: r.employeeName,
+    status: r.status,
+    warehouseLocation: r.warehouseLocation,
+    qcLocation: r.qcLocation,
+    qcEngineer: r.qcEngineer,
+    blancoSentAt: safeISO(r.blancoSentAt),
+    blancoClearResult: r.blancoClearResult,
+    blancoClearRemarks: r.blancoClearRemarks,
+    blancoClearBy: r.blancoClearBy,
+    blancoPurgeResult: r.blancoPurgeResult,
+    blancoPurgeRemarks: r.blancoPurgeRemarks,
+    blancoPurgeBy: r.blancoPurgeBy,
+  }));
+
+  const reverseBlancoTotalPages = Math.max(1, Math.ceil(reverseBlancoTotal / rqcLimit));
+  const safeReverseBlancoPage = Math.min(rqcPage, reverseBlancoTotalPages);
 
   // Split orders into: active (needs provisioning work), handed over to logistics,
   // and later stages (packing, dispatch, delivery, RTO, etc). All stay visible.
@@ -500,13 +579,14 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
       <ProvisioningTabs
         qcCount={qcBadgeCount}
         hpCount={hpTotalCount}
-        reverseQcCount={reverseQcHardwareTotal + reverseQcSoftwareTotal}
+        reverseQcCount={reverseQcHardwareTotal + reverseQcSoftwareTotal + reverseBlancoTotal}
       />
 
       {activeTab === "reverseqc" && (
         <ReverseQcSubTabs
           hardwareCount={reverseQcHardwareTotal}
           softwareCount={reverseQcSoftwareTotal}
+          blancoCount={reverseBlancoTotal}
         />
       )}
 
@@ -533,7 +613,7 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
                 />
               )}
             </>
-          ) : (
+          ) : rqcSubTab === "software" ? (
             <>
               <ReverseQcTable
                 items={serializedReverseQcSoftware}
@@ -548,6 +628,26 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
                   currentPage={safeReverseQcSoftwarePage}
                   totalPages={reverseQcSoftwareTotalPages}
                   totalCount={reverseQcSoftwareTotal}
+                  limit={rqcLimit}
+                  pageParam="rqcpage"
+                  limitParam="rqclimit"
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <ReverseBlancoTable
+                items={serializedReverseBlanco}
+                totalCount={reverseBlancoTotal}
+                columnFilterValues={reverseBlancoColumnFilterValues}
+                canManage={canManage}
+              />
+              {reverseBlancoTotal > 0 && (
+                <PaginationBar
+                  basePath="/dashboard/provisioning"
+                  currentPage={safeReverseBlancoPage}
+                  totalPages={reverseBlancoTotalPages}
+                  totalCount={reverseBlancoTotal}
                   limit={rqcLimit}
                   pageParam="rqcpage"
                   limitParam="rqclimit"
