@@ -31,6 +31,32 @@ const baseMapping: Record<string, string> = {
   "Total Quantity": "totalQuantity",
   "Quantity": "totalQuantity",
   "Qty": "totalQuantity",
+  // inventory enrichment columns (auto-create inventory if missing)
+  "Model": "model",
+  "Laptop Model": "model",
+  "Part No": "partNo",
+  "Part Number": "partNo",
+  "PartNo": "partNo",
+  "Specs": "specs",
+  "Specifications": "specs",
+  "Laptop Make": "laptopMake",
+  "Make": "laptopMake",
+  "Category": "category",
+  "Product Category": "category",
+  "Brand": "brand",
+  "Invoice Product Description": "invoiceProductDescription",
+  "Description": "description",
+  "Warranty Period": "warrantyPeriod",
+  "Warranty End Period": "warrantyEndPeriod",
+  "Tier": "tier",
+  "TAT": "tat",
+  "Delivery TAT Days": "deliveryTatDays",
+  "Zone": "zone",
+  "ODA Location": "odaLocation",
+  "SLA State": "slaState",
+  "Partner": "partner",
+  "Entity": "entity",
+  "SR": "sr",
 };
 
 const aliases: Record<string, string> = {
@@ -57,6 +83,32 @@ const aliases: Record<string, string> = {
   "total quantity": "totalQuantity",
   "quantity": "totalQuantity",
   "qty": "totalQuantity",
+  // inventory enrichment aliases
+  "model": "model",
+  "laptop model": "model",
+  "part no": "partNo",
+  "part number": "partNo",
+  "partno": "partNo",
+  "specs": "specs",
+  "specifications": "specs",
+  "laptop make": "laptopMake",
+  "make": "laptopMake",
+  "category": "category",
+  "product category": "category",
+  "brand": "brand",
+  "invoice product description": "invoiceProductDescription",
+  "description": "description",
+  "warranty period": "warrantyPeriod",
+  "warranty end period": "warrantyEndPeriod",
+  "tier": "tier",
+  "tat": "tat",
+  "delivery tat days": "deliveryTatDays",
+  "zone": "zone",
+  "oda location": "odaLocation",
+  "sla state": "slaState",
+  "partner": "partner",
+  "entity": "entity",
+  "sr": "sr",
 };
 
 const normLookup: Record<string, string> = {};
@@ -115,6 +167,26 @@ interface RowData {
   engineerName: string;
   serialNumber: string;
   totalQuantity: string;
+  // inventory enrichment fields
+  model: string;
+  partNo: string;
+  specs: string;
+  laptopMake: string;
+  category: string;
+  brand: string;
+  invoiceProductDescription: string;
+  description: string;
+  warrantyPeriod: string;
+  warrantyEndPeriod: string;
+  tier: string;
+  tat: string;
+  deliveryTatDays: string;
+  zone: string;
+  odaLocation: string;
+  slaState: string;
+  partner: string;
+  entity: string;
+  sr: string;
 }
 
 export async function POST(request: Request) {
@@ -190,6 +262,25 @@ export async function POST(request: Request) {
       engineerName: "",
       serialNumber: "",
       totalQuantity: "",
+      model: "",
+      partNo: "",
+      specs: "",
+      laptopMake: "",
+      category: "",
+      brand: "",
+      invoiceProductDescription: "",
+      description: "",
+      warrantyPeriod: "",
+      warrantyEndPeriod: "",
+      tier: "",
+      tat: "",
+      deliveryTatDays: "",
+      zone: "",
+      odaLocation: "",
+      slaState: "",
+      partner: "",
+      entity: "",
+      sr: "",
     };
 
     for (let i = 0; i < headers.length; i++) {
@@ -226,6 +317,60 @@ export async function POST(request: Request) {
     });
     for (const item of items) {
       inventoryMap.set(item.serialNumber, { id: item.id, status: item.status });
+    }
+  }
+
+  // Create missing inventory items from provisioning data
+  const missingSerials = allSerials.filter(sn => !inventoryMap.has(sn));
+  if (missingSerials.length > 0) {
+    // Bulk create missing inventory items
+    const createData = missingSerials.map(sn => {
+      const row = parsedRows.find(r => r.serialNumber === sn)!;
+      const model = row.model || row.laptopMake || "Unknown";
+      const data: Record<string, any> = {
+        serialNumber: sn,
+        model,
+        status: "AVAILABLE",
+      };
+      if (row.partNo) data.partNo = row.partNo;
+      if (row.specs) data.specs = row.specs;
+      if (row.laptopMake) data.laptopMake = row.laptopMake;
+      if (row.category) data.category = row.category;
+      if (row.brand) data.brand = row.brand;
+      if (row.invoiceProductDescription) data.invoiceProductDescription = row.invoiceProductDescription;
+      if (row.description) data.description = row.description;
+      if (row.warrantyPeriod) data.warrantyPeriod = row.warrantyPeriod;
+      if (row.warrantyEndPeriod) data.warrantyEndPeriod = row.warrantyEndPeriod;
+      if (row.tier) data.tier = row.tier;
+      if (row.tat) data.tat = row.tat;
+      if (row.deliveryTatDays) data.deliveryTatDays = parseInt(row.deliveryTatDays) || null;
+      if (row.zone) data.zone = row.zone;
+      if (row.odaLocation) data.odaLocation = row.odaLocation;
+      if (row.slaState) data.slaState = row.slaState;
+      if (row.partner) data.partner = row.partner;
+      if (row.entity) data.entity = row.entity;
+      if (row.sr) data.sr = parseInt(row.sr) || null;
+      if (row.warehouseLocation) data.invoicingWarehouse = row.warehouseLocation;
+      if (row.engineerName) data.engineerName = row.engineerName;
+      if (row.provisioningLocation) data.provisioningLocation = row.provisioningLocation;
+      if (row.clientName) data.clientName = row.clientName;
+      if (row.deliveryLocation) data.deliveredLocation = row.deliveryLocation;
+      return data;
+    }) as any[];
+
+    try {
+      const createdItems = await prisma.inventoryItem.createMany({ data: createData, skipDuplicates: true });
+      // Fetch the newly created items to add to inventoryMap
+      const newItems = await prisma.inventoryItem.findMany({
+        where: { serialNumber: { in: missingSerials } },
+        select: { serialNumber: true, id: true, status: true },
+      });
+      for (const item of newItems) {
+        inventoryMap.set(item.serialNumber, { id: item.id, status: item.status });
+      }
+      console.log(`[Provisioning] Auto-created ${createdItems.count} inventory items`);
+    } catch (err: any) {
+      errors.push(`Failed to auto-create inventory items: ${err?.message ?? "Unknown error"}`);
     }
   }
 
