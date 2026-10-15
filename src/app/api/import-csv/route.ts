@@ -861,10 +861,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const dataSheets = sheets.filter(s => s.headers.length > 0 && s.records.length > 0);
+  // If multiple sheets are present, filter to sheets that actually contain serial number column
+  const sheetsWithSerial = sheets.filter(s => {
+    if (s.headers.length === 0 || s.records.length === 0) return false;
+    const resolved = resolveColumns(s.headers);
+    return Array.from(resolved.values()).includes("serialNumber");
+  });
+
+  const dataSheets = sheetsWithSerial.length > 0
+    ? sheetsWithSerial
+    : sheets.filter(s => s.headers.length > 0 && s.records.length > 0);
+
   if (dataSheets.length === 0) {
     return NextResponse.json(
-      { success: false, error: "File must have a header row and at least one data row." },
+      { success: false, error: "File must have a header row with a Serial Number column and at least one data row." },
       { status: 400 }
     );
   }
@@ -923,6 +933,17 @@ export async function POST(request: Request) {
 
     // Resolve all headers upfront — intelligently
     const resolvedMap = resolveColumns(sheet.headers);
+
+    // If a sheet does not have a Serial Number column (e.g. "Summary", "Pivot", etc.),
+    // skip it gracefully instead of erroring on every row.
+    const hasSerialNumber = Array.from(resolvedMap.values()).includes("serialNumber");
+    if (!hasSerialNumber) {
+      if (dataSheets.length > 1) {
+        // Just skip this non-inventory summary/reference sheet silently or with an informational note
+        continue;
+      }
+    }
+
     const sheetMapping: { header: string; field: string | undefined }[] = [];
     const unknownHeaders: string[] = [];
 
@@ -1211,23 +1232,28 @@ async function handleUploadMode(
   const existingItems = await findItemsBySerial(allSerials, { id: true, serialNumber: true });
   const existingMap = new Map(existingItems);
 
-  // Assignment files only update existing inventory items. Serial numbers not found
-  // in inventory are skipped and reported — never auto-created.
+  // Separate rows into new items and existing items
+  const newItems: { data: Record<string, unknown>; rowNum: number }[] = [];
   const existingRows: { data: Record<string, unknown>; rowNum: number; itemId: string }[] = [];
-  let notFound = 0;
-  const seenNotFound = new Set<string>();
 
   for (const item of rows) {
     const sn = String(item.data.serialNumber ?? "").trim();
-    const itemId = existingMap.get(sn);
-    if (itemId) {
-      existingRows.push({ ...item, itemId: String(itemId.id) });
+    const existing = existingMap.get(sn);
+    if (existing) {
+      existingRows.push({ ...item, itemId: String(existing.id) });
     } else {
-      notFound++;
-      if (!seenNotFound.has(sn)) {
-        seenNotFound.add(sn);
-        errors.push(`${prefix}Row ${item.rowNum}: Serial number "${sn}" not found in inventory — skipped`);
-      }
+      newItems.push(item);
+    }
+  }
+
+  // Deduplicate newItems by serialNumber — CSV may have same serial multiple times
+  const seenSerials = new Set<string>();
+  const dedupedNewItems: { data: Record<string, unknown>; rowNum: number }[] = [];
+  for (const item of newItems) {
+    const sn = String(item.data.serialNumber ?? "").trim();
+    if (!seenSerials.has(sn)) {
+      seenSerials.add(sn);
+      dedupedNewItems.push(item);
     }
   }
 
@@ -1256,13 +1282,71 @@ async function handleUploadMode(
     }
   }
 
-  // Build assignment records only for rows that actually carry a user. A record
-  // with no employeeName is not a real assignment and would otherwise surface as
-  // phantom, nameless history in the inventory drawer.
+  // Batch create new inventory items
+  const newItemsData: Record<string, unknown>[] = [];
+  const newItemsMeta: { sn: string; rowNum: number }[] = [];
+
+  for (const item of dedupedNewItems) {
+    const sn = String(item.data.serialNumber ?? "").trim();
+    const cleanData = Object.fromEntries(
+      Object.entries(item.data).filter(([_, v]) => v !== null && v !== undefined)
+    );
+    if (!cleanData.serialNumber) cleanData.serialNumber = sn;
+    const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
+    const hasEntity = cleanData.entity && String(cleanData.entity).trim() !== "";
+    if (!cleanData.status) {
+      cleanData.status = hasEmployee ? "ALLOCATED" : hasEntity ? "AVAILABLE" : "NEW";
+    } else if (cleanData.status === "AVAILABLE" && !hasEntity) {
+      cleanData.status = "NEW";
+    }
+    newItemsData.push(cleanData);
+    newItemsMeta.push({ sn, rowNum: item.rowNum });
+  }
+
+  const createdItemIds = new Map<string, string>();
+  let created = 0;
+
+  for (let i = 0; i < newItemsData.length; i += BATCH_SIZE) {
+    const batchData = newItemsData.slice(i, i + BATCH_SIZE);
+    const batchMeta = newItemsMeta.slice(i, i + BATCH_SIZE);
+    try {
+      await prisma.inventoryItem.createMany({ data: batchData as any[] });
+      const batchSerials = batchMeta.map(m => m.sn);
+      const fetched = await prisma.inventoryItem.findMany({
+        where: { serialNumber: { in: batchSerials } },
+        select: { id: true, serialNumber: true },
+      });
+      for (const f of fetched) {
+        createdItemIds.set(f.serialNumber, f.id);
+      }
+      created += batchData.length;
+    } catch (batchErr: any) {
+      // Fallback one-by-one
+      for (let j = 0; j < batchData.length; j++) {
+        try {
+          const itemRes = await prisma.inventoryItem.create({ data: batchData[j] as any });
+          createdItemIds.set(batchMeta[j].sn, itemRes.id);
+          created++;
+        } catch (singleErr: any) {
+          errors.push(`${prefix}Row ${batchMeta[j].rowNum}: Failed to create item "${batchMeta[j].sn}" - ${singleErr?.message ?? "Error"}`);
+        }
+      }
+    }
+  }
+
+  // Build assignment records for both new and existing items (where employeeName is present)
   const allAssignments: Record<string, unknown>[] = [];
+  for (const item of newItems) {
+    const sn = String(item.data.serialNumber ?? "").trim();
+    const itemId = createdItemIds.get(sn);
+    if (itemId && item.data.employeeName && String(item.data.employeeName).trim()) {
+      allAssignments.push(buildAssignmentRecord(itemId, item.data));
+    }
+  }
   for (const item of existingRows) {
-    if (!item.data.employeeName || !String(item.data.employeeName).trim()) continue;
-    allAssignments.push(buildAssignmentRecord(item.itemId, item.data));
+    if (item.data.employeeName && String(item.data.employeeName).trim()) {
+      allAssignments.push(buildAssignmentRecord(item.itemId, item.data));
+    }
   }
 
   // Batch insert all assignment records
@@ -1276,5 +1360,5 @@ async function handleUploadMode(
     }
   }
 
-  return { created: 0, updated, mapped, notFound };
+  return { created, updated, mapped, notFound: 0 };
 }
