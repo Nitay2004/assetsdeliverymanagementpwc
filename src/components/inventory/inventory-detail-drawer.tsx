@@ -86,10 +86,16 @@ interface InventoryItem {
   csvStatus: string | null;
 }
 
+// Only genuine ISO date strings ("2026-10-15", "2026-10-15T…") are formatted as
+// dates. Anything else must be shown verbatim — `new Date("8")` / `new Date("122001")`
+// happily parse to 2001-08-01 / 122001-01-01, which used to turn short values like
+// Tier, TAT, Docket Number, DC and Pin Code into bogus dates.
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(?:$|[T ])/;
+
 function formatValue(v: unknown): string {
   if (v === null || v === undefined) return "—";
   if (v instanceof Date) return v.toLocaleDateString("en-CA");
-  if (typeof v === "string") {
+  if (typeof v === "string" && ISO_DATE_RE.test(v.trim())) {
     const d = new Date(v);
     if (!isNaN(d.getTime())) return d.toLocaleDateString("en-CA");
   }
@@ -795,7 +801,7 @@ export function InventoryDetailDrawer({
                   const fieldName = toFieldName(field.label);
                   const value = getValue(displayItem, fieldName);
                   const isStatus = fieldName === "status" || fieldName === "trackingStatus";
-                  if (fieldName === "podDocumentUrl") {
+                  if (fieldName === "podDocument" || fieldName === "podDocumentUrl") {
                     return (
                       <div key={fieldName} className="flex items-start gap-3">
                         <span className="text-xs text-muted-foreground w-36 shrink-0 pt-0.5">
