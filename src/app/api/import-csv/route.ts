@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { toDenseRow, toDenseRows } from "@/lib/sheet-cells";
 import { normalizeOdaLocation } from "@/lib/location-utils";
 import { calculateSlaStatus } from "@/lib/sla-utils";
+import { formatExcelTime } from "@/lib/excel-time";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
@@ -565,6 +566,11 @@ const intFields = new Set([
   "invoicedQuantity",
 ]);
 
+// Time-only columns: Excel hands these over as a day fraction (see formatExcelTime).
+const timeFields = new Set([
+  "emailReceivedHour",
+]);
+
 const validStatuses = new Set([
   "NEW", "AVAILABLE", "ALLOCATED", "DEFECTIVE", "RETIRED",
 ]);
@@ -699,6 +705,9 @@ function parseValue(value: string, field: string): unknown {
   if (field === "status") {
     const upper = value.toUpperCase();
     return validStatuses.has(upper) ? upper : null;
+  }
+  if (timeFields.has(field)) {
+    return formatExcelTime(value);
   }
   return value;
 }

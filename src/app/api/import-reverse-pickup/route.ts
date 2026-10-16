@@ -10,6 +10,7 @@ import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
 import { resolveStatus } from "@/lib/reverse-pickup-status";
 import { nextSequenceNumber } from "@/lib/sequence-number";
 import { toDenseRow, toDenseRows } from "@/lib/sheet-cells";
+import { formatExcelTime } from "@/lib/excel-time";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
@@ -232,6 +233,11 @@ const intFields = new Set([
   "year",
 ]);
 
+// Time-only columns: Excel hands these over as a day fraction (see formatExcelTime).
+const timeFields = new Set([
+  "emailReceivedHour",
+]);
+
 function excelSerialToDate(serial: number): Date {
   return new Date((serial - 25569) * 86400000);
 }
@@ -252,6 +258,9 @@ function parseValue(value: string, field: string): unknown {
   }
   if (field === "status") {
     return resolveStatus(value) ?? null;
+  }
+  if (timeFields.has(field)) {
+    return formatExcelTime(value);
   }
   return value;
 }
