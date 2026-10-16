@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { calculateCutoff } from "@/lib/cutoff-utils";
 import { calculateZone, calculateTier, calculateTatDays, calculateExpectedDeliveryDate } from "@/lib/location-utils";
 import { calculateSlaStatus } from "@/lib/sla-utils";
+import { inventoryStatusLabel, inventoryStatusStyle } from "@/lib/inventory-status";
 
 interface Props {
   open: boolean;
@@ -362,13 +363,8 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
                         <p className="font-semibold text-sm">{foundItem.serialNumber}</p>
                         <p className="text-xs text-muted-foreground">{foundItem.model}</p>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        foundItem.status === "AVAILABLE" ? "bg-green-100 text-green-700" :
-                        foundItem.status === "ALLOCATED" ? "bg-blue-100 text-blue-700" :
-                        foundItem.status === "NEW" ? "bg-purple-100 text-purple-700" :
-                        "bg-slate-100 text-slate-700"
-                      }`}>
-                        {foundItem.status}
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${inventoryStatusStyle(foundItem.status)}`}>
+                        {inventoryStatusLabel(foundItem.status)}
                       </span>
                     </div>
                     {foundItem.employeeName && (
@@ -505,12 +501,8 @@ export function AssignUserModal({ open, onClose, mode }: Props) {
                               <td className="px-3 py-2.5 font-medium">{item.serialNumber}</td>
                               <td className="px-3 py-2.5 text-muted-foreground">{item.model}</td>
                               <td className="px-3 py-2.5">
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  item.status === "AVAILABLE" ? "bg-green-100 text-green-700" :
-                                  item.status === "NEW" ? "bg-purple-100 text-purple-700" :
-                                  "bg-slate-100 text-slate-700"
-                                }`}>
-                                  {item.status}
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${inventoryStatusStyle(item.status)}`}>
+                                  {inventoryStatusLabel(item.status)}
                                 </span>
                               </td>
                               <td className="px-3 py-2.5 text-muted-foreground">{item.invoicingWarehouse || "—"}</td>

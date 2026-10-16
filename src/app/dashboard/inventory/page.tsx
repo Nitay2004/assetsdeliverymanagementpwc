@@ -4,6 +4,7 @@ import { InventoryTable } from "@/components/inventory/inventory-table";
 import { InventoryHeader } from "@/components/inventory/inventory-header";
 import { InventoryStatCards } from "@/components/inventory/inventory-stat-cards";
 import { parseColumnFilters, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
+import { DEPLOYED_STATUSES } from "@/lib/inventory-status";
 import type { Prisma, InventoryStatus } from "@prisma/client";
 
 const INVENTORY_FILTER_KEYS = ["serialNumber", "model", "status", "invoicingWarehouse", "employeeName", "trackingStatus"];
@@ -62,9 +63,9 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     }),
     prisma.inventoryItem.count({ where }),
-    prisma.inventoryItem.count({ where: { status: "NEW" } }),
-    prisma.inventoryItem.count({ where: { status: "AVAILABLE" } }),
-    prisma.inventoryItem.count({ where: { status: "ALLOCATED" } }),
+    prisma.inventoryItem.count({ where: { status: "PROVISION_PENDING" } }),
+    prisma.inventoryItem.count({ where: { status: "ASSET_RETURN_TO_WAREHOUSE" } }),
+    prisma.inventoryItem.count({ where: { status: { in: DEPLOYED_STATUSES } } }),
     prisma.inventoryItem.count({ where: { status: "QC_PENDING" } }),
   ]);
 

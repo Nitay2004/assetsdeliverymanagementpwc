@@ -10,6 +10,7 @@ import { normalizeOdaLocation } from "@/lib/location-utils";
 import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
 import { nextSequenceNumber } from "@/lib/sequence-number";
 import { hasPriorDelivery } from "@/app/actions/assignment";
+import { isDeployedStatus } from "@/lib/inventory-status";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -132,7 +133,7 @@ export async function getReversePickupRequest(id: string) {
 // ─── Reverse pickup eligibility ───
 //
 // A reverse pickup may only be raised for an asset that is actually out with a
-// user (ALLOCATED) and has delivery evidence, and only while no other request
+// user (deployed) and has delivery evidence, and only while no other request
 // for the same serial is still open. This is the single source of truth for
 // those rules: the create action and the form's live inline check both go
 // through it, so the reason shown to the operator is exactly the reason the
@@ -191,10 +192,11 @@ async function getReversePickupBlockReasons(serials: string[]): Promise<Map<stri
       continue;
     }
 
-    // Only an asset that is out with a user (ALLOCATED) may be picked up.
-    // Anything still in inventory — NEW/AVAILABLE/QC_PENDING/DEFECTIVE/RETIRED —
-    // is in our hands or in provisioning, so there is nothing to collect.
-    if (inventoryItem.status !== "ALLOCATED") {
+    // Only an asset that is out with a user (Shipped to User / Asset Redeployed)
+    // may be picked up. Anything still in inventory — Provision Pending /
+    // Asset Return to Warehouse / QC_PENDING / DEFECTIVE / RETIRED — is in our
+    // hands or in provisioning, so there is nothing to collect.
+    if (!isDeployedStatus(inventoryItem.status)) {
       blocked.set(
         serial,
         `Asset is in inventory (status: ${inventoryItem.status.toLowerCase().replace(/_/g, " ")}), not deployed to a user. Reverse pickup can only be raised for an asset that is deployed and delivered.`
@@ -551,7 +553,7 @@ async function restockInventoryItem(tx: Prisma.TransactionClient, inventoryItem:
   await tx.inventoryItem.update({
     where: { id: inventoryItem.id },
     data: {
-      status: "AVAILABLE",
+      status: "ASSET_RETURN_TO_WAREHOUSE",
       trackingStatus: null,
       trackingSubStatus: null,
       employeeName: null,
@@ -618,7 +620,7 @@ export async function receiveAtWarehouse(formData: FormData) {
       : await tx.inventoryItem.findUnique({ where: { serialNumber: current.serialNumber } });
 
     // Inward = unit is back in our hands: the current user moves to assignment
-    // history and the serial becomes AVAILABLE stock again.
+    // history and the serial becomes warehouse stock again.
     if (item) {
       await restockInventoryItem(tx, item);
     }

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { getInventoryByStatus } from "@/app/actions/dashboard";
+import { inventoryStatusLabel } from "@/lib/inventory-status";
 
 interface Props {
   open: boolean;
@@ -90,7 +91,7 @@ export function InventoryStatusTableModal({ open, onClose, title, status, icon, 
                     <td className="px-4 py-3 text-muted-foreground">{item.model}</td>
                     <td className="px-4 py-3">
                       <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
-                        {item.status}
+                        {inventoryStatusLabel(item.status)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{item.employeeName || "—"}</td>

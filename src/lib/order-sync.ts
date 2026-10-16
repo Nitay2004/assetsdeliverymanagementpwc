@@ -39,7 +39,7 @@ export async function syncOrderTrackingStatus(orderId: string, orderStatus: stri
   const itemIds = assets.map(a => a.inventoryItemId).filter(Boolean) as string[];
   if (itemIds.length === 0) return;
 
-  // RTO item received back at the warehouse → return to stock (AVAILABLE)
+  // RTO item received back at the warehouse → return to stock
   if (orderStatus === "RTO_DELIVERED_TO_WAREHOUSE") {
     const items = await prisma.inventoryItem.findMany({ where: { id: { in: itemIds } } });
 
@@ -81,7 +81,7 @@ export async function syncOrderTrackingStatus(orderId: string, orderStatus: stri
     await prisma.inventoryItem.updateMany({
       where: { id: { in: itemIds } },
       data: {
-        status: "AVAILABLE",
+        status: "ASSET_RETURN_TO_WAREHOUSE",
         trackingStatus: null,
         trackingSubStatus: null,
         employeeName: null,

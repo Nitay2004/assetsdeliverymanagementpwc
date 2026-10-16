@@ -9,6 +9,7 @@ import { syncOrderTrackingStatus } from "@/lib/order-sync";
 import { hasPriorDelivery } from "@/app/actions/assignment";
 import { calculateZone, calculateTier, calculateTatDays, calculateExpectedDeliveryDate, normalizeOdaLocation } from "@/lib/location-utils";
 import { calculateSlaStatus } from "@/lib/sla-utils";
+import { DEPLOYED_STATUSES, deployedStatus, isDeployedStatus } from "@/lib/inventory-status";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -57,7 +58,7 @@ export async function addInventoryItem(formData: FormData) {
   const trackingValue = rawTrackingStatus?.toLowerCase() || "";
   const isDelivered = trackingValue.includes("delivered") || trackingValue.includes("confirmed") || trackingValue.includes("dispatched") || trackingValue.includes("invoiced") || trackingValue.includes("payment") || trackingValue.includes("warranty");
   const hasEmployee = !!(formData.get("employeeName") as string);
-  const effectiveStatus = isDelivered || hasEmployee ? "ALLOCATED" : "NEW";
+  const effectiveStatus = isDelivered || hasEmployee ? "SHIPPED_TO_USER" : "PROVISION_PENDING";
   const slaFallback: Date | null = null;
 
   try {
@@ -165,11 +166,11 @@ export async function updateInventoryItem(id: string, formData: FormData) {
   const clearingUser = !!current?.employeeName && !newEmployeeName;
 
   let effectiveStatus = current?.status;
-  if (clearingUser && effectiveStatus === "ALLOCATED") {
+  if (clearingUser && isDeployedStatus(effectiveStatus)) {
     // No user left on the item — it is back in stock, not allocated.
-    effectiveStatus = "AVAILABLE";
-  } else if (isDelivered && effectiveStatus === "AVAILABLE") {
-    effectiveStatus = "ALLOCATED";
+    effectiveStatus = "ASSET_RETURN_TO_WAREHOUSE";
+  } else if (isDelivered && effectiveStatus === "ASSET_RETURN_TO_WAREHOUSE") {
+    effectiveStatus = deployedStatus(current?.status);
   }
   const slaFallback = current?.expectedDeliveryDate ?? null;
   // Actual Delivery Date is stamped by the delivery flow, never typed in the form.
@@ -356,7 +357,7 @@ export async function returnItemToStock(id: string) {
   await prisma.inventoryItem.update({
     where: { id },
     data: {
-      status: "AVAILABLE",
+      status: "ASSET_RETURN_TO_WAREHOUSE",
       trackingStatus: null,
       trackingSubStatus: null,
       employeeName: null,
@@ -390,7 +391,7 @@ export async function cancelItemAssignment(id: string) {
 
   const existing = await prisma.inventoryItem.findUnique({ where: { id } });
   if (!existing) throw new Error("Item not found.");
-  if (existing.status !== "ALLOCATED") throw new Error("Only allocated items can be cancelled.");
+  if (!isDeployedStatus(existing.status)) throw new Error("Only allocated items can be cancelled.");
 
   await prisma.$transaction(async (tx) => {
     if (existing.employeeName) {
@@ -424,7 +425,7 @@ export async function cancelItemAssignment(id: string) {
     await tx.inventoryItem.update({
       where: { id },
       data: {
-        status: "AVAILABLE",
+        status: "ASSET_RETURN_TO_WAREHOUSE",
         trackingStatus: "Shipment Cancelled",
         trackingSubStatus: null,
         employeeName: null,
@@ -761,7 +762,7 @@ export async function reassignItem(id: string, formData: FormData) {
     await prisma.inventoryItem.update({
       where: { id },
       data: {
-        status: "ALLOCATED",
+        status: "SHIPPED_TO_USER",
         trackingStatus: "Order Placed",
         ...assignmentFields,
       },
@@ -800,7 +801,7 @@ export async function sendToWarehouse(inventoryItemIds: string[]) {
   requirePermission(user, "inventory", "canCreate");
 
   const items = await prisma.inventoryItem.findMany({
-    where: { id: { in: inventoryItemIds }, status: { in: ["AVAILABLE", "ALLOCATED"] } },
+    where: { id: { in: inventoryItemIds }, status: { in: ["ASSET_RETURN_TO_WAREHOUSE", ...DEPLOYED_STATUSES] } },
   });
 
   if (items.length === 0) {
@@ -847,11 +848,14 @@ export async function sendToWarehouse(inventoryItemIds: string[]) {
     })),
   });
 
-  // Update InventoryItems to ALLOCATED
-  await prisma.inventoryItem.updateMany({
-    where: { id: { in: items.map(i => i.id) } },
-    data: { status: "ALLOCATED" },
-  });
+  // Mark the items as deployed to a user. A brand-new asset's first dispatch is
+  // "Shipped to User"; anything that has been out before is a redeployment.
+  for (const item of items) {
+    await prisma.inventoryItem.update({
+      where: { id: item.id },
+      data: { status: deployedStatus(item.status) },
+    });
+  }
 
   await syncOrderTrackingStatus(order.id, "ORDER_PLACED");
 
@@ -867,13 +871,13 @@ export async function fixInventoryStatusConsistency() {
   requirePermission(user, "inventory", "canEdit");
 
   const r1 = await prisma.inventoryItem.updateMany({
-    where: { status: "AVAILABLE", employeeName: { not: null } },
-    data: { status: "ALLOCATED" },
+    where: { status: "ASSET_RETURN_TO_WAREHOUSE", employeeName: { not: null } },
+    data: { status: "ASSET_REDEPLOYED" },
   });
 
   const r2 = await prisma.inventoryItem.updateMany({
     where: {
-      status: "AVAILABLE",
+      status: "ASSET_RETURN_TO_WAREHOUSE",
       OR: [
         { trackingStatus: { contains: "Delivered", mode: "insensitive" } },
         { trackingStatus: { contains: "Dispatched", mode: "insensitive" } },
@@ -881,15 +885,15 @@ export async function fixInventoryStatusConsistency() {
         { trackingStatus: { contains: "Allocated", mode: "insensitive" } },
       ],
     },
-    data: { status: "ALLOCATED" },
+    data: { status: "ASSET_REDEPLOYED" },
   });
 
   const r3 = await prisma.inventoryItem.updateMany({
     where: {
-      status: "AVAILABLE",
+      status: "ASSET_RETURN_TO_WAREHOUSE",
       assets: { some: { status: "allocated" } },
     },
-    data: { status: "ALLOCATED" },
+    data: { status: "ASSET_REDEPLOYED" },
   });
 
   const total = r1.count + r2.count + r3.count;

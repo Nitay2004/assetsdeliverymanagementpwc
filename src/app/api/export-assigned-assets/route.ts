@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { canViewModule } from "@/lib/permissions";
+import { DEPLOYED_STATUSES } from "@/lib/inventory-status";
 import * as XLSX from "xlsx";
 
 const columns: { label: string; field: string }[] = [
@@ -102,7 +103,7 @@ export async function GET() {
   }
 
   const items = await prisma.inventoryItem.findMany({
-    where: { status: "ALLOCATED" },
+    where: { status: { in: DEPLOYED_STATUSES } },
     include: {
       assignmentRecords: {
         orderBy: { assignedAt: "desc" },

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Package, ShieldCheck, Laptop, Database, ClipboardCheck } from "lucide-react";
 import { InventoryStatusTableModal } from "./inventory-status-table-modal";
+import { INVENTORY_STATUS_LABELS } from "@/lib/inventory-status";
 
 interface Props {
   totalCount: number;
@@ -16,7 +17,7 @@ interface Props {
 const CARD_BASE = "p-6 rounded-xl glass shadow-sm flex flex-col gap-2";
 
 export function InventoryStatCards({ totalCount, newCount, availableCount, qcPendingCount, allocatedCount }: Props) {
-  const [modal, setModal] = useState<"NEW" | "AVAILABLE" | "QC_PENDING" | null>(null);
+  const [modal, setModal] = useState<"PROVISION_PENDING" | "ASSET_RETURN_TO_WAREHOUSE" | "QC_PENDING" | null>(null);
   const router = useRouter();
 
   const card = (icon: React.ReactNode, label: string, value: number, colorClass: string, onClick?: () => void) => (
@@ -38,25 +39,25 @@ export function InventoryStatCards({ totalCount, newCount, availableCount, qcPen
     <>
       <div className="grid gap-6 sm:grid-cols-5 mt-8">
         {card(<Package className="size-4" />, "Total Stock", totalCount, "text-primary")}
-        {card(<Database className="size-4" />, "New", newCount, "text-purple-600", () => setModal("NEW"))}
-        {card(<ShieldCheck className="size-4" />, "Available", availableCount, "text-primary", () => setModal("AVAILABLE"))}
+        {card(<Database className="size-4" />, "Provision Pending", newCount, "text-purple-600", () => setModal("PROVISION_PENDING"))}
+        {card(<ShieldCheck className="size-4" />, "Asset Return to Warehouse", availableCount, "text-primary", () => setModal("ASSET_RETURN_TO_WAREHOUSE"))}
         {card(<ClipboardCheck className="size-4" />, "QC Pending", qcPendingCount, "text-amber-600", () => setModal("QC_PENDING"))}
-        {card(<Laptop className="size-4" />, "Allocated", allocatedCount, "text-primary", () => router.push("/dashboard/assigned-assets"))}
+        {card(<Laptop className="size-4" />, "Deployed", allocatedCount, "text-primary", () => router.push("/dashboard/assigned-assets"))}
       </div>
 
       <InventoryStatusTableModal
-        open={modal === "NEW"}
+        open={modal === "PROVISION_PENDING"}
         onClose={() => setModal(null)}
-        title="New Laptops"
-        status="NEW"
+        title={`${INVENTORY_STATUS_LABELS.PROVISION_PENDING} Laptops`}
+        status="PROVISION_PENDING"
         icon={<Database className="size-5 text-purple-600" />}
         iconBg="bg-purple-100"
       />
       <InventoryStatusTableModal
-        open={modal === "AVAILABLE"}
+        open={modal === "ASSET_RETURN_TO_WAREHOUSE"}
         onClose={() => setModal(null)}
-        title="Available Laptops"
-        status="AVAILABLE"
+        title={`${INVENTORY_STATUS_LABELS.ASSET_RETURN_TO_WAREHOUSE} Laptops`}
+        status="ASSET_RETURN_TO_WAREHOUSE"
         icon={<ShieldCheck className="size-5 text-primary" />}
         iconBg="bg-blue-100"
       />

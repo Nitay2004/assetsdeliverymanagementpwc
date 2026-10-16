@@ -5,6 +5,7 @@ import { parse } from "csv-parse/sync";
 import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 import { toDenseRow, toDenseRows } from "@/lib/sheet-cells";
+import { isDeployedStatus } from "@/lib/inventory-status";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
@@ -345,7 +346,7 @@ export async function POST(request: Request) {
       const data: Record<string, any> = {
         serialNumber: sn,
         model,
-        status: "AVAILABLE",
+        status: "ASSET_RETURN_TO_WAREHOUSE",
       };
       if (row.partNo) data.partNo = row.partNo;
       if (row.specs) data.specs = row.specs;
@@ -406,8 +407,8 @@ export async function POST(request: Request) {
       errors.push(`Row ${row.rowNum}: Serial number "${row.serialNumber}" not found in inventory — skipped`);
       continue;
     }
-    if (inv.status !== "AVAILABLE" && inv.status !== "ALLOCATED") {
-      errors.push(`Row ${row.rowNum}: "${row.serialNumber}" has status "${inv.status}" (must be AVAILABLE or ALLOCATED) — skipped`);
+    if (inv.status !== "ASSET_RETURN_TO_WAREHOUSE" && !isDeployedStatus(inv.status)) {
+      errors.push(`Row ${row.rowNum}: "${row.serialNumber}" has status "${inv.status}" (must be an in-warehouse or deployed asset) — skipped`);
       continue;
     }
 
@@ -459,7 +460,7 @@ export async function POST(request: Request) {
     const inventoryIds = group.serialNumbers.map(sn => sn.inventoryItemId);
     await prisma.inventoryItem.updateMany({
       where: { id: { in: inventoryIds } },
-      data: { status: "ALLOCATED" },
+      data: { status: "ASSET_REDEPLOYED" },
     });
 
     if (group.warehouseLocation) {

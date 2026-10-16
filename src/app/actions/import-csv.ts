@@ -139,7 +139,8 @@ const intFields = new Set([
 ]);
 
 const validStatuses = new Set([
-  "NEW", "AVAILABLE", "ALLOCATED", "DEFECTIVE", "RETIRED",
+  "PROVISION_PENDING", "SHIPPED_TO_USER", "ASSET_REDEPLOYED",
+  "ASSET_RETURN_TO_WAREHOUSE", "DEFECTIVE", "RETIRED",
 ]);
 
 function excelSerialToDate(serial: number): Date {
@@ -322,9 +323,9 @@ export async function importInventoryCSV(formData: FormData) {
         const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
         const hasEntity = cleanData.entity && String(cleanData.entity).trim() !== "";
         if (!cleanData.status) {
-          cleanData.status = hasEmployee ? "ALLOCATED" : hasEntity ? "AVAILABLE" : "NEW";
-        } else if (cleanData.status === "AVAILABLE" && !hasEntity) {
-          cleanData.status = "NEW";
+          cleanData.status = hasEmployee ? "SHIPPED_TO_USER" : hasEntity ? "ASSET_RETURN_TO_WAREHOUSE" : "PROVISION_PENDING";
+        } else if (cleanData.status === "ASSET_RETURN_TO_WAREHOUSE" && !hasEntity) {
+          cleanData.status = "PROVISION_PENDING";
         }
         const created = await prisma.inventoryItem.create({ data: cleanData as any });
         itemId = created.id;

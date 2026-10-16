@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { DEPLOYED_STATUSES } from "@/lib/inventory-status";
 import type { OrderStatus, ReversePickupStatus, InventoryStatus, Prisma } from "@prisma/client";
 
 export interface TableOrderData {
@@ -248,7 +249,7 @@ export async function getInventoryItemsByTrackingKeywords(
   ]);
 
   const where: Prisma.InventoryItemWhereInput = {
-    status: "ALLOCATED",
+    status: { in: DEPLOYED_STATUSES },
     OR: orConditions,
   };
 

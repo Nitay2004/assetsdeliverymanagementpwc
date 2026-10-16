@@ -116,7 +116,7 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
       take: limit,
     }),
     prisma.inventoryItem.findMany({
-      where: { status: "AVAILABLE" },
+      where: { status: "ASSET_RETURN_TO_WAREHOUSE" },
       orderBy: [{ serialNumber: "asc" }, { id: "asc" }],
     }),
   ]);

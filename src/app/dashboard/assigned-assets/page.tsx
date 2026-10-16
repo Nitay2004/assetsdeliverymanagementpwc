@@ -3,6 +3,7 @@ import { Users, Laptop, MapPin } from "lucide-react";
 import { AssignedAssetsTable } from "@/components/assigned-assets/assigned-assets-table";
 import { AssignedAssetsExportButton } from "@/components/assigned-assets/assigned-assets-export-button";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
+import { DEPLOYED_STATUSES } from "@/lib/inventory-status";
 import type { Prisma } from "@prisma/client";
 
 const ASSIGNED_FILTER_KEYS = ["serialNumber", "model", "employeeName", "emailId", "purpose", "trackingStatus", "location"];
@@ -30,7 +31,7 @@ export default async function AssignedAssetsPage(props: {
   const skip = (page - 1) * pageSize;
   const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
 
-  const baseWhere: Prisma.InventoryItemWhereInput = { status: "ALLOCATED" };
+  const baseWhere: Prisma.InventoryItemWhereInput = { status: { in: DEPLOYED_STATUSES } };
   const where: Prisma.InventoryItemWhereInput = search
     ? {
         ...baseWhere,
@@ -112,13 +113,13 @@ export default async function AssignedAssetsPage(props: {
   const [uniqueEmployees, modelBreakdown] =
     await Promise.all([
       prisma.inventoryItem.findMany({
-        where: { status: "ALLOCATED" },
+        where: { status: { in: DEPLOYED_STATUSES } },
         select: { employeeName: true },
         distinct: ["employeeName"],
       }),
       prisma.inventoryItem.groupBy({
         by: ["model"],
-        where: { status: "ALLOCATED" },
+        where: { status: { in: DEPLOYED_STATUSES } },
         _count: { id: true },
         orderBy: [{ _count: { id: "desc" } }, { _max: { createdAt: "desc" } }],
         take: 5,

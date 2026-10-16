@@ -10,6 +10,7 @@ import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
 import { resolveStatus } from "@/lib/reverse-pickup-status";
 import { nextSequenceNumber } from "@/lib/sequence-number";
 import { toDenseRow, toDenseRows } from "@/lib/sheet-cells";
+import { isDeployedStatus } from "@/lib/inventory-status";
 import { formatExcelTime } from "@/lib/excel-time";
 
 function normalize(s: string): string {
@@ -597,7 +598,7 @@ export async function POST(request: Request) {
         errors.push(`Row ${row.rowNum}: Skipped - "${sn}" already has an open reverse pickup request`);
         continue;
       }
-      if (item.status !== "ALLOCATED") {
+      if (!isDeployedStatus(item.status)) {
         errors.push(`Row ${row.rowNum}: Skipped - "${sn}" is in inventory (${item.status}), not deployed`);
         continue;
       }

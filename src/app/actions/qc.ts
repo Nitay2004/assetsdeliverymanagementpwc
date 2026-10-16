@@ -75,8 +75,8 @@ export async function sendToQc(id: string, formData: FormData) {
 
   const existing = await prisma.inventoryItem.findUnique({ where: { id } });
   if (!existing) throw new Error("Item not found.");
-  if (existing.status !== "AVAILABLE") {
-    throw new Error("Only items with AVAILABLE status can be sent for QC.");
+  if (existing.status !== "ASSET_RETURN_TO_WAREHOUSE") {
+    throw new Error("Only items returned to the warehouse can be sent for QC.");
   }
 
   // QC (Clean & Purge) is only for laptops that were delivered to a user and returned.

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { deployedStatus } from "@/lib/inventory-status";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/lib/order-sync";
@@ -31,11 +32,19 @@ export async function allocateInventoryToOrder(
     )
   );
 
-  // Mark inventory items as ALLOCATED
-  await prisma.inventoryItem.updateMany({
+  // Mark inventory items as deployed to a user. A brand-new asset's first
+  // dispatch is "Shipped to User"; anything that has been out before is a
+  // redeployment.
+  const selected = await prisma.inventoryItem.findMany({
     where: { id: { in: inventoryItemIds } },
-    data: { status: "ALLOCATED", trackingStatus: "Allocated" },
+    select: { id: true, status: true },
   });
+  for (const item of selected) {
+    await prisma.inventoryItem.update({
+      where: { id: item.id },
+      data: { status: deployedStatus(item.status), trackingStatus: "Allocated" },
+    });
+  }
 
   revalidatePath("/dashboard/warehouse");
   revalidatePath("/dashboard/inventory");

@@ -572,16 +572,18 @@ const timeFields = new Set([
 ]);
 
 const validStatuses = new Set([
-  "NEW", "AVAILABLE", "ALLOCATED", "DEFECTIVE", "RETIRED",
+  "PROVISION_PENDING", "SHIPPED_TO_USER", "ASSET_REDEPLOYED",
+  "ASSET_RETURN_TO_WAREHOUSE", "DEFECTIVE", "RETIRED",
 ]);
 
 // The provisioning file carries the real business state in "Master Provision Status-1 NEW"
 // (processStatus). Derive the system `status` from it so dashboard counts match reality:
 // - Lost devices → DEFECTIVE
-// - Deployed (shipped / redeployed / reallocated) or has a user → ALLOCATED
-// - Returned to warehouse → AVAILABLE (physical stock)
-// - Registered to an entity → AVAILABLE
-// - Otherwise (no entity, not deployed) → NEW
+// - Shipped to a user for the first time → SHIPPED_TO_USER
+// - Redeployed / reallocated, or has a user → ASSET_REDEPLOYED
+// - Returned to warehouse → ASSET_RETURN_TO_WAREHOUSE (physical stock)
+// - Registered to an entity → ASSET_RETURN_TO_WAREHOUSE
+// - Otherwise (no entity, not deployed) → PROVISION_PENDING
 function deriveStatus(
   processStatus: string | null | undefined,
   hasEmployee: boolean,
@@ -589,19 +591,16 @@ function deriveStatus(
 ): string {
   const v = (processStatus ?? "").toLowerCase();
   if (v.includes("lost")) return "DEFECTIVE";
-  if (
-    v.includes("shipped to the user") ||
-    v.includes("shipped to user") ||
-    v.includes("redeploy") ||
-    v.includes("reallocat") ||
-    hasEmployee
-  ) {
-    return "ALLOCATED";
+  if (v.includes("shipped to the user") || v.includes("shipped to user")) {
+    return "SHIPPED_TO_USER";
+  }
+  if (v.includes("redeploy") || v.includes("reallocat") || hasEmployee) {
+    return "ASSET_REDEPLOYED";
   }
   if (v.includes("return to warehouse") || v.includes("returned to warehouse")) {
-    return "AVAILABLE";
+    return "ASSET_RETURN_TO_WAREHOUSE";
   }
-  return hasEntity ? "AVAILABLE" : "NEW";
+  return hasEntity ? "ASSET_RETURN_TO_WAREHOUSE" : "PROVISION_PENDING";
 }
 
 function excelSerialToDate(serial: number): Date {
@@ -1304,9 +1303,9 @@ async function handleUploadMode(
     const hasEmployee = cleanData.employeeName && String(cleanData.employeeName).trim() !== "";
     const hasEntity = cleanData.entity && String(cleanData.entity).trim() !== "";
     if (!cleanData.status) {
-      cleanData.status = hasEmployee ? "ALLOCATED" : hasEntity ? "AVAILABLE" : "NEW";
-    } else if (cleanData.status === "AVAILABLE" && !hasEntity) {
-      cleanData.status = "NEW";
+      cleanData.status = hasEmployee ? "SHIPPED_TO_USER" : hasEntity ? "ASSET_RETURN_TO_WAREHOUSE" : "PROVISION_PENDING";
+    } else if (cleanData.status === "ASSET_RETURN_TO_WAREHOUSE" && !hasEntity) {
+      cleanData.status = "PROVISION_PENDING";
     }
     newItemsData.push(cleanData);
     newItemsMeta.push({ sn, rowNum: item.rowNum });

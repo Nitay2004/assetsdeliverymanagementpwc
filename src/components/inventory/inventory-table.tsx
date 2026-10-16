@@ -10,6 +10,12 @@ import { InventoryDetailDrawer } from "./inventory-detail-drawer";
 import { SendToQcModal } from "./send-to-qc-modal";
 import { DataTableFilter, filterRows, UrlDataTableFilter } from "@/components/shared/data-table-filter";
 import { useColumnFilters, ColumnFilterHeader, type ColumnFilterConfig, type ColumnFilterValue } from "@/components/shared/column-filter";
+import { isDeployedStatus, inventoryStatusLabel, inventoryStatusStyle } from "@/lib/inventory-status";
+
+// An asset can be sent to the warehouse when it is in stock (returned to the
+// warehouse) or already deployed (a redeployment / reassignment).
+const isSendable = (status: string) =>
+  status === "ASSET_RETURN_TO_WAREHOUSE" || isDeployedStatus(status);
 
 const INVENTORY_COLUMNS: ColumnFilterConfig<InventoryItem>[] = [
   { key: "serialNumber", getValue: r => r.serialNumber },
@@ -206,7 +212,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
   }
 
   const toggleSelectAll = () => {
-    const sendableOnPage = items.filter(i => i.status === "AVAILABLE" || i.status === "ALLOCATED").map(i => i.id);
+    const sendableOnPage = items.filter(i => i.status === "ASSET_RETURN_TO_WAREHOUSE" || isDeployedStatus(i.status)).map(i => i.id);
     if (sendableOnPage.length === 0) return;
     
     const allSelected = sendableOnPage.every(id => selectedIds.has(id));
@@ -233,8 +239,8 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
   };
 
   const allSendableOnPageSelected = items.length > 0 && 
-    items.filter(i => i.status === "AVAILABLE" || i.status === "ALLOCATED").length > 0 &&
-    items.filter(i => i.status === "AVAILABLE" || i.status === "ALLOCATED").every(i => selectedIds.has(i.id));
+    items.filter(i => i.status === "ASSET_RETURN_TO_WAREHOUSE" || isDeployedStatus(i.status)).length > 0 &&
+    items.filter(i => i.status === "ASSET_RETURN_TO_WAREHOUSE" || isDeployedStatus(i.status)).every(i => selectedIds.has(i.id));
 
   const filteredItems = columnFiltered;
 
@@ -269,7 +275,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                   className="accent-primary size-4 rounded cursor-pointer"
                   checked={allSendableOnPageSelected}
                   onChange={toggleSelectAll}
-                  disabled={items.filter(i => i.status === "AVAILABLE" || i.status === "ALLOCATED").length === 0}
+                  disabled={items.filter(i => i.status === "ASSET_RETURN_TO_WAREHOUSE" || isDeployedStatus(i.status)).length === 0}
                   title="Select all available on this page"
                 />
               </th>
@@ -322,7 +328,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
               </tr>
             ) : (
               filteredItems.map(item => {
-                const canSend = item.status === "AVAILABLE" || item.status === "ALLOCATED";
+                const canSend = isSendable(item.status);
                 const isSelected = selectedIds.has(item.id);
 
                 return (
@@ -346,15 +352,8 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                   <td className="px-4 py-4 font-medium whitespace-nowrap">{item.serialNumber}</td>
                   <td className="px-4 py-4 whitespace-nowrap">{item.model}</td>
                   <td className="px-4 py-4 whitespace-nowrap">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                      item.status === 'NEW' ? 'bg-purple-100 text-purple-700' :
-                      item.status === 'AVAILABLE' ? 'bg-green-100 text-green-700' :
-                      item.status === 'QC_PENDING' ? 'bg-amber-100 text-amber-700' :
-                      item.status === 'ALLOCATED' ? 'bg-blue-100 text-blue-700' :
-                      item.status === 'DEFECTIVE' ? 'bg-red-100 text-red-700' :
-                      'bg-slate-100 text-slate-700'
-                    }`}>
-                      {item.status === 'QC_PENDING' ? 'QC Pending' : item.status}
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${inventoryStatusStyle(item.status)}`}>
+                      {inventoryStatusLabel(item.status)}
                     </span>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-muted-foreground">
@@ -375,7 +374,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                      {item.status === "AVAILABLE" && (
+                      {item.status === "ASSET_RETURN_TO_WAREHOUSE" && (
                         <button
                           onClick={() => setQcItem(item)}
                           className="flex items-center gap-1.5 rounded-md bg-amber-50 text-amber-700 px-2.5 py-1 text-xs font-semibold hover:bg-amber-100 transition-colors"

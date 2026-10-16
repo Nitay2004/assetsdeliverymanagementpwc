@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
+import { deployedStatus } from "@/lib/inventory-status";
 import { revalidatePath } from "next/cache";
 
 export async function hasPriorDelivery(itemId: string, serialNumber: string): Promise<boolean> {
@@ -46,10 +47,15 @@ export async function markItemAllocated(id: string) {
   // parks it in the warehouse pending-allocation queue is created by Send to
   // Warehouse, so a bulk send never collides with an order that assignment
   // used to create on its own.
+  const current = await prisma.inventoryItem.findUnique({
+    where: { id },
+    select: { status: true },
+  });
+
   await prisma.inventoryItem.update({
     where: { id },
     data: {
-      status: "ALLOCATED",
+      status: deployedStatus(current?.status),
       trackingStatus: "Order Placed",
     },
   });

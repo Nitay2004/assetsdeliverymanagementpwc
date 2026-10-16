@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { getInventoryBySlaStatus } from "@/app/actions/dashboard";
+import { inventoryStatusLabel, inventoryStatusStyle } from "@/lib/inventory-status";
 
 interface Props {
   open: boolean;
@@ -90,8 +91,8 @@ export function InventorySlaModal({ open, onClose, title, icon, iconBg, slaValue
                     <td className="px-4 py-3">{item.model}</td>
                     <td className="px-4 py-3">{item.employeeName ?? <span className="text-xs text-muted-foreground italic">—</span>}</td>
                     <td className="px-4 py-3">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${item.status === "ALLOCATED" ? "bg-blue-100 text-blue-700" : item.status === "AVAILABLE" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
-                        {item.status}
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${inventoryStatusStyle(item.status)}`}>
+                        {inventoryStatusLabel(item.status)}
                       </span>
                     </td>
                     <td className="px-4 py-3">

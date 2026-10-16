@@ -63,7 +63,7 @@ export default function ImportProvisioningPage() {
       <div className="rounded-xl glass shadow-sm p-4 text-sm text-muted-foreground space-y-2">
         <p className="font-medium text-foreground">Required columns:</p>
         <p><span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">Delivery Location</span> — where the assets need to be delivered</p>
-        <p><span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">Serial Number</span> — inventory item serial number (must exist and be AVAILABLE or ALLOCATED)</p>
+        <p><span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">Serial Number</span> — inventory item serial number (must exist and be in the warehouse or already deployed to a user)</p>
         <p className="font-medium text-foreground mt-2">Optional columns:</p>
         <p><span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">Client Name</span>, <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">Warehouse Location</span>, <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">Provisioning Location</span>, <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">Engineer Name</span></p>
         <p className="text-xs mt-2">Rows with the same Client + Delivery Location are grouped into one order. Orders are automatically set to &quot;In Provisioning&quot; status.</p>

@@ -13,6 +13,7 @@ import { PincodeInput } from "@/components/shared/pincode-input";
 import { calculateCutoff } from "@/lib/cutoff-utils";
 import { calculateZone, calculateTier, calculateTatDays, calculateExpectedDeliveryDate } from "@/lib/location-utils";
 import { calculateSlaStatus } from "@/lib/sla-utils";
+import { isDeployedStatus, inventoryStatusLabel, inventoryStatusStyle } from "@/lib/inventory-status";
 
 interface InventoryItem {
   id: string;
@@ -354,7 +355,7 @@ export function InventoryDetailDrawer({
   async function handleReturnToStock() {
     const ok = await showAlert({
       title: "Return to stock?",
-      description: `Mark ${displayItem.serialNumber} as AVAILABLE. All assignment history is preserved.`,
+      description: `Mark ${displayItem.serialNumber} as returned to the warehouse. All assignment history is preserved.`,
       confirmLabel: "Return",
       cancelLabel: "Cancel",
     });
@@ -374,7 +375,7 @@ export function InventoryDetailDrawer({
   async function handleCancelAssignment() {
     const ok = await showAlert({
       title: "Cancel assignment?",
-      description: `Cancel ${displayItem.employeeName}'s assignment for ${displayItem.serialNumber}. The item will be marked AVAILABLE and the linked order will be cancelled. The assignment is saved to history as "Shipment Cancelled".`,
+      description: `Cancel ${displayItem.employeeName}'s assignment for ${displayItem.serialNumber}. The item will be marked as returned to the warehouse and the linked order will be cancelled. The assignment is saved to history as "Shipment Cancelled".`,
       confirmLabel: "Cancel Assignment",
       cancelLabel: "Back",
     });
@@ -516,13 +517,8 @@ export function InventoryDetailDrawer({
         <div className="px-6 py-4 space-y-6">
           {/* Status badge */}
           <div>
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-              displayItem.status === "NEW" ? "bg-purple-100 text-purple-700" :
-              displayItem.status === "AVAILABLE" ? "bg-green-100 text-green-700" :
-              displayItem.status === "ALLOCATED" ? "bg-blue-100 text-blue-700" :
-              "bg-red-100 text-red-700"
-            }`}>
-              {displayItem.status}
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${inventoryStatusStyle(displayItem.status)}`}>
+              {inventoryStatusLabel(displayItem.status)}
             </span>
           </div>
 
@@ -570,7 +566,7 @@ export function InventoryDetailDrawer({
           {/* Actions */}
           {isAdmin && (
             <div className="space-y-3">
-              {displayItem.status === "ALLOCATED" && (
+              {isDeployedStatus(displayItem.status) && (
                 <button
                   onClick={handleReturnToStock}
                   className="flex items-center gap-2 rounded-lg bg-amber-100 text-amber-800 px-3 py-2 text-sm font-medium hover:bg-amber-200 transition-colors w-full"
@@ -580,7 +576,7 @@ export function InventoryDetailDrawer({
                 </button>
               )}
 
-              {displayItem.status === "ALLOCATED" && displayItem.employeeName && (
+              {isDeployedStatus(displayItem.status) && displayItem.employeeName && (
                 <button
                   onClick={handleCancelAssignment}
                   className="flex items-center gap-2 rounded-lg bg-red-100 text-red-800 px-3 py-2 text-sm font-medium hover:bg-red-200 transition-colors w-full"
@@ -822,13 +818,10 @@ export function InventoryDetailDrawer({
                       {isStatus && value !== "—" ? (
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                           fieldName === "status"
-                            ? value === "NEW" ? "bg-purple-100 text-purple-700"
-                            : value === "AVAILABLE" ? "bg-green-100 text-green-700"
-                            : value === "ALLOCATED" ? "bg-blue-100 text-blue-700"
-                            : "bg-red-100 text-red-700"
+                            ? inventoryStatusStyle(String(value))
                             : statusColor(value)
                         }`}>
-                          {value}
+                          {fieldName === "status" ? inventoryStatusLabel(String(value)) : value}
                         </span>
                       ) : (
                         <span className="text-sm text-foreground font-medium break-words min-w-0">

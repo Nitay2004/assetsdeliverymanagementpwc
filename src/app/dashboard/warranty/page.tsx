@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { Shield, CheckCircle, AlertCircle } from "lucide-react";
 import { WarrantyItemTable } from "@/components/warranty/warranty-item-table";
 import { parseColumnFilters, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
+import { DEPLOYED_STATUSES } from "@/lib/inventory-status";
 import type { Prisma } from "@prisma/client";
 
 // The date columns are intentionally not filterable: their distinct values are
@@ -20,7 +21,7 @@ export default async function WarrantyPage(props: { searchParams: Promise<Record
   const limit = Math.min(100, Math.max(1, parseInt(typeof searchParams.limit === "string" ? searchParams.limit : "25", 10) || 25));
   const search = typeof searchParams.search === "string" ? searchParams.search.trim() : "";
 
-  const baseWhere: Prisma.InventoryItemWhereInput = { status: { in: ["ALLOCATED", "AVAILABLE"] } };
+  const baseWhere: Prisma.InventoryItemWhereInput = { status: { in: [...DEPLOYED_STATUSES, "ASSET_RETURN_TO_WAREHOUSE"] } };
   const filters = parseColumnFilters(searchParams, WARRANTY_FILTER_KEYS);
   const where: Prisma.InventoryItemWhereInput = { ...baseWhere };
   if (search) {

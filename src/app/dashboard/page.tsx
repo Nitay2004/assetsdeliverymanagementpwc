@@ -27,6 +27,7 @@ import { ReverseStatCard } from "@/components/dashboard/reverse-stat-card";
 import { CancelledReverseStatCard } from "@/components/dashboard/cancelled-reverse-stat-card";
 import { InventorySlaStatCard } from "@/components/dashboard/inventory-sla-stat-card";
 import { DashboardInventoryCards } from "@/components/dashboard/dashboard-inventory-cards";
+import { DEPLOYED_STATUSES } from "@/lib/inventory-status";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   ORDER_PLACED: { label: "Order Placed", color: "#eab308" },
@@ -94,7 +95,7 @@ export default async function DashboardPage(props: {
     }),
     prisma.asset.count({ where: { order: orderWhere } }),
     prisma.inventoryItem.count({
-      where: { ...(inventoryWhere ?? {}), status: "ALLOCATED", warrantyPeriod: null },
+      where: { ...(inventoryWhere ?? {}), status: { in: DEPLOYED_STATUSES }, warrantyPeriod: null },
     }),
     prisma.inventoryItem.groupBy({
       by: ["invoicingWarehouse"],
@@ -107,7 +108,7 @@ export default async function DashboardPage(props: {
       take: 5,
     }),
     prisma.inventoryItem.findMany({
-      where: { ...(inventoryWhere ?? {}), status: "ALLOCATED" },
+      where: { ...(inventoryWhere ?? {}), status: { in: DEPLOYED_STATUSES } },
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       take: 5,
     }),
@@ -128,7 +129,7 @@ export default async function DashboardPage(props: {
     }),
     prisma.inventoryItem.count({
       where: {
-        status: "ALLOCATED",
+        status: { in: DEPLOYED_STATUSES },
         OR: [
           { trackingStatus: { contains: "shipped to user", mode: "insensitive" } },
           { trackingStatus: { contains: "delivered", mode: "insensitive" } },
@@ -139,7 +140,7 @@ export default async function DashboardPage(props: {
     }),
     prisma.inventoryItem.count({
       where: {
-        status: "ALLOCATED",
+        status: { in: DEPLOYED_STATUSES },
         OR: [
           { trackingStatus: { contains: "in transit", mode: "insensitive" } },
           { trackingSubStatus: { contains: "in transit", mode: "insensitive" } },
@@ -148,7 +149,7 @@ export default async function DashboardPage(props: {
     }),
     prisma.inventoryItem.count({
       where: {
-        status: "ALLOCATED",
+        status: { in: DEPLOYED_STATUSES },
         OR: [
           { trackingStatus: { contains: "rto", mode: "insensitive" } },
           { trackingSubStatus: { contains: "rto", mode: "insensitive" } },
@@ -172,9 +173,9 @@ export default async function DashboardPage(props: {
   const rtoCount = (["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"] as OrderStatus[]).reduce((sum, s) => sum + orderStatusCount(s), 0) + rtoInventoryCount;
 
   const totalInventory = inventoryStatuses.reduce((sum, r) => sum + r._count._all, 0);
-  const newStock = inventoryStatusCount("NEW");
-  const availableStock = inventoryStatusCount("AVAILABLE");
-  const allocatedStock = inventoryStatusCount("ALLOCATED");
+  const newStock = inventoryStatusCount("PROVISION_PENDING");
+  const availableStock = inventoryStatusCount("ASSET_RETURN_TO_WAREHOUSE");
+  const allocatedStock = inventoryStatusCount("SHIPPED_TO_USER") + inventoryStatusCount("ASSET_REDEPLOYED");
 
   // Reverse Shipment stats
   const reverseStatusMap = new Map(reversePickupStatuses.map(r => [r.status, r._count._all]));

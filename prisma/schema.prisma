@@ -34,10 +34,11 @@ enum OrderStatus {
 }
 
 enum InventoryStatus {
-  NEW
-  AVAILABLE
+  PROVISION_PENDING
+  SHIPPED_TO_USER
+  ASSET_REDEPLOYED
+  ASSET_RETURN_TO_WAREHOUSE
   QC_PENDING
-  ALLOCATED
   DEFECTIVE
   RETIRED
 }
@@ -181,7 +182,7 @@ model InventoryItem {
   model                     String
   partNo                    String?         @map("part_no")
   specs                     String?
-  status                    InventoryStatus @default(AVAILABLE)
+  status                    InventoryStatus @default(ASSET_RETURN_TO_WAREHOUSE)
   partner                   String?
   sr                        Int?
   entity                    String?

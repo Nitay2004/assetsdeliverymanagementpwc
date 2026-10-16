@@ -9,7 +9,7 @@ export async function GET() {
   }
 
   const items = await prisma.inventoryItem.findMany({
-    where: { status: { in: ["AVAILABLE", "NEW"] } },
+    where: { status: { in: ["ASSET_RETURN_TO_WAREHOUSE", "PROVISION_PENDING"] } },
     select: {
       id: true,
       serialNumber: true,
