@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { canViewModule } from "@/lib/permissions";
 import * as XLSX from "xlsx";
 
 const orderColumns: { label: string; field: string }[] = [
@@ -51,10 +52,16 @@ function getVal(obj: Record<string, unknown>, field: string): unknown {
 
 export async function GET() {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "WAREHOUSE")) {
+  if (!user) {
     return NextResponse.json(
       { success: false, error: "Unauthorized." },
       { status: 401 }
+    );
+  }
+  if (!canViewModule(user.permissions, user.role, "warehouse")) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden." },
+      { status: 403 }
     );
   }
 

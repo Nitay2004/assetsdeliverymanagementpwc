@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/lib/order-sync";
 import { nextSequenceNumber } from "@/lib/sequence-number";
+import { withUniqueRetry } from "@/lib/retry";
 
 function numberToWords(num: number): string {
   if (num === 0) return "Zero";
@@ -125,7 +126,6 @@ export async function generateDC(orderId: string, data: DcFormData) {
   const targetStatus = isRto ? "RTO_DC_GENERATED" : "DC_GENERATED";
   const trackingStatus = isRto ? "RTO_DC_GENERATED" : "DC_GENERATED";
 
-  const dcNumber = await getNextDcNumber();
   const dcDate = new Date();
 
   // Product Master stays the source of truth for the HSN: whatever the browser
@@ -158,48 +158,53 @@ export async function generateDC(orderId: string, data: DcFormData) {
   const amountInWords = numberToWords(Math.round(totalAmount)) + " Only";
   const taxAmountInWords = numberToWords(Math.round(totalTaxAmount)) + " Only";
 
-  const dc = await prisma.deliveryChallan.create({
-    data: {
-      orderId,
-      dcNumber,
-      dcDate,
-      warehouseId: data.warehouseId || null,
-      shipToLocation: data.shipToLocation,
-      billToLocation: data.billToLocation,
-      modeOfPayment: data.modeOfPayment || null,
-      referenceNo: data.referenceNo,
-      referenceDate: data.referenceDate ? new Date(data.referenceDate) : null,
-      otherReferences: data.otherReferences,
-      buyersOrderNo: data.buyersOrderNo,
-      buyersOrderDate: data.buyersOrderDate ? new Date(data.buyersOrderDate) : null,
-      dispatchDocNo: data.dispatchDocNo,
-      dispatchedThrough: data.dispatchedThrough,
-      destination: data.destination,
-      termsOfDelivery: data.termsOfDelivery,
-      amountInWords,
-      taxableValue: totalTaxableValue,
-      igst: igstAmount,
-      totalTaxAmount,
-      taxAmountInWords,
-      items: {
-        create: items.map((item) => ({
-          description: item.description,
-          hsnSac: item.hsnSac,
-          quantity: item.quantity,
-          rate: item.rate,
-          amount: item.amount,
-          taxableValue: item.taxableValue,
-          igstRate,
-          igstAmount,
-        })),
-      },
-    },
-    include: { items: true },
-  });
-
-  await prisma.order.update({
-    where: { id: orderId },
-    data: { dcNumber, status: targetStatus },
+  const { dc, freshNumber: dcNumber } = await withUniqueRetry(async () => {
+    const freshNumber = await getNextDcNumber();
+    return prisma.$transaction(async (tx) => {
+      const created = await tx.deliveryChallan.create({
+        data: {
+          orderId,
+          dcNumber: freshNumber,
+          dcDate,
+          warehouseId: data.warehouseId || null,
+          shipToLocation: data.shipToLocation,
+          billToLocation: data.billToLocation,
+          modeOfPayment: data.modeOfPayment || null,
+          referenceNo: data.referenceNo,
+          referenceDate: data.referenceDate ? new Date(data.referenceDate) : null,
+          otherReferences: data.otherReferences,
+          buyersOrderNo: data.buyersOrderNo,
+          buyersOrderDate: data.buyersOrderDate ? new Date(data.buyersOrderDate) : null,
+          dispatchDocNo: data.dispatchDocNo,
+          dispatchedThrough: data.dispatchedThrough,
+          destination: data.destination,
+          termsOfDelivery: data.termsOfDelivery,
+          amountInWords,
+          taxableValue: totalTaxableValue,
+          igst: igstAmount,
+          totalTaxAmount,
+          taxAmountInWords,
+          items: {
+            create: items.map((item) => ({
+              description: item.description,
+              hsnSac: item.hsnSac,
+              quantity: item.quantity,
+              rate: item.rate,
+              amount: item.amount,
+              taxableValue: item.taxableValue,
+              igstRate,
+              igstAmount,
+            })),
+          },
+        },
+        include: { items: true },
+      });
+      await tx.order.update({
+        where: { id: orderId },
+        data: { dcNumber: freshNumber, status: targetStatus },
+      });
+      return { dc: created, freshNumber };
+    });
   });
 
   await syncOrderTrackingStatus(orderId, trackingStatus);
@@ -342,7 +347,6 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
   const rp = await prisma.reversePickupRequest.findUnique({ where: { id: rpId } });
   if (!rp) throw new Error("Reverse pickup request not found");
 
-  const dcNumber = await getNextDcNumber();
   const dcDate = new Date();
 
   // Product Master stays the source of truth for the HSN: whatever the browser
@@ -363,53 +367,58 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
   const amountInWords = numberToWords(Math.round(totalAmount)) + " Only";
   const taxAmountInWords = numberToWords(Math.round(totalTaxAmount)) + " Only";
 
-  const dc = await prisma.deliveryChallan.create({
-    data: {
-      reversePickupRequestId: rpId,
-      dcNumber,
-      dcDate,
-      warehouseId: data.warehouseId || null,
-      shipToLocation: data.shipToLocation,
-      billToLocation: data.billToLocation,
-      // Reverse pickup DCs are raised on a return leg, so there is no payment
-      // term to capture.
-      modeOfPayment: null,
-      referenceNo: data.referenceNo,
-      referenceDate: data.referenceDate ? new Date(data.referenceDate) : null,
-      otherReferences: data.otherReferences,
-      buyersOrderNo: data.buyersOrderNo,
-      buyersOrderDate: data.buyersOrderDate ? new Date(data.buyersOrderDate) : null,
-      dispatchDocNo: data.dispatchDocNo,
-      // Dispatched Through is pre-filled in the modal with the pickup partner
-      // from the request, but the dropdown stays usable for requests that have
-      // no partner recorded, so whatever was chosen wins.
-      dispatchedThrough: data.dispatchedThrough || rp.partnerName,
-      destination: data.destination,
-      termsOfDelivery: data.termsOfDelivery,
-      amountInWords,
-      taxableValue: totalTaxableValue,
-      igst: igstAmount,
-      totalTaxAmount,
-      taxAmountInWords,
-      items: {
-        create: items.map((item) => ({
-          description: item.description,
-          hsnSac: item.hsnSac,
-          quantity: item.quantity,
-          rate: item.rate,
-          amount: item.amount,
-          taxableValue: item.taxableValue,
-          igstRate,
-          igstAmount,
-        })),
-      },
-    },
-    include: { items: true },
-  });
-
-  await prisma.reversePickupRequest.update({
-    where: { id: rpId },
-    data: { dcNo: dcNumber, status: "DC_GENERATED" },
+  const { dc, freshNumber: dcNumber } = await withUniqueRetry(async () => {
+    const freshNumber = await getNextDcNumber();
+    return prisma.$transaction(async (tx) => {
+      const created = await tx.deliveryChallan.create({
+        data: {
+          reversePickupRequestId: rpId,
+          dcNumber: freshNumber,
+          dcDate,
+          warehouseId: data.warehouseId || null,
+          shipToLocation: data.shipToLocation,
+          billToLocation: data.billToLocation,
+          // Reverse pickup DCs are raised on a return leg, so there is no payment
+          // term to capture.
+          modeOfPayment: null,
+          referenceNo: data.referenceNo,
+          referenceDate: data.referenceDate ? new Date(data.referenceDate) : null,
+          otherReferences: data.otherReferences,
+          buyersOrderNo: data.buyersOrderNo,
+          buyersOrderDate: data.buyersOrderDate ? new Date(data.buyersOrderDate) : null,
+          dispatchDocNo: data.dispatchDocNo,
+          // Dispatched Through is pre-filled in the modal with the pickup partner
+          // from the request, but the dropdown stays usable for requests that have
+          // no partner recorded, so whatever was chosen wins.
+          dispatchedThrough: data.dispatchedThrough || rp.partnerName,
+          destination: data.destination,
+          termsOfDelivery: data.termsOfDelivery,
+          amountInWords,
+          taxableValue: totalTaxableValue,
+          igst: igstAmount,
+          totalTaxAmount,
+          taxAmountInWords,
+          items: {
+            create: items.map((item) => ({
+              description: item.description,
+              hsnSac: item.hsnSac,
+              quantity: item.quantity,
+              rate: item.rate,
+              amount: item.amount,
+              taxableValue: item.taxableValue,
+              igstRate,
+              igstAmount,
+            })),
+          },
+        },
+        include: { items: true },
+      });
+      await tx.reversePickupRequest.update({
+        where: { id: rpId },
+        data: { dcNo: freshNumber, status: "DC_GENERATED" },
+      });
+      return { dc: created, freshNumber };
+    });
   });
 
   if (rp.inventoryItemId) {

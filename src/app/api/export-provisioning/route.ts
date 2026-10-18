@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { canViewModule } from "@/lib/permissions";
 import * as XLSX from "xlsx";
 
 const HEADERS = [
@@ -61,10 +62,16 @@ function dateStr(d: Date | null | undefined): string {
 
 export async function GET() {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "PROVISIONING")) {
+  if (!user) {
     return NextResponse.json(
       { success: false, error: "Unauthorized." },
       { status: 401 }
+    );
+  }
+  if (!canViewModule(user.permissions, user.role, "provisioning")) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden." },
+      { status: 403 }
     );
   }
 

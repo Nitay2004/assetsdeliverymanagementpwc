@@ -7,6 +7,17 @@ import { resolveModuleFromPath, canViewModule } from '@/lib/permissions';
 const SESSION_COOKIE_NAME = 'devit_session';
 const ABSOLUTE_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8 hours absolute maximum
 
+function getClientIp(req: NextRequest): string {
+  const xfwd = req.headers.get("x-forwarded-for");
+  if (xfwd) {
+    const first = xfwd.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  const xreal = req.headers.get("x-real-ip")?.trim();
+  if (xreal) return xreal;
+  return "unknown";
+}
+
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 
 function getRateLimit(key: string, maxRequests: number, windowMs: number): boolean {
@@ -26,6 +37,15 @@ function getRateLimit(key: string, maxRequests: number, windowMs: number): boole
   return true;
 }
 
+const cleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitMap.entries()) {
+    if (now > entry.resetTime) {
+      rateLimitMap.delete(key);
+    }
+  }
+}, 60 * 1000).unref?.();
+
 const UPLOAD_WINDOW = 60 * 1000;
 const UPLOAD_MAX = 10;
 const GENERAL_WINDOW = 60 * 1000;
@@ -37,7 +57,7 @@ function deleteCookie(response: NextResponse) {
 }
 
 export async function proxy(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const ip = getClientIp(request);
   const pathname = request.nextUrl.pathname;
 
   if (pathname.startsWith("/api/")) {

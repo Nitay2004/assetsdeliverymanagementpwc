@@ -128,9 +128,13 @@ export async function requireAuth(): Promise<NonNullable<Awaited<ReturnType<type
 }
 
 function twoFactorPendingKey(): Buffer {
+  const raw = process.env.TWO_FACTOR_ENCRYPTION_KEY;
+  if (!raw) {
+    throw new Error("TWO_FACTOR_ENCRYPTION_KEY is not set");
+  }
   return crypto
     .createHash("sha256")
-    .update(`devit-2fa-pending:${process.env.TWO_FACTOR_ENCRYPTION_KEY ?? ""}`)
+    .update(`devit-2fa-pending:${raw}`)
     .digest();
 }
 

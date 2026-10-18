@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { canViewModule } from "@/lib/permissions";
 import { podFileUrl } from "@/lib/storage";
 import * as XLSX from "xlsx";
 
@@ -19,10 +20,16 @@ function getVal(obj: Record<string, unknown>, field: string): unknown {
 
 export async function GET() {
   const user = await getSession();
-  if (!user || (user.role !== "ADMIN" && user.role !== "LOGISTICS")) {
+  if (!user) {
     return NextResponse.json(
       { success: false, error: "Unauthorized." },
       { status: 401 }
+    );
+  }
+  if (!canViewModule(user.permissions, user.role, "logistics")) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden." },
+      { status: 403 }
     );
   }
 

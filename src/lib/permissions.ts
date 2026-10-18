@@ -20,7 +20,7 @@ export interface ModulePermission {
 
 export type Permissions = Record<ModuleId, ModulePermission>;
 
-export function getDefaultPermissions(role?: string): Permissions {
+export function getDefaultPermissions(role?: string | null): Permissions {
   const defaults: Permissions = {
     inventory:         { canView: false, canCreate: false, canEdit: false, canDelete: false },
     "assigned-assets": { canView: false, canCreate: false, canEdit: false, canDelete: false },

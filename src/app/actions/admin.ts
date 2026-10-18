@@ -1,5 +1,7 @@
 "use server";
 
+import { UserRole } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import bcrypt from "bcryptjs";
@@ -42,6 +44,10 @@ export async function createUser(formData: FormData) {
   if (!email || !password) {
     return { success: false, error: "Email and password are required." };
   }
+  const validRoles = Object.values(UserRole);
+  if (role && !validRoles.includes(role as UserRole)) {
+    return { success: false, error: "Invalid role." };
+  }
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
@@ -55,8 +61,8 @@ export async function createUser(formData: FormData) {
       email,
       name: name || null,
       passwordHash,
-      role: role as any,
-      permissions: getDefaultPermissions(role) as any,
+      role: role as UserRole,
+      permissions: getDefaultPermissions(role) as unknown as Prisma.InputJsonValue,
       isActive: true,
     },
   });
@@ -73,6 +79,10 @@ export async function updateUser(userId: string, formData: FormData) {
   const password = formData.get("password") as string;
   const isActive = formData.get("isActive") === "true";
 
+  if (role && !Object.values(UserRole).includes(role as UserRole)) {
+    return { success: false, error: "Invalid role." };
+  }
+
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (!existing) return { success: false, error: "User not found." };
 
@@ -80,7 +90,7 @@ export async function updateUser(userId: string, formData: FormData) {
 
   const updateData: Record<string, unknown> = {
     name: name || null,
-    role: role as any,
+    role: role as UserRole,
     isActive,
   };
 
@@ -89,7 +99,7 @@ export async function updateUser(userId: string, formData: FormData) {
   }
 
   if (roleChanged) {
-    updateData.permissions = getDefaultPermissions(role) as any;
+    updateData.permissions = getDefaultPermissions(role) as unknown as Prisma.InputJsonValue;
   }
 
   await prisma.user.update({
@@ -113,7 +123,7 @@ export async function updateUserPermissions(userId: string, permissions: Permiss
 
   await prisma.user.update({
     where: { id: userId },
-    data: { permissions: permissions as any },
+    data: { permissions: permissions as unknown as Prisma.InputJsonValue },
   });
 
   revalidatePath("/dashboard/admin/users");
@@ -161,7 +171,7 @@ export async function resetUserPermissions(userId: string) {
 
   await prisma.user.update({
     where: { id: userId },
-    data: { permissions: getDefaultPermissions(user.role) as any },
+    data: { permissions: getDefaultPermissions(user.role) as unknown as Prisma.InputJsonValue },
   });
 
   revalidatePath("/dashboard/admin/users");

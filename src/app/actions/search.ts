@@ -27,110 +27,133 @@ export async function globalSearch(raw: string): Promise<SearchResult[]> {
   const q = sanitize(raw);
   if (!q || q.length < 2) return [];
 
+  const canViewInventory = canViewModule(user.permissions, user.role, "inventory");
+  const canViewOrder = canViewModule(user.permissions, user.role, "warehouse");
+  const canViewAsset = canViewModule(user.permissions, user.role, "provisioning");
+  const canViewDocket = canViewModule(user.permissions, user.role, "logistics");
+
+  const queries: Array<Promise<any>> = [];
   const results: SearchResult[] = [];
 
-  const [items, orders, assets, dockets] = await Promise.all([
-    prisma.inventoryItem.findMany({
-      where: {
-        OR: [
-          { serialNumber: { contains: q, mode: "insensitive" } },
-          { model: { contains: q, mode: "insensitive" } },
-          { employeeName: { contains: q, mode: "insensitive" } },
-          { emailId: { contains: q, mode: "insensitive" } },
-          { mobileNumber: { contains: q, mode: "insensitive" } },
-          { purpose: { contains: q, mode: "insensitive" } },
-          { trackingStatus: { contains: q, mode: "insensitive" } },
-        ],
-      },
-      take: 5,
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-    }),
-    prisma.order.findMany({
-      where: {
-        OR: [
-          { clientName: { contains: q, mode: "insensitive" } },
-          { deliveryLocation: { contains: q, mode: "insensitive" } },
-          { dcNumber: { contains: q, mode: "insensitive" } },
-          { invoiceNumber: { contains: q, mode: "insensitive" } },
-        ],
-      },
-      take: 5,
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-    }),
-    prisma.asset.findMany({
-      where: {
-        status: { contains: q, mode: "insensitive" },
-      },
-      select: {
-        id: true,
-        status: true,
-        orderId: true,
-        inventoryItem: { select: { serialNumber: true } },
-      },
-      take: 5,
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-    }),
-    prisma.docket.findMany({
-      where: {
-        OR: [
-          { docketNumber: { contains: q, mode: "insensitive" } },
-          { ewayBillNumber: { contains: q, mode: "insensitive" } },
-        ],
-      },
-      include: { order: { select: { clientName: true } } },
-      take: 5,
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-    }),
-  ]);
-
-  for (const item of items) {
-    results.push({
-      type: "inventory",
-      id: item.id,
-      label: item.serialNumber,
-      sublabel: `${item.model} — ${item.employeeName || item.status}`,
-      href: `/dashboard/inventory?selected=${item.id}`,
-    });
+  if (canViewInventory) {
+    queries.push(
+      prisma.inventoryItem.findMany({
+        where: {
+          OR: [
+            { serialNumber: { contains: q, mode: "insensitive" } },
+            { model: { contains: q, mode: "insensitive" } },
+            { employeeName: { contains: q, mode: "insensitive" } },
+            { emailId: { contains: q, mode: "insensitive" } },
+            { mobileNumber: { contains: q, mode: "insensitive" } },
+            { purpose: { contains: q, mode: "insensitive" } },
+            { trackingStatus: { contains: q, mode: "insensitive" } },
+          ],
+        },
+        take: 5,
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      })
+    );
+  }
+  if (canViewOrder) {
+    queries.push(
+      prisma.order.findMany({
+        where: {
+          OR: [
+            { clientName: { contains: q, mode: "insensitive" } },
+            { deliveryLocation: { contains: q, mode: "insensitive" } },
+            { dcNumber: { contains: q, mode: "insensitive" } },
+            { invoiceNumber: { contains: q, mode: "insensitive" } },
+          ],
+        },
+        take: 5,
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      })
+    );
+  }
+  if (canViewAsset) {
+    queries.push(
+      prisma.asset.findMany({
+        where: {
+          status: { contains: q, mode: "insensitive" },
+        },
+        select: {
+          id: true,
+          status: true,
+          orderId: true,
+          inventoryItem: { select: { serialNumber: true } },
+        },
+        take: 5,
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      })
+    );
+  }
+  if (canViewDocket) {
+    queries.push(
+      prisma.docket.findMany({
+        where: {
+          OR: [
+            { docketNumber: { contains: q, mode: "insensitive" } },
+            { ewayBillNumber: { contains: q, mode: "insensitive" } },
+          ],
+        },
+        include: { order: { select: { clientName: true } } },
+        take: 5,
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      })
+    );
   }
 
-  for (const order of orders) {
-    results.push({
-      type: "order",
-      id: order.id,
-      label: `Order: ${order.clientName}`,
-      sublabel: `${order.deliveryLocation} · ${order.totalQuantity} units · ${order.status}`,
-      href: `/dashboard/warehouse/${order.id}`,
-    });
+  const queryResults = await Promise.all(queries);
+  let idx = 0;
+  if (canViewInventory) {
+    const items = queryResults[idx++];
+
+    for (const item of items) {
+      results.push({
+        type: "inventory",
+        id: item.id,
+        label: item.serialNumber,
+        sublabel: `${item.model} — ${item.employeeName || item.status}`,
+        href: `/dashboard/inventory?selected=${item.id}`,
+      });
+    }
+  }
+  if (canViewOrder) {
+    const orders = queryResults[idx++];
+    for (const order of orders) {
+      results.push({
+        type: "order",
+        id: order.id,
+        label: `Order: ${order.clientName}`,
+        sublabel: `${order.deliveryLocation} · ${order.totalQuantity} units · ${order.status}`,
+        href: `/dashboard/warehouse/${order.id}`,
+      });
+    }
+  }
+  if (canViewAsset) {
+    const assets = queryResults[idx++];
+    for (const asset of assets) {
+      results.push({
+        type: "asset",
+        id: asset.id,
+        label: `Asset: ${asset.inventoryItem?.serialNumber ?? "—"}`,
+        sublabel: `Status: ${asset.status}`,
+        href: `/dashboard/provisioning?selected=${asset.orderId}`,
+      });
+    }
+  }
+  if (canViewDocket) {
+    const dockets = queryResults[idx++];
+    for (const docket of dockets) {
+      results.push({
+        type: "docket",
+        id: docket.id,
+        label: `Docket: ${docket.docketNumber ?? "—"}`,
+        sublabel: `E-Way: ${docket.ewayBillNumber ?? "—"} · ${docket.order?.clientName ?? ""}`,
+        href: `/dashboard/logistics?selected=${docket.orderId}`,
+      });
+    }
   }
 
-  for (const asset of assets) {
-    results.push({
-      type: "asset",
-      id: asset.id,
-      label: `Asset: ${asset.inventoryItem?.serialNumber ?? "—"}`,
-      sublabel: `Status: ${asset.status}`,
-      href: `/dashboard/provisioning?selected=${asset.orderId}`,
-    });
-  }
-
-  for (const docket of dockets) {
-    results.push({
-      type: "docket",
-      id: docket.id,
-      label: `Docket: ${docket.docketNumber ?? "—"}`,
-      sublabel: `E-Way: ${docket.ewayBillNumber ?? "—"} · ${docket.order?.clientName ?? ""}`,
-      href: `/dashboard/logistics?selected=${docket.orderId}`,
-    });
-  }
-
-  const canViewResult = (type: SearchResult["type"]) =>
-    type === "inventory"
-      ? canViewModule(user.permissions, user.role, "inventory")
-      : type === "order"
-        ? canViewModule(user.permissions, user.role, "warehouse")
-        : type === "asset"
-          ? canViewModule(user.permissions, user.role, "provisioning")
-          : canViewModule(user.permissions, user.role, "logistics");
-
-  return results.filter(r => canViewResult(r.type)).slice(0, 10);
+  return results.slice(0, 10);
 }
