@@ -738,6 +738,23 @@ export async function reassignItem(id: string, formData: FormData) {
     slaStatus,
   };
 
+  // If asset is in ASSET_RETURN_TO_WAREHOUSE and being assigned to a new user, mark as redeployed
+  if (existing.status === "ASSET_RETURN_TO_WAREHOUSE" && employeeName) {
+    await prisma.inventoryItem.update({
+      where: { id },
+      data: {
+        status: "ASSET_REDEPLOYED",
+        trackingStatus: "Order Placed",
+        ...assignmentFields,
+      },
+    });
+    revalidatePath("/dashboard/inventory");
+    revalidatePath("/dashboard/warehouse");
+    revalidatePath("/dashboard/provisioning");
+    revalidatePath("/dashboard");
+    return;
+  }
+
   if (wasDelivered) {
     await prisma.inventoryItem.update({
       where: { id },
