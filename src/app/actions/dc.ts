@@ -46,14 +46,19 @@ export async function getNextDcNumber(): Promise<string> {
   await requireAuth();
   const now = new Date();
   const year = now.getFullYear();
-  const shortYear = year % 100;
-  const nextShortYear = (year + 1) % 100;
+  const month = now.getMonth() + 1;
+  let fyStart = year;
+  if (month < 4) {
+    fyStart = year - 1;
+  }
+  const shortYear = fyStart % 100;
+  const nextShortYear = (fyStart + 1) % 100;
   const fy = `${String(shortYear).padStart(2, "0")}-${String(nextShortYear).padStart(2, "0")}`;
 
   const nextSeq = await nextSequenceNumber({
     table: "delivery_challans",
     column: "dc_number",
-    valuePattern: /^DC-PDH-([0-9]+)-\d{2}-\d{2}$/,
+    valuePattern: new RegExp(`^DC-PDH-([0-9]+)-${String(shortYear).padStart(2,"0")}-${String(nextShortYear).padStart(2,"0")}$`),
   });
 
   return `DC-PDH-${String(nextSeq).padStart(4, "0")}-${fy}`;
