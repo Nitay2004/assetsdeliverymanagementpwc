@@ -97,8 +97,5 @@ export async function deleteOrder(id: string) {
   const user = await getSession();
   requirePermission(user, "warehouse", "canDelete");
 
-  await prisma.order.delete({ where: { id } });
-
-  revalidatePath("/dashboard/warehouse");
-  revalidatePath("/dashboard");
+  throw new Error("Order deletion is disabled for compliance. Use soft-delete/audit workflow.");
 }

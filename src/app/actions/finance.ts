@@ -46,13 +46,7 @@ export async function updateOrderFinance(
 export async function deleteOrder(orderId: string) {
   const user = await getSession();
   requirePermission(user, "finance", "canDelete");
-
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) throw new Error("Order not found.");
-
-  await prisma.order.delete({ where: { id: orderId } });
-
-  revalidatePath("/dashboard/finance");
+  throw new Error("Order deletion is disabled for compliance. Use soft-delete/audit workflow.");
 }
 
 export async function generateEwayBill(orderId: string, ewayBillNumber: string, ewayBillDocumentUrl?: string | null) {

@@ -1083,9 +1083,7 @@ export async function generateReversePickupEwayBill(formData: FormData) {
 export async function deleteReversePickupRequest(id: string) {
   const user = await getSession();
   requirePermission(user, "reverse-pickup", "canDelete");
-
-  await prisma.reversePickupRequest.delete({ where: { id } });
-  revalidatePath("/dashboard/reverse-pickup");
+  throw new Error("Reverse pickup deletion is disabled for compliance.");
 }
 
 export async function lookupInventoryBySerial(serialNumber: string) {
