@@ -738,6 +738,14 @@ export async function reassignItem(id: string, formData: FormData) {
     slaStatus,
   };
 
+  // Block reassign if asset is currently with a user and not returned to warehouse
+  const isCurrentlyWithUser = !!existing.employeeName &&
+    (existing.status === "SHIPPED_TO_USER" || existing.status === "ASSET_REDEPLOYED");
+
+  if (isCurrentlyWithUser && employeeName && existing.status !== "ASSET_RETURN_TO_WAREHOUSE") {
+    throw new Error("Cannot reassign. Asset is currently assigned to a user. Cancel shipment or wait for reverse pickup/RTO to return it to warehouse first.");
+  }
+
   // If asset is in ASSET_RETURN_TO_WAREHOUSE and being assigned to a new user, mark as redeployed
   if (existing.status === "ASSET_RETURN_TO_WAREHOUSE" && employeeName) {
     await prisma.inventoryItem.update({
