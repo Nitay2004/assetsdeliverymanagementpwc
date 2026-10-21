@@ -68,7 +68,8 @@ export async function createUser(formData: FormData) {
   });
 
   revalidatePath("/dashboard/admin/users");
-  return { success: true, user };
+  // Never return the password hash to the client.
+  return { success: true, user: { id: user.id, email: user.email, role: user.role } };
 }
 
 export async function updateUser(userId: string, formData: FormData) {

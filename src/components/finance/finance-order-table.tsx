@@ -28,6 +28,10 @@ interface DcItemData {
   taxableValue: number | null;
   igstRate: number | null;
   igstAmount: number | null;
+  cgstRate: number | null;
+  cgstAmount: number | null;
+  sgstRate: number | null;
+  sgstAmount: number | null;
 }
 
 interface WarehouseData {
@@ -44,6 +48,8 @@ interface DcData {
   billToLocation: string | null;
   taxableValue: number | null;
   igst: number | null;
+  cgst: number | null;
+  sgst: number | null;
   totalTaxAmount: number | null;
   items: DcItemData[];
   warehouse: WarehouseData | null;

@@ -6,16 +6,29 @@ import { requirePermission } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+const MAX_ORDER_QUANTITY = 1000;
+
+function parseTotalQuantity(raw: FormDataEntryValue | null): number {
+  const parsed = parseInt(String(raw ?? ""), 10);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error("Total quantity must be a whole number of at least 1.");
+  }
+  if (parsed > MAX_ORDER_QUANTITY) {
+    throw new Error(`Total quantity cannot exceed ${MAX_ORDER_QUANTITY}.`);
+  }
+  return parsed;
+}
+
 export async function addOrder(formData: FormData) {
   const user = await getSession();
   requirePermission(user, "warehouse", "canCreate");
 
   const clientName = formData.get("clientName") as string;
   const intermediary = formData.get("intermediary") as string;
-  const totalQuantity = parseInt(formData.get("totalQuantity") as string, 10);
+  const totalQuantity = parseTotalQuantity(formData.get("totalQuantity"));
   const deliveryLocation = formData.get("deliveryLocation") as string;
 
-  if (!clientName || !intermediary || !totalQuantity || !deliveryLocation) {
+  if (!clientName || !intermediary || !deliveryLocation) {
     throw new Error("All fields are required.");
   }
 
@@ -44,10 +57,10 @@ export async function updateOrder(id: string, formData: FormData) {
 
   const clientName = formData.get("clientName") as string;
   const intermediary = formData.get("intermediary") as string;
-  const totalQuantity = parseInt(formData.get("totalQuantity") as string, 10);
+  const totalQuantity = parseTotalQuantity(formData.get("totalQuantity"));
   const deliveryLocation = formData.get("deliveryLocation") as string;
 
-  if (!clientName || !intermediary || !totalQuantity || !deliveryLocation) {
+  if (!clientName || !intermediary || !deliveryLocation) {
     throw new Error("All fields are required.");
   }
 

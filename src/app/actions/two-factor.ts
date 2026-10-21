@@ -27,6 +27,15 @@ async function assertPassword(userId: string, password: string) {
 export async function startTwoFactorSetupAction() {
   const user = await requireAuth();
 
+  // Re-enrolment must go through the disable flow (which requires the current
+  // password). Without this guard a stolen session could call this action,
+  // overwrite the secret and silently switch 2FA off.
+  if (user.twoFactorEnabled) {
+    throw new Error(
+      "Two-factor authentication is already enabled. Disable it with your password before setting it up again."
+    );
+  }
+
   const secret = createTotpSecret();
 
   await prisma.user.update({

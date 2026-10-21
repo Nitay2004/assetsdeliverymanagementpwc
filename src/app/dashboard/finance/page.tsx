@@ -125,6 +125,8 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
       dcDate: dc.dcDate.toISOString(),
       taxableValue: dc.taxableValue ? Number(dc.taxableValue) : null,
       igst: dc.igst ? Number(dc.igst) : null,
+      cgst: dc.cgst ? Number(dc.cgst) : null,
+      sgst: dc.sgst ? Number(dc.sgst) : null,
       totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null,
       items: dc.items.map(i => ({
         ...i,
@@ -133,6 +135,10 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
         taxableValue: i.taxableValue ? Number(i.taxableValue) : null,
         igstRate: i.igstRate ? Number(i.igstRate) : null,
         igstAmount: i.igstAmount ? Number(i.igstAmount) : null,
+        cgstRate: i.cgstRate ? Number(i.cgstRate) : null,
+        cgstAmount: i.cgstAmount ? Number(i.cgstAmount) : null,
+        sgstRate: i.sgstRate ? Number(i.sgstRate) : null,
+        sgstAmount: i.sgstAmount ? Number(i.sgstAmount) : null,
       })),
     })),
   }));

@@ -212,14 +212,16 @@ export async function advanceOrderStatus(orderId: string, status: string) {
       const dc = await tx.deliveryChallan.findFirst({
         where: { orderId },
         orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-        select: { taxableValue: true },
+        select: { taxableValue: true, totalTaxAmount: true },
       });
       const docket = await tx.docket.findFirst({
         where: { orderId },
         orderBy: [{ createdAt: "desc" }, { id: "asc" }],
         select: { ewayBillNumber: true },
       });
-      const consignmentValue = dc?.taxableValue ? Number(dc.taxableValue) : 0;
+      const consignmentValue =
+        (dc?.taxableValue ? Number(dc.taxableValue) : 0) +
+        (dc?.totalTaxAmount ? Number(dc.totalTaxAmount) : 0);
       if (consignmentValue > 50000 && !docket?.ewayBillNumber) {
         throw new Error("E-Way Bill is required for consignments above ₹50,000 before dispatch.");
       }

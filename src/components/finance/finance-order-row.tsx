@@ -21,6 +21,10 @@ interface DcItemData {
   taxableValue: number | null;
   igstRate: number | null;
   igstAmount: number | null;
+  cgstRate: number | null;
+  cgstAmount: number | null;
+  sgstRate: number | null;
+  sgstAmount: number | null;
 }
 
 interface WarehouseData {
@@ -37,6 +41,8 @@ interface DcData {
   billToLocation: string | null;
   taxableValue: number | null;
   igst: number | null;
+  cgst: number | null;
+  sgst: number | null;
   totalTaxAmount: number | null;
   items: DcItemData[];
   warehouse: WarehouseData | null;
@@ -454,7 +460,14 @@ export function FinanceOrderRow({ order, canManage, elementId, financeSubTab = "
                         {dc.taxableValue && (
                           <div className="flex justify-end gap-6 mt-2 text-xs text-muted-foreground">
                             <span>Taxable: <span className="font-mono font-medium text-foreground">{dc.taxableValue.toLocaleString("en-IN")}</span></span>
-                            <span>IGST: <span className="font-mono font-medium text-foreground">{(dc.igst ?? 0).toLocaleString("en-IN")}</span></span>
+                            {(dc.cgst != null && dc.cgst > 0) || (dc.sgst != null && dc.sgst > 0) ? (
+                              <>
+                                <span>CGST: <span className="font-mono font-medium text-foreground">{(dc.cgst ?? 0).toLocaleString("en-IN")}</span></span>
+                                <span>SGST: <span className="font-mono font-medium text-foreground">{(dc.sgst ?? 0).toLocaleString("en-IN")}</span></span>
+                              </>
+                            ) : (
+                              <span>IGST: <span className="font-mono font-medium text-foreground">{(dc.igst ?? 0).toLocaleString("en-IN")}</span></span>
+                            )}
                             <span>Total Tax: <span className="font-mono font-medium text-foreground">{(dc.totalTaxAmount ?? 0).toLocaleString("en-IN")}</span></span>
                           </div>
                         )}
