@@ -54,6 +54,16 @@ prov-test.csv
 /scripts/*.js
 /scripts/supabase-old.env
 
+# internal docs, diagrams, and consolidation plans
+ARCHITECTURE.md
+CODE_REVIEW_REPORT.md
+*.xlsx
+/diagrams/
+/scripts/
+/public/devit-logo-mark.png
+/src/__tests__/
+vitest.config.ts
+
 # deploy archives
 /project.tgz
 *.tgz
