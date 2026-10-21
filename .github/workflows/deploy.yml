@@ -41,8 +41,11 @@ jobs:
           # stale middleware.ts on the server breaks the build.
           rm -rf /opt/asset-delivery-system/src/src
           rm -f /opt/asset-delivery-system/src/middleware.ts
-          tar --exclude=.git --exclude=node_modules --exclude=.next --exclude=.env --exclude=.env.* --exclude='*.tmp.js' --exclude='*.log' --exclude=project.tgz -cf - . | (cd /opt/asset-delivery-system && tar -xf -)
-          chmod -R u+rwX,go+rX /opt/asset-delivery-system/prisma || true
+          # If docker created files as root inside prisma/migrations, fix ownership/permissions first
+          sudo rm -rf /opt/asset-delivery-system/prisma/migrations/20261021000000_add_cgst_sgst_to_dc 2>/dev/null || rm -rf /opt/asset-delivery-system/prisma/migrations/20261021000000_add_cgst_sgst_to_dc 2>/dev/null || true
+          sudo chown -R "$(id -u):$(id -g)" /opt/asset-delivery-system/prisma 2>/dev/null || true
+          tar --exclude=.git --exclude=node_modules --exclude=.next --exclude=.env --exclude=.env.* --exclude='*.tmp.js' --exclude='*.log' --exclude=project.tgz -cf - . | (cd /opt/asset-delivery-system && tar --no-same-owner -xf -)
+          chmod -R u+rwX,go+rX /opt/asset-delivery-system/prisma 2>/dev/null || true
 
       - name: Build & restart app
         run: |
