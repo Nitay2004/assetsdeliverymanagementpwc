@@ -14,7 +14,7 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Quality gate — runs BEFORE anything is written to the deploy dir, so a
       # broken typecheck stops the deploy here and the old container keeps
