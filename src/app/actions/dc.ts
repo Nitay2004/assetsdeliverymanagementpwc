@@ -8,6 +8,19 @@ import { syncOrderTrackingStatus } from "@/lib/order-sync";
 import { nextSequenceNumber } from "@/lib/sequence-number";
 import { withUniqueRetry } from "@/lib/retry";
 
+function getStateFromLocation(loc: string | null | undefined): string | null {
+  if (!loc) return null;
+  const text = loc.toLowerCase();
+  const states = [
+    "andhra pradesh", "arunachal pradesh", "assam", "bihar", "chhattisgarh", "goa", "gujarat", "haryana", "himachal pradesh", "jharkhand", "karnataka", "kerala", "madhya pradesh", "maharashtra", "manipur", "meghalaya", "mizoram", "nagaland", "odisha", "punjab", "rajasthan", "sikkim", "tamil nadu", "telangana", "tripura", "uttar pradesh", "uttarakhand", "west bengal",
+    "delhi", "jammu and kashmir", "ladakh", "chandigarh", "puducherry", "andaman and nicobar", "daman and diu", "dadra and nagar haveli", "lakshadweep",
+  ];
+  for (const s of states) {
+    if (text.includes(s)) return s;
+  }
+  return null;
+}
+
 function numberToWords(num: number): string {
   if (num === 0) return "Zero";
 
@@ -133,33 +146,99 @@ export async function generateDC(orderId: string, data: DcFormData) {
 
   const dcDate = new Date();
 
-  // Product Master stays the source of truth for the HSN: whatever the browser
-  // sent only fills in when the product has no HSN on file.
+  // Product Master stays the source of truth for the HSN and GST rate
   const hsnByModel: Record<string, string> = {};
+  const gstRateByModel: Record<string, number> = {};
   for (const a of order.assets) {
     if (!a.inventoryItem) continue;
     const modelKey = (a.inventoryItem.model || "").trim().toLowerCase();
     if (modelKey && hsnByModel[modelKey] === undefined) {
       hsnByModel[modelKey] = (await lookupProductHsn(a.inventoryItem.partNo, a.inventoryItem.model)) ?? "";
     }
+    if (modelKey && gstRateByModel[modelKey] === undefined) {
+      const pm = await prisma.productMaster.findFirst({
+        where: a.inventoryItem.partNo
+          ? { partNo: { equals: a.inventoryItem.partNo, mode: "insensitive" } }
+          : { model: { equals: a.inventoryItem.model, mode: "insensitive" } },
+        select: { gstRate: true },
+      });
+      if (pm?.gstRate != null) {
+        gstRateByModel[modelKey] = Number(pm.gstRate);
+      }
+    }
   }
 
-  const items = data.items.map((item) => {
-    const amount = item.quantity * item.rate;
-    const taxableValue = amount;
-    return {
-      ...item,
-      hsnSac: item.hsnSac || hsnByModel[(item.description || "").trim().toLowerCase()] || "",
-      amount,
-      taxableValue,
-    };
-  });
+  // Determine if intra-state or inter-state
+  const shipperState = getStateFromLocation(data.warehouseLocation || order.warehouseLocation);
+  const consigneeState = getStateFromLocation(data.shipToLocation || order.deliveryLocation);
+  const isIntraState = shipperState && consigneeState && shipperState === consigneeState;
+
+  const items = await Promise.all(
+    data.items.map(async (item) => {
+      const amount = item.quantity * item.rate;
+      const taxableValue = amount;
+      const key = (item.description || "").trim().toLowerCase();
+      const hsnSac = item.hsnSac || hsnByModel[key] || "";
+      let gstRate = gstRateByModel[key];
+      if (gstRate == null && hsnSac) {
+        const pm = await prisma.productMaster.findFirst({
+          where: { hsnCode: { equals: hsnSac, mode: "insensitive" } },
+          select: { gstRate: true },
+        });
+        if (pm?.gstRate != null) gstRate = Number(pm.gstRate);
+      }
+      if (gstRate == null) gstRate = 18;
+      return {
+        ...item,
+        hsnSac,
+        amount,
+        taxableValue,
+        gstRate,
+      };
+    })
+  );
 
   const totalAmount = items.reduce((sum, i) => sum + i.amount, 0);
   const totalTaxableValue = items.reduce((sum, i) => sum + i.taxableValue, 0);
-  const igstRate = items[0]?.hsnSac ? 18 : 0;
-  const igstAmount = totalTaxableValue * (igstRate / 100);
-  const totalTaxAmount = igstAmount;
+
+  let totalIgstAmount = 0;
+  let totalCgstAmount = 0;
+  let totalSgstAmount = 0;
+  const computedItems = items.map((item) => {
+    const gstRate = item.gstRate || 18;
+    if (isIntraState) {
+      const cgstRate = gstRate / 2;
+      const sgstRate = gstRate / 2;
+      const cgstAmount = item.taxableValue * (cgstRate / 100);
+      const sgstAmount = item.taxableValue * (sgstRate / 100);
+      totalCgstAmount += cgstAmount;
+      totalSgstAmount += sgstAmount;
+      return {
+        ...item,
+        cgstRate,
+        cgstAmount,
+        sgstRate,
+        sgstAmount,
+        igstRate: null,
+        igstAmount: 0,
+      };
+    } else {
+      const igstRate = gstRate;
+      const igstAmount = item.taxableValue * (igstRate / 100);
+      totalIgstAmount += igstAmount;
+      return {
+        ...item,
+        igstRate,
+        igstAmount,
+        cgstRate: null,
+        cgstAmount: 0,
+        sgstRate: null,
+        sgstAmount: 0,
+      };
+    }
+  });
+
+  const totalTaxAmount = isIntraState ? totalCgstAmount + totalSgstAmount : totalIgstAmount;
   const amountInWords = numberToWords(Math.round(totalAmount)) + " Only";
   const taxAmountInWords = numberToWords(Math.round(totalTaxAmount)) + " Only";
 
@@ -186,19 +265,25 @@ export async function generateDC(orderId: string, data: DcFormData) {
           termsOfDelivery: data.termsOfDelivery,
           amountInWords,
           taxableValue: totalTaxableValue,
-          igst: igstAmount,
+          igst: totalIgstAmount || null,
+          cgst: totalCgstAmount || null,
+          sgst: totalSgstAmount || null,
           totalTaxAmount,
           taxAmountInWords,
           items: {
-            create: items.map((item) => ({
+            create: computedItems.map((item) => ({
               description: item.description,
               hsnSac: item.hsnSac,
               quantity: item.quantity,
               rate: item.rate,
               amount: item.amount,
               taxableValue: item.taxableValue,
-              igstRate,
-              igstAmount,
+              igstRate: item.igstRate,
+              igstAmount: item.igstAmount || 0,
+              cgstRate: item.cgstRate,
+              cgstAmount: item.cgstAmount || 0,
+              sgstRate: item.sgstRate,
+              sgstAmount: item.sgstAmount || 0,
             })),
           },
         },
@@ -229,9 +314,27 @@ export async function generateDC(orderId: string, data: DcFormData) {
   revalidatePath("/dashboard/finance");
   revalidatePath("/dashboard/inventory");
 
-  return { ...dc, taxableValue: dc.taxableValue ? Number(dc.taxableValue) : null, igst: dc.igst ? Number(dc.igst) : null, totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null, items: dc.items.map(i => ({ ...i, rate: Number(i.rate), amount: Number(i.amount), taxableValue: i.taxableValue ? Number(i.taxableValue) : null, igstRate: i.igstRate ? Number(i.igstRate) : null, igstAmount: i.igstAmount ? Number(i.igstAmount) : null })) };
+  return {
+    ...dc,
+    taxableValue: dc.taxableValue ? Number(dc.taxableValue) : null,
+    igst: dc.igst ? Number(dc.igst) : null,
+    cgst: (dc as any).cgst ? Number((dc as any).cgst) : null,
+    sgst: (dc as any).sgst ? Number((dc as any).sgst) : null,
+    totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null,
+    items: dc.items.map(i => ({
+      ...i,
+      rate: Number(i.rate),
+      amount: Number(i.amount),
+      taxableValue: i.taxableValue ? Number(i.taxableValue) : null,
+      igstRate: (i as any).igstRate ? Number((i as any).igstRate) : null,
+      igstAmount: (i as any).igstAmount ? Number((i as any).igstAmount) : null,
+      cgstRate: (i as any).cgstRate ? Number((i as any).cgstRate) : null,
+      cgstAmount: (i as any).cgstAmount ? Number((i as any).cgstAmount) : null,
+      sgstRate: (i as any).sgstRate ? Number((i as any).sgstRate) : null,
+      sgstAmount: (i as any).sgstAmount ? Number((i as any).sgstAmount) : null,
+    }))
+  };
 }
-
 export async function getDC(dcId: string) {
   await requireAuth();
   const dc = await prisma.deliveryChallan.findUnique({
@@ -353,22 +456,69 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
   if (!rp) throw new Error("Reverse pickup request not found");
 
   const dcDate = new Date();
-
-  // Product Master stays the source of truth for the HSN: whatever the browser
-  // sent only fills in when the product has no HSN on file.
   const resolvedHsn = await resolveProductHsn(rp.serialNumber, rp.model);
 
-  const items = data.items.map((item) => {
-    const amount = item.quantity * item.rate;
-    const taxableValue = amount;
-    return { ...item, hsnSac: item.hsnSac || resolvedHsn || "", amount, taxableValue };
-  });
+  const shipperState = getStateFromLocation(rp.warehouseLocation);
+  const consigneeState = getStateFromLocation(rp.pickupAddress) || getStateFromLocation(`${rp.pickupAddress}, ${rp.city}, ${rp.state}, ${rp.pinCode}`);
+  const isIntraState = shipperState && consigneeState && shipperState === consigneeState;
+
+  const items = await Promise.all(
+    data.items.map(async (item) => {
+      const amount = item.quantity * item.rate;
+      const taxableValue = amount;
+      const key = (item.description || "").trim().toLowerCase();
+      const hsnSac = item.hsnSac || resolvedHsn || "";
+      let gstRate = 18;
+      const pm = await prisma.productMaster.findFirst({
+        where: hsnSac ? { hsnCode: { equals: hsnSac, mode: "insensitive" } } : { model: { equals: key, mode: "insensitive" } },
+        select: { gstRate: true },
+      });
+      if (pm?.gstRate != null) gstRate = Number(pm.gstRate);
+      return { ...item, hsnSac, amount, taxableValue, gstRate };
+    })
+  );
 
   const totalAmount = items.reduce((sum, i) => sum + i.amount, 0);
   const totalTaxableValue = items.reduce((sum, i) => sum + i.taxableValue, 0);
-  const igstRate = items[0]?.hsnSac ? 18 : 0;
-  const igstAmount = totalTaxableValue * (igstRate / 100);
-  const totalTaxAmount = igstAmount;
+
+  let totalIgstAmount = 0;
+  let totalCgstAmount = 0;
+  let totalSgstAmount = 0;
+  const computedItems = items.map((item) => {
+    const gstRate = item.gstRate || 18;
+    if (isIntraState) {
+      const cgstRate = gstRate / 2;
+      const sgstRate = gstRate / 2;
+      const cgstAmount = item.taxableValue * (cgstRate / 100);
+      const sgstAmount = item.taxableValue * (sgstRate / 100);
+      totalCgstAmount += cgstAmount;
+      totalSgstAmount += sgstAmount;
+      return {
+        ...item,
+        cgstRate,
+        cgstAmount,
+        sgstRate,
+        sgstAmount,
+        igstRate: null,
+        igstAmount: 0,
+      };
+    } else {
+      const igstRate = gstRate;
+      const igstAmount = item.taxableValue * (igstRate / 100);
+      totalIgstAmount += igstAmount;
+      return {
+        ...item,
+        igstRate,
+        igstAmount,
+        cgstRate: null,
+        cgstAmount: 0,
+        sgstRate: null,
+        sgstAmount: 0,
+      };
+    }
+  });
+
+  const totalTaxAmount = isIntraState ? totalCgstAmount + totalSgstAmount : totalIgstAmount;
   const amountInWords = numberToWords(Math.round(totalAmount)) + " Only";
   const taxAmountInWords = numberToWords(Math.round(totalTaxAmount)) + " Only";
 
@@ -383,8 +533,6 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
           warehouseId: data.warehouseId || null,
           shipToLocation: data.shipToLocation,
           billToLocation: data.billToLocation,
-          // Reverse pickup DCs are raised on a return leg, so there is no payment
-          // term to capture.
           modeOfPayment: null,
           referenceNo: data.referenceNo,
           referenceDate: data.referenceDate ? new Date(data.referenceDate) : null,
@@ -392,27 +540,30 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
           buyersOrderNo: data.buyersOrderNo,
           buyersOrderDate: data.buyersOrderDate ? new Date(data.buyersOrderDate) : null,
           dispatchDocNo: data.dispatchDocNo,
-          // Dispatched Through is pre-filled in the modal with the pickup partner
-          // from the request, but the dropdown stays usable for requests that have
-          // no partner recorded, so whatever was chosen wins.
           dispatchedThrough: data.dispatchedThrough || rp.partnerName,
           destination: data.destination,
           termsOfDelivery: data.termsOfDelivery,
           amountInWords,
           taxableValue: totalTaxableValue,
-          igst: igstAmount,
+          igst: totalIgstAmount || null,
+          cgst: totalCgstAmount || null,
+          sgst: totalSgstAmount || null,
           totalTaxAmount,
           taxAmountInWords,
           items: {
-            create: items.map((item) => ({
+            create: computedItems.map((item) => ({
               description: item.description,
               hsnSac: item.hsnSac,
               quantity: item.quantity,
               rate: item.rate,
               amount: item.amount,
               taxableValue: item.taxableValue,
-              igstRate,
-              igstAmount,
+              igstRate: item.igstRate,
+              igstAmount: item.igstAmount || 0,
+              cgstRate: item.cgstRate,
+              cgstAmount: item.cgstAmount || 0,
+              sgstRate: item.sgstRate,
+              sgstAmount: item.sgstAmount || 0,
             })),
           },
         },
@@ -437,10 +588,28 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
   revalidatePath("/dashboard/reverse-pickup");
   revalidatePath("/dashboard/inventory");
 
-  return { ...dc, taxableValue: dc.taxableValue ? Number(dc.taxableValue) : null, igst: dc.igst ? Number(dc.igst) : null, totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null, items: dc.items.map(i => ({ ...i, rate: Number(i.rate), amount: Number(i.amount), taxableValue: i.taxableValue ? Number(i.taxableValue) : null, igstRate: i.igstRate ? Number(i.igstRate) : null, igstAmount: i.igstAmount ? Number(i.igstAmount) : null })) };
+  return {
+    ...dc,
+    taxableValue: dc.taxableValue ? Number(dc.taxableValue) : null,
+    igst: dc.igst ? Number(dc.igst) : null,
+    cgst: (dc as any).cgst ? Number((dc as any).cgst) : null,
+    sgst: (dc as any).sgst ? Number((dc as any).sgst) : null,
+    totalTaxAmount: dc.totalTaxAmount ? Number(dc.totalTaxAmount) : null,
+    items: dc.items.map(i => ({
+      ...i,
+      rate: Number(i.rate),
+      amount: Number(i.amount),
+      taxableValue: i.taxableValue ? Number(i.taxableValue) : null,
+      igstRate: (i as any).igstRate ? Number((i as any).igstRate) : null,
+      igstAmount: (i as any).igstAmount ? Number((i as any).igstAmount) : null,
+      cgstRate: (i as any).cgstRate ? Number((i as any).cgstRate) : null,
+      cgstAmount: (i as any).cgstAmount ? Number((i as any).cgstAmount) : null,
+      sgstRate: (i as any).sgstRate ? Number((i as any).sgstRate) : null,
+      sgstAmount: (i as any).sgstAmount ? Number((i as any).sgstAmount) : null,
+    }))
+  };
 }
 
-// ─── Docket Number on DC ───
 
 export async function updateDcDocket(docketId: string, docketNumber: string) {
   const user = await getSession();

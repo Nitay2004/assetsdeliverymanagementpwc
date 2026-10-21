@@ -66,22 +66,24 @@ export async function addDocket(formData: FormData) {
   const orderId = formData.get("orderId") as string;
   const docketNumber = formData.get("docketNumber") as string;
   const courierName = (formData.get("courierName") as string) || null;
-  const ewayBillNumber = formData.get("ewayBillNumber") as string;
+  const ewayBillNumber = (formData.get("ewayBillNumber") as string)?.trim() || "";
   const podDocumentUrl = formData.get("podDocumentUrl") as string;
 
   if (!orderId || !docketNumber) {
     throw new Error("Order and docket number are required.");
   }
 
-  await prisma.docket.create({
-    data: {
-      orderId,
-      docketNumber,
-      courierName,
-      ewayBillNumber: ewayBillNumber || null,
-      podDocumentUrl: podDocumentUrl || null,
-    },
-  });
+  if (ewayBillNumber) {
+    if (!/^\d{12}$/.test(ewayBillNumber)) {
+      throw new Error("E-Way Bill number must be 12 digits.");
+    }
+    const existing = await prisma.docket.findFirst({
+      where: { ewayBillNumber },
+    });
+    if (existing) {
+      throw new Error("E-Way Bill number already exists.");
+    }
+  }
 
   const linkedAssets = await prisma.asset.findMany({
     where: { orderId, inventoryItemId: { not: null } },
