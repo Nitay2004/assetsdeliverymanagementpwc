@@ -36,16 +36,18 @@ jobs:
 
       - name: Sync code to deploy dir
         run: |
-          # tar only adds/overwrites; remove files deleted from the repo so they
-          # don't linger. middleware.ts was renamed to proxy.ts in Next 16 — a
-          # stale middleware.ts on the server breaks the build.
-          rm -rf /opt/asset-delivery-system/src/src
-          rm -f /opt/asset-delivery-system/src/middleware.ts
-          # If docker created files as root inside prisma/migrations, fix ownership/permissions first
-          sudo rm -rf /opt/asset-delivery-system/prisma/migrations/20261021000000_add_cgst_sgst_to_dc 2>/dev/null || rm -rf /opt/asset-delivery-system/prisma/migrations/20261021000000_add_cgst_sgst_to_dc 2>/dev/null || true
-          sudo chown -R "$(id -u):$(id -g)" /opt/asset-delivery-system/prisma 2>/dev/null || true
-          tar --exclude=.git --exclude=node_modules --exclude=.next --exclude=.env --exclude=.env.* --exclude='*.tmp.js' --exclude='*.log' --exclude=project.tgz -cf - . | (cd /opt/asset-delivery-system && tar --no-same-owner -xf -)
-          chmod -R u+rwX,go+rX /opt/asset-delivery-system/prisma 2>/dev/null || true
+          # Use docker (running as root) to reliably clean and sync into /opt/asset-delivery-system,
+          # avoiding host user permission issues with root-owned files from previous docker builds.
+          docker run --rm \
+            -v "$PWD":/repo:ro \
+            -v /opt/asset-delivery-system:/dest \
+            node:22-alpine sh -c '
+              rm -rf /dest/src/src
+              rm -f /dest/src/middleware.ts
+              cd /repo
+              tar --exclude=.git --exclude=node_modules --exclude=.next --exclude=.env --exclude=.env.* --exclude="*.tmp.js" --exclude="*.log" --exclude=project.tgz -cf - . | (cd /dest && tar -xf -)
+              chmod -R 777 /dest/prisma /dest/src 2>/dev/null || true
+            '
 
       - name: Build & restart app
         run: |
