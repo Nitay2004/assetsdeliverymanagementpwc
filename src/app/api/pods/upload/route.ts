@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { saveFile, podFileUrl, POD_BUCKET } from "@/lib/storage";
 import { getSession } from "@/lib/auth";
-import { canViewModule } from "@/lib/permissions";
+import { canModuleAction } from "@/lib/permissions";
 import { calculateSlaStatus } from "@/lib/sla-utils";
 import { timingSafeEqual } from "crypto";
 
@@ -43,10 +43,12 @@ export async function POST(req: NextRequest) {
   try {
     const sessionUser = await getSession();
     const apiKeyAuth = authorized(req);
+    // View-only access must not be enough: this endpoint writes the POD and
+    // flips the order to DELIVERED.
     const moduleAuth =
       !!sessionUser &&
-      (canViewModule(sessionUser.permissions, sessionUser.role, "logistics") ||
-        canViewModule(sessionUser.permissions, sessionUser.role, "warehouse"));
+      (canModuleAction(sessionUser.permissions, sessionUser.role, "logistics", "canEdit") ||
+        canModuleAction(sessionUser.permissions, sessionUser.role, "warehouse", "canEdit"));
     if (!apiKeyAuth && !moduleAuth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

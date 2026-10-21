@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { saveFile, POD_BUCKET } from "@/lib/storage";
 import { getSession } from "@/lib/auth";
-import { canViewModule } from "@/lib/permissions";
+import { canModuleAction } from "@/lib/permissions";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -26,9 +26,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     if (
-      !canViewModule(user.permissions, user.role, "logistics") &&
-      !canViewModule(user.permissions, user.role, "reverse-pickup") &&
-      !canViewModule(user.permissions, user.role, "warehouse")
+      !canModuleAction(user.permissions, user.role, "logistics", "canEdit") &&
+      !canModuleAction(user.permissions, user.role, "reverse-pickup", "canEdit") &&
+      !canModuleAction(user.permissions, user.role, "warehouse", "canEdit")
     ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

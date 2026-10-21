@@ -6,6 +6,7 @@ import { deployedStatus } from "@/lib/inventory-status";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/lib/order-sync";
+import { orderTransitionError } from "@/lib/order-status";
 
 export async function allocateInventoryToOrder(
   orderId: string,
@@ -54,7 +55,16 @@ export async function allocateInventoryToOrder(
 export async function updateOrderStatus(orderId: string, status: string) {
   const user = await getSession();
   requirePermission(user, "warehouse", "canEdit");
-  
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { status: true },
+  });
+  if (!order) throw new Error("Order not found.");
+
+  const transitionError = orderTransitionError(order.status, status);
+  if (transitionError) throw new Error(transitionError);
+
   await prisma.order.update({
     where: { id: orderId },
     data: { status: status as any },

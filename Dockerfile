@@ -2,7 +2,10 @@ FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+# vitest@5 peer-depends on @types/node@^22 while the project pins @types/node@^20.
+# npm's strict peer resolver refuses to install; --legacy-peer-deps relaxes that
+# check so the install matches the already-resolved package-lock.json.
+RUN npm ci --ignore-scripts --legacy-peer-deps
 
 FROM node:22-alpine AS builder
 RUN apk add --no-cache libc6-compat openssl

@@ -31,6 +31,8 @@ interface DcPdfData {
   amountInWords?: string | null;
   taxableValue: number | null;
   igst: number | null;
+  cgst?: number | null;
+  sgst?: number | null;
   totalTaxAmount: number | null;
   taxAmountInWords?: string | null;
   items: Array<{
@@ -42,6 +44,10 @@ interface DcPdfData {
     taxableValue?: number | null;
     igstRate?: number | null;
     igstAmount?: number | null;
+    cgstRate?: number | null;
+    cgstAmount?: number | null;
+    sgstRate?: number | null;
+    sgstAmount?: number | null;
   }>;
 }
 
@@ -206,7 +212,7 @@ export async function generateDcPdf(data: DcPdfData, clientName: string): Promis
               { text: "Rate (INR)", style: "tableHeader" },
               { text: "Amount (INR)", style: "tableHeader" },
               { text: "Taxable Value", style: "tableHeader" },
-              { text: "IGST", style: "tableHeader" },
+              { text: "GST", style: "tableHeader" },
             ],
             ...data.items.map((item) => [
               { text: item.description, style: "tableCell" },
@@ -215,7 +221,12 @@ export async function generateDcPdf(data: DcPdfData, clientName: string): Promis
               { text: item.rate.toLocaleString("en-IN", { minimumFractionDigits: 2 }), style: "tableCellRight" },
               { text: item.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }), style: "tableCellRight" },
               { text: (item.taxableValue ?? item.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }), style: "tableCellRight" },
-              { text: (item.igstAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), style: "tableCellRight" },
+              {
+                text: (
+                  (item.igstAmount ?? 0) + (item.cgstAmount ?? 0) + (item.sgstAmount ?? 0)
+                ).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
+                style: "tableCellRight",
+              },
             ]),
           ],
         },
@@ -240,10 +251,23 @@ export async function generateDcPdf(data: DcPdfData, clientName: string): Promis
               { text: "Total Taxable Value", style: "totalLabel" },
               { text: (data.taxableValue ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), style: "totalValue" },
             ],
-            [
-              { text: "IGST", style: "totalLabel" },
-              { text: (data.igst ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), style: "totalValue" },
-            ],
+            ...((data.cgst != null && data.cgst > 0) || (data.sgst != null && data.sgst > 0)
+              ? [
+                  [
+                    { text: "CGST", style: "totalLabel" },
+                    { text: (data.cgst ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), style: "totalValue" },
+                  ],
+                  [
+                    { text: "SGST", style: "totalLabel" },
+                    { text: (data.sgst ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), style: "totalValue" },
+                  ],
+                ]
+              : [
+                  [
+                    { text: "IGST", style: "totalLabel" },
+                    { text: (data.igst ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), style: "totalValue" },
+                  ],
+                ]),
             [
               { text: "Total Tax Amount", style: "totalLabel" },
               { text: (data.totalTaxAmount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 }), style: "totalValue" },

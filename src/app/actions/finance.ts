@@ -5,6 +5,8 @@ import { getSession } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/lib/order-sync";
+import { orderTransitionError } from "@/lib/order-status";
+import { validateEwayBillNumber } from "@/lib/eway-bill";
 
 export async function updateOrderFinance(
   orderId: string,
@@ -22,6 +24,14 @@ export async function updateOrderFinance(
 
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) throw new Error("Order not found.");
+
+  if (data.status !== undefined) {
+    const transitionError = orderTransitionError(order.status, data.status);
+    if (transitionError) throw new Error(transitionError);
+  }
+  if (data.totalQuantity !== undefined && (!Number.isInteger(data.totalQuantity) || data.totalQuantity < 0)) {
+    throw new Error("Total quantity must be a whole number of zero or more.");
+  }
 
   const updateData: Record<string, unknown> = {};
   if (data.clientName !== undefined) updateData.clientName = data.clientName;
@@ -62,6 +72,13 @@ export async function generateEwayBill(orderId: string, ewayBillNumber: string, 
   const docket = order.dockets[0];
   if (!docket) throw new Error("No docket found for this order.");
 
+  const formatError = validateEwayBillNumber(ewayBillNumber);
+  if (formatError) throw new Error(formatError);
+  const duplicate = await prisma.docket.findFirst({
+    where: { ewayBillNumber, id: { not: docket.id } },
+  });
+  if (duplicate) throw new Error("E-Way Bill number already exists.");
+
   await prisma.docket.update({
     where: { id: docket.id },
     data: { ewayBillNumber, ewayBillDocumentUrl: ewayBillDocumentUrl ?? null },
@@ -69,6 +86,9 @@ export async function generateEwayBill(orderId: string, ewayBillNumber: string, 
 
   const isRto = order.status === "RTO_EWAY_BILL_REQUESTED";
   const targetStatus = isRto ? "RTO_EWAY_BILL_GENERATED" : "EWAY_BILL_GENERATED";
+
+  const transitionError = orderTransitionError(order.status, targetStatus);
+  if (transitionError) throw new Error(transitionError);
 
   await prisma.order.update({
     where: { id: orderId },

@@ -303,6 +303,20 @@ export async function deleteInventoryItem(id: string) {
   const user = await getSession();
   requirePermission(user, "inventory", "canDelete");
 
+  // AssignmentRecord is onDelete: Cascade, so deleting the item would erase the
+  // whole custody history of the asset. Refuse rather than lose compliance
+  // data; the item can be retired instead.
+  const [assignmentCount, assetCount, rpCount] = await Promise.all([
+    prisma.assignmentRecord.count({ where: { inventoryItemId: id } }),
+    prisma.asset.count({ where: { inventoryItemId: id } }),
+    prisma.reversePickupRequest.count({ where: { inventoryItemId: id } }),
+  ]);
+  if (assignmentCount > 0 || assetCount > 0 || rpCount > 0) {
+    throw new Error(
+      "This asset has assignment, order or reverse-pickup history and cannot be deleted. Retire it instead."
+    );
+  }
+
   try {
     await prisma.inventoryItem.delete({ where: { id } });
   } catch {
