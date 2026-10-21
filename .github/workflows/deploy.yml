@@ -29,7 +29,7 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" \
             -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
             -v "$PWD":/repo -w /repo node:22-alpine sh -c '
-            npm ci --no-audit --no-fund
+            npm ci --no-audit --no-fund --legacy-peer-deps
             npx tsc --noEmit
             npm run lint || echo "::warning::lint reported issues (non-blocking)"
           '
@@ -42,6 +42,7 @@ jobs:
           rm -rf /opt/asset-delivery-system/src/src
           rm -f /opt/asset-delivery-system/src/middleware.ts
           tar --exclude=.git --exclude=node_modules --exclude=.next --exclude=.env --exclude=.env.* --exclude='*.tmp.js' --exclude='*.log' --exclude=project.tgz -cf - . | (cd /opt/asset-delivery-system && tar -xf -)
+          chmod -R u+rwX,go+rX /opt/asset-delivery-system/prisma || true
 
       - name: Build & restart app
         run: |
