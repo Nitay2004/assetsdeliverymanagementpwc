@@ -19,38 +19,43 @@ export async function markAsRto(
   const user = await getSession();
   requirePermission(user, "logistics", "canCreate");
 
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    select: { status: true },
-  });
-  if (!order) throw new Error("Order not found.");
-  if (order.status !== "DISPATCHED") {
-    throw new Error("Can only mark as RTO from DISPATCHED status.");
-  }
+  const rtoDocketNumber = data.rtoDocketNumber?.trim();
+  if (!rtoDocketNumber) throw new Error("RTO docket number is required.");
 
-  // Create RTO record
-  await prisma.rtoRecord.create({
-    data: {
-      orderId,
-      warehouseId: data.warehouseId,
-      receivedBy: data.receivedBy,
-      rtoDocketNumber: data.rtoDocketNumber,
-      rtoDate: new Date(),
-    },
-  });
+  await prisma.$transaction(async (tx) => {
+    // Claim the transition first. A double submit or two operators working the
+    // same row will make exactly one of these update exactly one row; the other
+    // gets zero and must not create a second RTO record/docket.
+    const claimed = await tx.order.updateMany({
+      where: { id: orderId, status: "DISPATCHED" },
+      data: { status: "RTO" },
+    });
+    if (claimed.count === 0) {
+      const existing = await tx.order.findUnique({
+        where: { id: orderId },
+        select: { status: true },
+      });
+      if (!existing) throw new Error("Order not found.");
+      throw new Error("Can only mark as RTO from DISPATCHED status.");
+    }
 
-  // Create a new docket for RTO (old one stays)
-  await prisma.docket.create({
-    data: {
-      orderId,
-      docketNumber: data.rtoDocketNumber,
-    },
-  });
+    await tx.rtoRecord.create({
+      data: {
+        orderId,
+        warehouseId: data.warehouseId,
+        receivedBy: data.receivedBy,
+        rtoDocketNumber,
+        rtoDate: new Date(),
+      },
+    });
 
-  // Update order status
-  await prisma.order.update({
-    where: { id: orderId },
-    data: { status: "RTO" },
+    // Create a new docket for RTO (old one stays)
+    await tx.docket.create({
+      data: {
+        orderId,
+        docketNumber: rtoDocketNumber,
+      },
+    });
   });
 
   await syncOrderTrackingStatus(orderId, "RTO");

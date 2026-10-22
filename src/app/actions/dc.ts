@@ -317,6 +317,18 @@ export async function generateDC(orderId: string, data: DcFormData) {
   const { dc, freshNumber: dcNumber } = await withUniqueRetry(async () => {
     const freshNumber = await getNextDcNumber();
     return prisma.$transaction(async (tx) => {
+      // Re-check inside the transaction so two simultaneous submits cannot both
+      // pass the pre-flight check and create two forward DCs for one order.
+      if (!isRto) {
+        const existingDc = await tx.deliveryChallan.findFirst({
+          where: { orderId },
+          select: { dcNumber: true },
+        });
+        if (existingDc) {
+          throw new Error(`A delivery challan (${existingDc.dcNumber}) already exists for this order.`);
+        }
+      }
+
       const created = await tx.deliveryChallan.create({
         data: {
           orderId,
@@ -361,10 +373,20 @@ export async function generateDC(orderId: string, data: DcFormData) {
         },
         include: { items: true },
       });
-      await tx.order.update({
-        where: { id: orderId },
+      // Conditional claim: only the caller that still sees an allowed status
+      // advances the order. A concurrent caller fails and rolls back its DC.
+      const claimed = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          status: isRto
+            ? "RTO_DC_REQUESTED"
+            : { in: ["IN_PROVISIONING", "DC_REQUESTED"] },
+        },
         data: { dcNumber: freshNumber, status: targetStatus },
       });
+      if (claimed.count === 0) {
+        throw new Error("Order status changed before the DC could be generated. Refresh and try again.");
+      }
       return { dc: created, freshNumber };
     });
   });
@@ -609,6 +631,14 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
   const { dc, freshNumber: dcNumber } = await withUniqueRetry(async () => {
     const freshNumber = await getNextDcNumber();
     return prisma.$transaction(async (tx) => {
+      const existingDc = await tx.deliveryChallan.findFirst({
+        where: { reversePickupRequestId: rpId },
+        select: { dcNumber: true },
+      });
+      if (existingDc) {
+        throw new Error(`A delivery challan (${existingDc.dcNumber}) already exists for this reverse pickup.`);
+      }
+
       const created = await tx.deliveryChallan.create({
         data: {
           reversePickupRequestId: rpId,
@@ -653,10 +683,13 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
         },
         include: { items: true },
       });
-      await tx.reversePickupRequest.update({
-        where: { id: rpId },
+      const claimed = await tx.reversePickupRequest.updateMany({
+        where: { id: rpId, dcNo: null },
         data: { dcNo: freshNumber, status: "DC_GENERATED" },
       });
+      if (claimed.count === 0) {
+        throw new Error("A DC was already generated for this reverse pickup, or its status changed.");
+      }
       return { dc: created, freshNumber };
     });
   });

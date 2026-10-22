@@ -370,6 +370,7 @@ model Asset {
   order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
 
+  @@unique([orderId, inventoryItemId])
   @@index([orderId])
   @@index([inventoryItemId])
   @@map("assets")
@@ -499,7 +500,7 @@ model ReversePickupRequest {
 
   dcNo                  String?              @map("dc_no") // Automatic
   srnNo                 String?              @map("srn_no")
-  eWayBillNo            String?              @map("e_way_bill_no") // Automatic
+  eWayBillNo            String?              @map("e_way_bill_no") @unique // Automatic
   eWayBillDocumentUrl   String?              @map("e_way_bill_document_url")
   etaForUnitReceived    DateTime?            @map("eta_for_unit_received") @db.Date
   caseAge               String?              @map("case_age") // Automatic
@@ -644,9 +645,9 @@ model ProductMaster {
 model Docket {
   id                        String    @id @default(uuid()) @db.Uuid
   orderId                   String    @map("order_id") @db.Uuid
-  docketNumber              String?   @map("docket_number")
+  docketNumber              String?   @map("docket_number") @unique
   courierName               String?   @map("courier_name")
-  ewayBillNumber            String?   @map("eway_bill_number")
+  ewayBillNumber            String?   @map("eway_bill_number") @unique
   ewayBillDocumentUrl       String?   @map("eway_bill_document_url")
   podDocumentUrl            String?   @map("pod_document_url")
   pafexTrackingFound        Boolean?  @map("pafex_tracking_found")

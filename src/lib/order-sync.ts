@@ -25,10 +25,26 @@ const orderStatusTrackingMap: Record<string, string> = {
   RTO_DC_GENERATED: "RTO DC Generated",
   RTO_EWAY_BILL_REQUESTED: "RTO E-Way Bill Requested",
   RTO_EWAY_BILL_GENERATED: "RTO E-Way Bill Generated",
+  RTO_IN_TRANSIT: "RTO In Transit",
+  RTO_DELIVERED_TO_WAREHOUSE: "RTO Delivered to Warehouse",
   DELIVERY_CONFIRMED: "Delivery Confirmed",
   INVOICED: "Invoiced",
   WARRANTY_UPDATED: "Warranty Updated",
+  CANCELLED: "Cancelled",
 };
+
+// Orders in these states no longer hold their asset allocation. Marking the
+// Asset rows "released" keeps the history row while freeing the physical item
+// for a future order (enforced by the partial unique index on
+// assets.inventory_item_id in the database).
+const TERMINAL_ORDER_STATUSES = new Set([
+  "DELIVERED",
+  "DELIVERY_CONFIRMED",
+  "INVOICED",
+  "WARRANTY_UPDATED",
+  "RTO_DELIVERED_TO_WAREHOUSE",
+  "CANCELLED",
+]);
 
 export async function syncOrderTrackingStatus(orderId: string, orderStatus: string) {
   const assets = await prisma.asset.findMany({
@@ -37,6 +53,17 @@ export async function syncOrderTrackingStatus(orderId: string, orderStatus: stri
   });
 
   const itemIds = assets.map(a => a.inventoryItemId).filter(Boolean) as string[];
+
+  // Once the order reaches a terminal state it no longer owns these assets.
+  // The rows stay for history, but "released" is excluded from the partial
+  // unique index so the same physical item can be allocated to a new order.
+  if (TERMINAL_ORDER_STATUSES.has(orderStatus)) {
+    await prisma.asset.updateMany({
+      where: { orderId, status: { not: "released" } },
+      data: { status: "released" },
+    });
+  }
+
   if (itemIds.length === 0) return;
 
   // RTO item received back at the warehouse → return to stock
@@ -109,7 +136,10 @@ export async function syncOrderTrackingStatus(orderId: string, orderStatus: stri
     return;
   }
 
-  const trackingStatus = orderStatusTrackingMap[orderStatus] ?? null;
+  const trackingStatus = orderStatusTrackingMap[orderStatus];
+  // Never write null over a tracking status the source data already carries.
+  // Unknown statuses simply leave the existing value untouched.
+  if (!trackingStatus) return;
 
   // Delivery transaction from the app → auto-record the outward date. Each delivery
   // fills the next empty outward slot (outwardDate1 → outwardDate6) so app transactions

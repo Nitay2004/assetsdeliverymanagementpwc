@@ -3,7 +3,7 @@ import { timingSafeEqual } from "crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { canViewModule } from "@/lib/permissions";
+import { canModuleAction } from "@/lib/permissions";
 import { saveFile, POD_BUCKET } from "@/lib/storage";
 import { calculateSlaStatus } from "@/lib/sla-utils";
 import {
@@ -453,10 +453,12 @@ export async function POST(req: NextRequest) {
   try {
     const sessionUser = await getSession();
     const apiKeyAuth = authorized(req);
+    // This endpoint writes dockets, delivery dates, PODs and tracking state.
+    // A view-only grant (including the default PWC role) must not be enough.
     const moduleAuth =
       !!sessionUser &&
-      (canViewModule(sessionUser.permissions, sessionUser.role, "logistics") ||
-        canViewModule(sessionUser.permissions, sessionUser.role, "warehouse"));
+      (canModuleAction(sessionUser.permissions, sessionUser.role, "logistics", "canEdit") ||
+        canModuleAction(sessionUser.permissions, sessionUser.role, "warehouse", "canEdit"));
     if (!apiKeyAuth && !moduleAuth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

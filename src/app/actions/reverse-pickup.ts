@@ -1008,28 +1008,43 @@ export async function completeReversePickup(formData: FormData) {
   const id = formData.get("id") as string;
   if (!id) throw new Error("Request ID is required.");
 
-  const request = await prisma.reversePickupRequest.findUnique({
-    where: { id },
-    select: { serialNumber: true, inventoryItemId: true },
-  });
-  if (!request) throw new Error("Reverse pickup request not found.");
-
-  const inventoryItem = request.inventoryItemId
-    ? await prisma.inventoryItem.findUnique({ where: { id: request.inventoryItemId } })
-    : await prisma.inventoryItem.findUnique({ where: { serialNumber: request.serialNumber } });
-
   await prisma.$transaction(async (tx) => {
+    const request = await tx.reversePickupRequest.findUnique({
+      where: { id },
+      select: { serialNumber: true, inventoryItemId: true },
+    });
+    if (!request) throw new Error("Reverse pickup request not found.");
+
+    // Claim completion atomically. A double click or stale tab must not restock
+    // the same unit twice. Completion is only valid after Blanco has been
+    // purged/certified, matching the Warehouse UI.
+    const claimed = await tx.reversePickupRequest.updateMany({
+      where: { id, status: { in: ["BLANCO_PURGED", "BLANCO_CERTIFIED"] } },
+      data: { status: "COMPLETED", finalDisposition: "RESTOCKED" },
+    });
+    if (claimed.count === 0) {
+      throw new Error("This request cannot be completed from its current status.");
+    }
+
+    let inventoryItem = request.inventoryItemId
+      ? await tx.inventoryItem.findUnique({ where: { id: request.inventoryItemId } })
+      : await tx.inventoryItem.findUnique({ where: { serialNumber: request.serialNumber } });
+
     if (inventoryItem) {
-      await restockInventoryItem(tx, inventoryItem);
+      // Lock the inventory row so two reverse-pickup requests for the same
+      // serial cannot restock it concurrently.
+      await tx.$queryRaw`
+        SELECT id FROM inventory_items WHERE id = ${inventoryItem.id} FOR UPDATE
+      `;
+      inventoryItem = await tx.inventoryItem.findUnique({ where: { id: inventoryItem.id } });
+      if (inventoryItem) {
+        await restockInventoryItem(tx, inventoryItem);
+      }
     }
 
     await tx.reversePickupRequest.update({
       where: { id },
-      data: {
-        status: "COMPLETED",
-        finalDisposition: "RESTOCKED",
-        inventoryItemId: inventoryItem?.id ?? request.inventoryItemId,
-      },
+      data: { inventoryItemId: inventoryItem?.id ?? request.inventoryItemId },
     });
   });
 

@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { getSession, requireAuth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { redirect } from "next/navigation";
@@ -466,7 +467,7 @@ export async function cancelItemAssignment(id: string) {
     const asset = await tx.asset.findFirst({
       where: {
         inventoryItemId: id,
-        order: { status: { notIn: ["DELIVERED", "DELIVERY_CONFIRMED", "INVOICED", "WARRANTY_UPDATED", "CANCELLED"] } },
+        order: { status: { notIn: ["DELIVERED", "DELIVERY_CONFIRMED", "INVOICED", "WARRANTY_UPDATED", "RTO_DELIVERED_TO_WAREHOUSE", "CANCELLED"] } },
       },
       select: { orderId: true },
     });
@@ -839,70 +840,91 @@ export async function sendToWarehouse(inventoryItemIds: string[]) {
   const user = await getSession();
   requirePermission(user, "inventory", "canCreate");
 
-  const items = await prisma.inventoryItem.findMany({
-    where: { id: { in: inventoryItemIds }, status: { in: ["ASSET_RETURN_TO_WAREHOUSE", ...DEPLOYED_STATUSES] } },
-  });
-
-  if (items.length === 0) {
-    throw new Error("No available or allocated items selected.");
+  const uniqueIds = [...new Set(inventoryItemIds)];
+  if (uniqueIds.length === 0) {
+    throw new Error("No items selected.");
   }
 
-  const alreadyInOrder = await prisma.asset.findFirst({
-    where: {
-      inventoryItemId: { in: items.map(i => i.id) },
-      order: { status: { notIn: ["DELIVERED", "DELIVERY_CONFIRMED", "WARRANTY_UPDATED", "CANCELLED"] } },
-    },
-    include: { order: { select: { id: true, status: true } } },
-  });
+  const orderId = await prisma.$transaction(async (tx) => {
+    // Serialise concurrent dispatches of the same physical items. Without this
+    // lock two requests can both read "no active order" and create two orders
+    // for the same asset.
+    await tx.$queryRaw`
+      SELECT id FROM inventory_items
+      WHERE id IN (${Prisma.join(uniqueIds)})
+      FOR UPDATE
+    `;
 
-  if (alreadyInOrder) {
-    throw new Error(`One or more items are already assigned to an active order (${alreadyInOrder.order.status}).`);
-  }
-
-  // Create an Order
-  const orderName = items.length === 1 
-    ? (items[0].employeeName || items[0].entity || "Individual Dispatch") 
-    : "Bulk Dispatch Batch";
-    
-  const orderLocation = items.length === 1 
-    ? ([items[0].city, items[0].state].filter(Boolean).join(", ") || "N/A") 
-    : "Multiple Locations";
-
-  const order = await prisma.order.create({
-    data: {
-      clientName: orderName,
-      intermediary: "Direct from Inventory",
-      totalQuantity: items.length,
-      deliveryLocation: orderLocation,
-      status: "ORDER_PLACED", // User requested it to start in Pending Allocation
-    },
-  });
-
-  // Create Asset slots and link to items
-  await prisma.asset.createMany({
-    data: items.map(item => ({
-      orderId: order.id,
-      status: "allocated",
-      inventoryItemId: item.id,
-    })),
-  });
-
-  // Mark the items as deployed to a user. A brand-new asset's first dispatch is
-  // "Shipped to User"; anything that has been out before is a redeployment.
-  for (const item of items) {
-    await prisma.inventoryItem.update({
-      where: { id: item.id },
-      data: { status: deployedStatus(item.status) },
+    const items = await tx.inventoryItem.findMany({
+      where: {
+        id: { in: uniqueIds },
+        status: { in: ["ASSET_RETURN_TO_WAREHOUSE", ...DEPLOYED_STATUSES] },
+      },
     });
-  }
 
-  await syncOrderTrackingStatus(order.id, "ORDER_PLACED");
+    if (items.length !== uniqueIds.length) {
+      throw new Error("One or more selected items are no longer available.");
+    }
+
+    const alreadyInOrder = await tx.asset.findFirst({
+      where: {
+        inventoryItemId: { in: items.map(i => i.id) },
+        order: { status: { notIn: ["DELIVERED", "DELIVERY_CONFIRMED", "INVOICED", "WARRANTY_UPDATED", "RTO_DELIVERED_TO_WAREHOUSE", "CANCELLED"] } },
+      },
+      include: { order: { select: { id: true, status: true } } },
+    });
+
+    if (alreadyInOrder) {
+      throw new Error(`One or more items are already assigned to an active order (${alreadyInOrder.order.status}).`);
+    }
+
+    // Create an Order
+    const orderName = items.length === 1
+      ? (items[0].employeeName || items[0].entity || "Individual Dispatch")
+      : "Bulk Dispatch Batch";
+
+    const orderLocation = items.length === 1
+      ? ([items[0].city, items[0].state].filter(Boolean).join(", ") || "N/A")
+      : "Multiple Locations";
+
+    const order = await tx.order.create({
+      data: {
+        clientName: orderName,
+        intermediary: "Direct from Inventory",
+        totalQuantity: items.length,
+        deliveryLocation: orderLocation,
+        status: "ORDER_PLACED", // User requested it to start in Pending Allocation
+      },
+    });
+
+    // Create Asset slots and link to items
+    await tx.asset.createMany({
+      data: items.map(item => ({
+        orderId: order.id,
+        status: "allocated",
+        inventoryItemId: item.id,
+      })),
+    });
+
+    // Mark the items as deployed to a user. A brand-new asset's first dispatch is
+    // "Shipped to User"; anything that has been out before is a redeployment.
+    for (const item of items) {
+      await tx.inventoryItem.update({
+        where: { id: item.id },
+        data: { status: deployedStatus(item.status) },
+      });
+    }
+
+    return order.id;
+  });
+
+  await syncOrderTrackingStatus(orderId, "ORDER_PLACED");
 
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/warehouse");
   revalidatePath("/dashboard/provisioning");
   revalidatePath("/dashboard");
-  return { success: true, orderId: order.id };
+  return { success: true, orderId };
 }
 
 export async function fixInventoryStatusConsistency() {

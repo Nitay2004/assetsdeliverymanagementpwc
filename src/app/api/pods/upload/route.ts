@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma, type OrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { saveFile, podFileUrl, POD_BUCKET } from "@/lib/storage";
 import { getSession } from "@/lib/auth";
@@ -38,6 +39,21 @@ function matchesMagic(buffer: Buffer, ext: string): boolean {
   if (buffer.length < magic.length) return false;
   return magic.every((byte, i) => buffer[i] === byte);
 }
+
+// Date-only fields are stored as @db.Date. Building them from local midnight
+// shifts the stored day for anyone east of UTC, so parse as UTC and reject
+// impossible dates such as 2026-02-31 (which JS would silently roll over).
+function parseDateOnlyUtc(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+    return null;
+  }
+  return date;
+}
+
+const POD_ALLOWED_ORDER_STATUSES = new Set<string>(["DISPATCHED", "DELIVERY_CONFIRMED", "DELIVERED"]);
+const POD_DELIVERABLE_ORDER_STATUSES = new Set<OrderStatus>(["DISPATCHED", "DELIVERY_CONFIRMED"]);
 
 export async function POST(req: NextRequest) {
   try {
@@ -83,9 +99,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "File content does not match its extension" }, { status: 400 });
     }
 
-    const deliveryDate = deliveryDateRaw ? new Date(`${deliveryDateRaw}T00:00:00`) : null;
-    if (deliveryDateRaw && deliveryDate && Number.isNaN(deliveryDate.getTime())) {
-      return NextResponse.json({ error: "Invalid deliveryDate. Use YYYY-MM-DD format." }, { status: 400 });
+    const deliveryDate = deliveryDateRaw ? parseDateOnlyUtc(deliveryDateRaw) : null;
+    if (deliveryDateRaw && !deliveryDate) {
+      return NextResponse.json({ error: "Invalid deliveryDate. Use a real YYYY-MM-DD date." }, { status: 400 });
     }
 
     const dockets = await prisma.docket.findMany({
@@ -100,41 +116,96 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const orderIds = [...new Set(dockets.map(d => d.orderId))];
+    // One docket number must not fan out across multiple orders: that would
+    // attach this POD and delivery stamp to unrelated shipments.
+    if (orderIds.length > 1) {
+      return NextResponse.json(
+        {
+          error: `Docket number "${docketNumberRaw}" belongs to ${orderIds.length} different orders. Refusing to update all of them.`,
+          orderIds,
+        },
+        { status: 409 }
+      );
+    }
+
+    const orders = await prisma.order.findMany({
+      where: { id: { in: orderIds } },
+      select: { id: true, status: true },
+    });
+    const orderById = new Map(orders.map(o => [o.id, o]));
+    const invalidOrders = orderIds
+      .map(id => ({ id, status: orderById.get(id)?.status ?? "NOT_FOUND" }))
+      .filter(o => !POD_ALLOWED_ORDER_STATUSES.has(o.status));
+    if (invalidOrders.length > 0) {
+      return NextResponse.json(
+        {
+          error: "POD can only be uploaded for dispatched, delivery-confirmed or already delivered orders.",
+          orders: invalidOrders,
+        },
+        { status: 409 }
+      );
+    }
+
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const filePath = await saveFile(`${POD_BUCKET}/${fileName}`, buffer);
 
-    await prisma.docket.updateMany({
-      where: { id: { in: dockets.map(d => d.id) } },
-      data: { podDocumentUrl: filePath },
-    });
-
-    const orderIds = [...new Set(dockets.map(d => d.orderId))];
-    const delivered: { orderId: string; items: number }[] = [];
-
-    for (const orderId of orderIds) {
-      const order = await prisma.order.findUnique({
-        where: { id: orderId },
-        select: { status: true },
+    const delivered = await prisma.$transaction(async (tx) => {
+      // Lock the orders so their status cannot change between the check and
+      // the POD write. Re-read after locking because the snapshot above may be
+      // stale by now.
+      await tx.$queryRaw`
+        SELECT id FROM orders WHERE id IN (${Prisma.join(orderIds)}) FOR UPDATE
+      `;
+      const freshOrders = await tx.order.findMany({
+        where: { id: { in: orderIds } },
+        select: { id: true, status: true },
       });
-      if (!order) continue;
-
-      const assets = await prisma.asset.findMany({
-        where: { orderId, inventoryItemId: { not: null } },
-        select: { inventoryItemId: true },
-      });
-      const itemIds = assets.map(a => a.inventoryItemId).filter(Boolean) as string[];
-
-      if (order.status === "DISPATCHED" || order.status === "DELIVERY_CONFIRMED") {
-        await prisma.order.update({ where: { id: orderId }, data: { status: "DELIVERED" } });
+      if (
+        freshOrders.length !== orderIds.length ||
+        freshOrders.some(o => !POD_ALLOWED_ORDER_STATUSES.has(o.status))
+      ) {
+        throw new Error("Order status changed. POD upload was cancelled.");
       }
+      const freshOrderById = new Map(freshOrders.map(o => [o.id, o]));
 
-      if (itemIds.length > 0) {
+      await tx.docket.updateMany({
+        where: { id: { in: dockets.map(d => d.id) } },
+        data: { podDocumentUrl: filePath },
+      });
+
+      const updated: { orderId: string; items: number }[] = [];
+      for (const orderId of orderIds) {
+        const status = freshOrderById.get(orderId)?.status;
+        // Re-uploading a POD for an order that is already DELIVERED only
+        // replaces the document. It must not move dates or status again.
+        if (!status || !POD_DELIVERABLE_ORDER_STATUSES.has(status)) continue;
+
+        // Claim the transition atomically. If another request already moved the
+        // order, this matches zero rows and we leave its item dates alone.
+        const claimed = await tx.order.updateMany({
+          where: {
+            id: orderId,
+            status: { in: [...POD_DELIVERABLE_ORDER_STATUSES] },
+          },
+          data: { status: "DELIVERED" },
+        });
+        if (claimed.count === 0) continue;
+
+        const assets = await tx.asset.findMany({
+          where: { orderId, inventoryItemId: { not: null } },
+          select: { inventoryItemId: true },
+        });
+        const itemIds = assets.map(a => a.inventoryItemId).filter(Boolean) as string[];
+        if (itemIds.length === 0) continue;
+
         const now = deliveryDate ?? new Date();
-        const items = await prisma.inventoryItem.findMany({
+        const items = await tx.inventoryItem.findMany({
           where: { id: { in: itemIds } },
           select: {
             id: true,
             expectedDeliveryDate: true,
+            actualDeliveryDate: true,
             outwardDate1: true,
             outwardDate2: true,
             outwardDate3: true,
@@ -144,9 +215,10 @@ export async function POST(req: NextRequest) {
           },
         });
         for (const item of items) {
+          const actualDelivery = item.actualDeliveryDate ?? now;
           const dateToSet: Record<string, Date> = {
             deliveryDate: now,
-            actualDeliveryDate: now,
+            actualDeliveryDate: actualDelivery,
           };
           if (!item.outwardDate1) dateToSet.outwardDate1 = now;
           else if (!item.outwardDate2) dateToSet.outwardDate2 = now;
@@ -154,18 +226,25 @@ export async function POST(req: NextRequest) {
           else if (!item.outwardDate4) dateToSet.outwardDate4 = now;
           else if (!item.outwardDate5) dateToSet.outwardDate5 = now;
           else if (!item.outwardDate6) dateToSet.outwardDate6 = now;
-          await prisma.inventoryItem.update({
+          await tx.inventoryItem.update({
             where: { id: item.id },
             data: {
               trackingStatus: trackingStatusMap["DELIVERED"],
               ...dateToSet,
-              slaStatus: calculateSlaStatus(dateToSet.actualDeliveryDate, item.expectedDeliveryDate),
+              slaStatus: calculateSlaStatus(actualDelivery, item.expectedDeliveryDate),
             },
           });
         }
-        delivered.push({ orderId, items: itemIds.length });
+        // Terminal order: free the physical asset for a future allocation
+        // (the partial unique index ignores "released" history rows).
+        await tx.asset.updateMany({
+          where: { orderId, status: { not: "released" } },
+          data: { status: "released" },
+        });
+        updated.push({ orderId, items: itemIds.length });
       }
-    }
+      return updated;
+    });
 
     return NextResponse.json({
       success: true,

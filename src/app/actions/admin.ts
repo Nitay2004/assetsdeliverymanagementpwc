@@ -7,7 +7,12 @@ import { getSession } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getDefaultPermissions, type Permissions } from "@/lib/permissions";
+import {
+  getDefaultPermissions,
+  type ModuleId,
+  type ModulePermission,
+  type Permissions,
+} from "@/lib/permissions";
 
 async function requireAdmin() {
   const user = await getSession();
@@ -15,6 +20,82 @@ async function requireAdmin() {
     throw new Error("Unauthorized");
   }
   return user;
+}
+
+const MODULE_IDS: ModuleId[] = [
+  "inventory",
+  "assigned-assets",
+  "warehouse",
+  "provisioning",
+  "finance",
+  "logistics",
+  "reverse-pickup",
+  "warranty",
+  "product-master",
+  "vendor-master",
+  "admin",
+];
+
+const PERMISSION_FLAGS = ["canView", "canCreate", "canEdit", "canDelete"] as const;
+
+// Permissions arrive from the browser as arbitrary JSON. Validate the exact
+// shape instead of persisting whatever was posted: unknown keys and non-boolean
+// values are rejected, while missing legacy fields fall back to role defaults.
+function sanitizePermissions(input: unknown, role: string | null | undefined): Permissions {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Invalid permissions payload.");
+  }
+
+  const raw = input as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (!MODULE_IDS.includes(key as ModuleId)) {
+      throw new Error(`Unknown permission module "${key}".`);
+    }
+  }
+
+  const defaults = getDefaultPermissions(role);
+  const result = {} as Permissions;
+  for (const moduleId of MODULE_IDS) {
+    const moduleValue = raw[moduleId];
+    if (moduleValue === undefined) {
+      // Legacy rows may not contain every module; fill the gap from the role
+      // defaults instead of rejecting the whole edit.
+      result[moduleId] = defaults[moduleId];
+      continue;
+    }
+    if (!moduleValue || typeof moduleValue !== "object" || Array.isArray(moduleValue)) {
+      throw new Error(`Invalid permissions for "${moduleId}".`);
+    }
+    const source = moduleValue as Record<string, unknown>;
+    for (const key of Object.keys(source)) {
+      if (!PERMISSION_FLAGS.includes(key as (typeof PERMISSION_FLAGS)[number])) {
+        throw new Error(`Unknown permission "${moduleId}.${key}".`);
+      }
+    }
+    const cleaned = {} as ModulePermission;
+    for (const flag of PERMISSION_FLAGS) {
+      const value = source[flag];
+      if (value === undefined) {
+        cleaned[flag] = defaults[moduleId][flag];
+      } else if (typeof value === "boolean") {
+        cleaned[flag] = value;
+      } else {
+        throw new Error(`Permission "${moduleId}.${flag}" must be true or false.`);
+      }
+    }
+    result[moduleId] = cleaned;
+  }
+  return result;
+}
+
+// Removing the last active admin would lock everyone out of user management.
+async function assertAnotherActiveAdmin(userId: string) {
+  const remaining = await prisma.user.count({
+    where: { role: "ADMIN", isActive: true, id: { not: userId } },
+  });
+  if (remaining === 0) {
+    throw new Error("Cannot remove or disable the last active admin.");
+  }
 }
 
 export async function getUsers() {
@@ -73,7 +154,7 @@ export async function createUser(formData: FormData) {
 }
 
 export async function updateUser(userId: string, formData: FormData) {
-  await requireAdmin();
+  const currentUser = await requireAdmin();
 
   const name = formData.get("name") as string;
   const role = formData.get("role") as string;
@@ -87,11 +168,31 @@ export async function updateUser(userId: string, formData: FormData) {
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (!existing) return { success: false, error: "User not found." };
 
-  const roleChanged = Boolean(role) && role !== existing.role;
+  const nextRole = role ? (role as UserRole) : existing.role;
+  const roleChanged = nextRole !== existing.role;
+
+  // An admin must not change their own role or disable themselves: either can
+  // create an unrecoverable lockout, and both are easy to do by accident.
+  if (currentUser.id === userId) {
+    if (roleChanged) {
+      return { success: false, error: "You cannot change your own role." };
+    }
+    if (!isActive && existing.isActive) {
+      return { success: false, error: "You cannot disable your own account." };
+    }
+  }
+
+  if (existing.role === "ADMIN" && (nextRole !== "ADMIN" || !isActive)) {
+    try {
+      await assertAnotherActiveAdmin(userId);
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  }
 
   const updateData: Record<string, unknown> = {
     name: name || null,
-    role: role as UserRole,
+    role: nextRole,
     isActive,
   };
 
@@ -100,7 +201,7 @@ export async function updateUser(userId: string, formData: FormData) {
   }
 
   if (roleChanged) {
-    updateData.permissions = getDefaultPermissions(role) as unknown as Prisma.InputJsonValue;
+    updateData.permissions = getDefaultPermissions(nextRole) as unknown as Prisma.InputJsonValue;
   }
 
   await prisma.user.update({
@@ -120,23 +221,51 @@ export async function updateUser(userId: string, formData: FormData) {
 }
 
 export async function updateUserPermissions(userId: string, permissions: Permissions) {
-  await requireAdmin();
+  const currentUser = await requireAdmin();
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true },
+  });
+  if (!target) return { success: false, error: "User not found." };
+
+  let safePermissions: Permissions;
+  try {
+    safePermissions = sanitizePermissions(permissions, target.role);
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
 
   await prisma.user.update({
     where: { id: userId },
-    data: { permissions: permissions as unknown as Prisma.InputJsonValue },
+    data: { permissions: safePermissions as unknown as Prisma.InputJsonValue },
   });
+
+  // Permission edits take effect on the next request because sessions are
+  // re-read from the DB, but revoking other live sessions is defence in depth.
+  if (userId !== currentUser.id) {
+    await prisma.session.deleteMany({ where: { userId } });
+  }
 
   revalidatePath("/dashboard/admin/users");
   return { success: true };
 }
 
 export async function deleteUser(userId: string) {
-  await requireAdmin();
-
-  const currentUser = await getSession();
-  if (currentUser?.id === userId) {
+  const currentUser = await requireAdmin();
+  if (currentUser.id === userId) {
     return { success: false, error: "Cannot delete your own account." };
+  }
+
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) return { success: false, error: "User not found." };
+
+  if (target.role === "ADMIN" && target.isActive) {
+    try {
+      await assertAnotherActiveAdmin(userId);
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
   }
 
   await prisma.user.delete({ where: { id: userId } });
@@ -145,10 +274,22 @@ export async function deleteUser(userId: string) {
 }
 
 export async function toggleUserStatus(userId: string) {
-  await requireAdmin();
+  const currentUser = await requireAdmin();
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return { success: false, error: "User not found." };
+
+  if (currentUser.id === userId && user.isActive) {
+    return { success: false, error: "You cannot disable your own account." };
+  }
+
+  if (user.role === "ADMIN" && user.isActive) {
+    try {
+      await assertAnotherActiveAdmin(userId);
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  }
 
   const updated = await prisma.user.update({
     where: { id: userId },
@@ -165,7 +306,7 @@ export async function toggleUserStatus(userId: string) {
 }
 
 export async function resetUserPermissions(userId: string) {
-  await requireAdmin();
+  const currentUser = await requireAdmin();
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return { success: false, error: "User not found." };
@@ -174,6 +315,10 @@ export async function resetUserPermissions(userId: string) {
     where: { id: userId },
     data: { permissions: getDefaultPermissions(user.role) as unknown as Prisma.InputJsonValue },
   });
+
+  if (userId !== currentUser.id) {
+    await prisma.session.deleteMany({ where: { userId } });
+  }
 
   revalidatePath("/dashboard/admin/users");
   return { success: true };
