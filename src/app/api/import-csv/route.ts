@@ -994,6 +994,13 @@ export async function POST(request: Request) {
         data.model = data.laptopModel;
       }
 
+      // The provisioning/assignment sheets carry the target date in "Delivery TAT
+      // Date" rather than "Expected Delivery Date". Treat it as the expected date
+      // so the SLA columns are populated instead of staying blank.
+      if (!data.expectedDeliveryDate && data.deliveryTatDate) {
+        data.expectedDeliveryDate = data.deliveryTatDate;
+      }
+
       data.slaStatus = calculateSlaStatus(
         data.actualDeliveryDate as string | Date | null | undefined,
         data.expectedDeliveryDate as string | Date | null | undefined

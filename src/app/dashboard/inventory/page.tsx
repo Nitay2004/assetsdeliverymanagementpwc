@@ -119,7 +119,7 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
             ...i,
             requestDate: safeISO(i.requestDate),
             slaStartDate: safeISO(i.slaStartDate),
-            expectedDeliveryDate: safeISO(i.expectedDeliveryDate),
+            expectedDeliveryDate: safeISO(i.expectedDeliveryDate ?? i.deliveryTatDate),
             actualDeliveryDate: safeISO(i.actualDeliveryDate),
             laptopAcceptanceDate: safeISO(i.laptopAcceptanceDate),
             warrantyEndPeriod: safeISO(i.warrantyEndPeriod),

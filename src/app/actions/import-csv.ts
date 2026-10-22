@@ -233,6 +233,12 @@ export async function importInventoryCSV(formData: FormData) {
       data.model = data.laptopModel;
     }
 
+    // Sheets carry the target date as "Delivery TAT Date"; use it as the expected
+    // delivery date when an explicit Expected Delivery Date column is absent.
+    if (!data.expectedDeliveryDate && data.deliveryTatDate) {
+      data.expectedDeliveryDate = data.deliveryTatDate;
+    }
+
     data.slaStatus = calculateSlaStatus(
       data.actualDeliveryDate as string | Date | null | undefined,
       data.expectedDeliveryDate as string | Date | null | undefined
