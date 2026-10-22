@@ -61,6 +61,21 @@ export const ACTIVE_PROVISIONING_STATUSES: OrderStatus[] = ["ALLOCATED", "IN_PRO
 // Statuses where the order has been handed over to logistics.
 export const HANDED_OVER_STATUSES: OrderStatus[] = ["DC_REQUESTED", "DOCKET_REQUESTED", "DOCKET_ASSIGNED"];
 
+// Statuses in which a shipment is still in the warehouse and its docket details
+// (docket number, courier, e-way bill, POD) may still be corrected. Once the
+// parcel is dispatched the docket is tied to a physical consignment, so editing
+// it afterwards would desync the record from what actually left the building.
+export const DOCKET_EDITABLE_STATUSES: OrderStatus[] = [
+  "IN_PROVISIONING",
+  "DC_REQUESTED",
+  "DC_GENERATED",
+  "DOCKET_REQUESTED",
+  "DOCKET_ASSIGNED",
+  "PACKED_AND_LABELLED",
+  "EWAY_BILL_REQUESTED",
+  "EWAY_BILL_GENERATED",
+];
+
 // ─── Transition policy ───────────────────────────────────────────────────────
 //
 // Every server action that changes Order.status must go through this module so

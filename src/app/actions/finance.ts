@@ -29,8 +29,8 @@ export async function updateOrderFinance(
     const transitionError = orderTransitionError(order.status, data.status);
     if (transitionError) throw new Error(transitionError);
   }
-  if (data.totalQuantity !== undefined && (!Number.isInteger(data.totalQuantity) || data.totalQuantity < 0)) {
-    throw new Error("Total quantity must be a whole number of zero or more.");
+  if (data.totalQuantity !== undefined && (!Number.isInteger(data.totalQuantity) || data.totalQuantity < 1)) {
+    throw new Error("Total quantity must be a whole number of at least 1.");
   }
 
   const updateData: Record<string, unknown> = {};

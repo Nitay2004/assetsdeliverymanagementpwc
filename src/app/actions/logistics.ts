@@ -5,7 +5,7 @@ import { getSession } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/lib/order-sync";
-import { isValidOrderStatus, orderTransitionError } from "@/lib/order-status";
+import { isValidOrderStatus, orderTransitionError, DOCKET_EDITABLE_STATUSES } from "@/lib/order-status";
 import { validateEwayBillNumber } from "@/lib/eway-bill";
 
 export async function markAsRto(
@@ -80,6 +80,12 @@ export async function addDocket(formData: FormData) {
     throw new Error("Order and docket number are required.");
   }
 
+  const duplicateNumber = await prisma.docket.findFirst({
+    where: { docketNumber },
+    select: { id: true },
+  });
+  if (duplicateNumber) throw new Error("Docket number already exists.");
+
   if (ewayBillNumber) {
     const formatError = validateEwayBillNumber(ewayBillNumber);
     if (formatError) throw new Error(formatError);
@@ -131,6 +137,20 @@ export async function updateDocket(id: string, formData: FormData) {
 
   if (!docketNumber) throw new Error("Docket number is required.");
 
+  const docket = await prisma.docket.findUnique({
+    where: { id },
+    select: { id: true, orderId: true, order: { select: { status: true } } },
+  });
+  if (!docket) throw new Error("Docket not found.");
+
+  // The docket number is unique across all orders, so a duplicate has to be
+  // rejected explicitly or the raw constraint error leaks.
+  const duplicateNumber = await prisma.docket.findFirst({
+    where: { docketNumber, id: { not: id } },
+    select: { id: true },
+  });
+  if (duplicateNumber) throw new Error("Docket number already exists.");
+
   if (ewayBillNumber) {
     const formatError = validateEwayBillNumber(ewayBillNumber);
     if (formatError) throw new Error(formatError);
@@ -138,6 +158,15 @@ export async function updateDocket(id: string, formData: FormData) {
       where: { ewayBillNumber, id: { not: id } },
     });
     if (duplicate) throw new Error("E-Way Bill number already exists.");
+  }
+
+  // A docket stops being editable once the order has left the warehouse, so an
+  // operator cannot rewrite the docket tied to a parcel that is already in
+  // transit.
+  if (!DOCKET_EDITABLE_STATUSES.includes(docket.order.status)) {
+    throw new Error(
+      `A docket can only be edited while the order is in the warehouse; this order is "${docket.order.status}".`
+    );
   }
 
   await prisma.docket.update({

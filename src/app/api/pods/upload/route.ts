@@ -5,6 +5,7 @@ import { saveFile, podFileUrl, POD_BUCKET } from "@/lib/storage";
 import { getSession } from "@/lib/auth";
 import { canModuleAction } from "@/lib/permissions";
 import { calculateSlaStatus } from "@/lib/sla-utils";
+import { parseDateOnlyUtc, todayDateOnlyUtc } from "@/lib/date-only";
 import { timingSafeEqual } from "crypto";
 
 const ALLOWED_EXT = ["pdf", "jpg", "jpeg", "png"];
@@ -41,16 +42,9 @@ function matchesMagic(buffer: Buffer, ext: string): boolean {
 }
 
 // Date-only fields are stored as @db.Date. Building them from local midnight
-// shifts the stored day for anyone east of UTC, so parse as UTC and reject
-// impossible dates such as 2026-02-31 (which JS would silently roll over).
-function parseDateOnlyUtc(value: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const date = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
-    return null;
-  }
-  return date;
-}
+// shifts the stored day for anyone east of UTC, so parseDateOnlyUtc (from
+// @/lib/date-only) parses as UTC and rejects impossible dates such as
+// 2026-02-31 (which JS would silently roll over).
 
 const POD_ALLOWED_ORDER_STATUSES = new Set<string>(["DISPATCHED", "DELIVERY_CONFIRMED", "DELIVERED"]);
 const POD_DELIVERABLE_ORDER_STATUSES = new Set<OrderStatus>(["DISPATCHED", "DELIVERY_CONFIRMED"]);
@@ -84,6 +78,15 @@ export async function POST(req: NextRequest) {
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     if (!ALLOWED_EXT.includes(ext)) {
       return NextResponse.json({ error: "Only PDF, JPG, and PNG files are allowed" }, { status: 400 });
+    }
+
+    // Reject an oversized upload from the declared size before buffering the
+    // whole body into memory.
+    if (file.size === 0) {
+      return NextResponse.json({ error: "Empty file" }, { status: 400 });
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: "File exceeds the 10 MB limit" }, { status: 413 });
     }
 
     const bytes = await file.arrayBuffer();
@@ -199,7 +202,9 @@ export async function POST(req: NextRequest) {
         const itemIds = assets.map(a => a.inventoryItemId).filter(Boolean) as string[];
         if (itemIds.length === 0) continue;
 
-        const now = deliveryDate ?? new Date();
+        // Without an explicit delivery date, fall back to today's calendar day as
+        // UTC midnight so the @db.Date columns store the intended day.
+        const now = deliveryDate ?? todayDateOnlyUtc();
         const items = await tx.inventoryItem.findMany({
           where: { id: { in: itemIds } },
           select: {

@@ -1,3 +1,5 @@
+import { dateOnlyInOffset } from "@/lib/date-only";
+
 const BASE_URL = "https://pafexnew.itdservices.in";
 const TRACKING_TIMEOUT_MS = 30_000;
 const POD_TIMEOUT_MS = 60_000;
@@ -174,9 +176,17 @@ function newestOf(events: PafexEvent[]): PafexEvent | null {
 
 function parseEventDate(value: string | null): Date | null {
   if (!value) return null;
-  // Pafex sends "2026-08-21 19:30:00", which Date.parse reads as local time.
-  const parsed = new Date(value.replace(" ", "T"));
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  // Pafex sends "2026-08-21 19:30:00" with no timezone, which Date.parse reads
+  // as local time. Pafex is an Indian courier, so the timestamp is IST; the day
+  // that belongs in a @db.Date column is therefore the IST calendar day, stored
+  // as UTC midnight. If the payload ever carries an explicit offset, that
+  // offset wins instead of being overwritten.
+  const trimmed = value.trim();
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+  const iso = trimmed.replace(" ", "T");
+  const parsed = new Date(hasZone ? iso : `${iso}+05:30`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return dateOnlyInOffset(parsed, 330);
 }
 
 export function deliveredAt(tracking: PafexTracking): Date | null {

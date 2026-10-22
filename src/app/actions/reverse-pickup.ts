@@ -11,6 +11,8 @@ import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
 import { nextSequenceNumber } from "@/lib/sequence-number";
 import { hasPriorDelivery } from "@/app/actions/assignment";
 import { isDeployedStatus } from "@/lib/inventory-status";
+import { hasReachedWarehouse } from "@/lib/reverse-pickup-config";
+import { validateEwayBillNumber } from "@/lib/eway-bill";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -60,6 +62,32 @@ async function nextReversePickupRequestNumber(): Promise<string> {
   });
 
   return `RPU-${String(seq).padStart(4, "0")}`;
+}
+
+/**
+ * Server-side status precondition for a reverse-pickup workflow step.
+ *
+ * The UI only ever shows the button for the expected predecessor state, but a
+ * stale tab, a replayed form submit, or a direct call can still reach the action.
+ * Re-reading the row and refusing anything outside `allowed` keeps each step on
+ * the documented sequence and stops side effects (restock, date stamping) from
+ * running out of order.
+ */
+async function requireReversePickupStatus(
+  id: string,
+  allowed: readonly string[],
+  actionLabel: string
+): Promise<void> {
+  const request = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: { status: true },
+  });
+  if (!request) throw new Error("Reverse pickup request not found.");
+  if (!allowed.includes(request.status)) {
+    throw new Error(
+      `${actionLabel} is not allowed while the request is "${request.status}" (expected ${allowed.join(" or ")}).`
+    );
+  }
 }
 
 /**
@@ -406,6 +434,8 @@ export async function assignPartner(formData: FormData) {
 
   if (!id || !partnerName) throw new Error("Request ID and partner name are required.");
 
+  await requireReversePickupStatus(id, ["REQUESTED"], "Assigning a partner");
+
   await prisma.reversePickupRequest.update({
     where: { id },
     data: {
@@ -429,6 +459,8 @@ export async function requestDc(formData: FormData) {
   const id = formData.get("id") as string;
   if (!id) throw new Error("Request ID is required.");
 
+  await requireReversePickupStatus(id, ["PARTNER_ASSIGNED"], "Requesting a DC");
+
   await prisma.reversePickupRequest.update({
     where: { id },
     data: { status: "DC_REQUESTED" },
@@ -444,6 +476,8 @@ export async function requestEwayBill(formData: FormData) {
 
   const id = formData.get("id") as string;
   if (!id) throw new Error("Request ID is required.");
+
+  await requireReversePickupStatus(id, ["DC_GENERATED"], "Requesting an e-way bill");
 
   await prisma.reversePickupRequest.update({
     where: { id },
@@ -463,6 +497,8 @@ export async function recordInspection(formData: FormData) {
   const inspectionDate = parseDate(formData.get("inspectionDate") as string);
 
   if (!id) throw new Error("Request ID is required.");
+
+  await requireReversePickupStatus(id, ["DOCKET_ASSIGNED"], "Recording an inspection");
 
   await prisma.reversePickupRequest.update({
     where: { id },
@@ -485,6 +521,8 @@ export async function markAsPickedUp(formData: FormData) {
   const docketNumber = formData.get("docketNumber") as string;
 
   if (!id) throw new Error("Request ID is required.");
+
+  await requireReversePickupStatus(id, ["INSPECTED"], "Marking as picked up");
 
   const existing = await prisma.reversePickupRequest.findUnique({
     where: { id },
@@ -712,6 +750,8 @@ export async function recordCleanQc(formData: FormData) {
 
   if (!id || !qcCleanResult) throw new Error("Request ID and Hardware QC result are required.");
 
+  await requireReversePickupStatus(id, ["RECEIVED_AT_WAREHOUSE"], "Recording Hardware QC");
+
   const existing = await prisma.reversePickupRequest.findUnique({
     where: { id },
     select: { qcPurgeResult: true, qcEngineer: true },
@@ -749,6 +789,8 @@ export async function recordPurgeQc(formData: FormData) {
   const qcPurgeBy = formData.get("qcPurgeBy") as string;
 
   if (!id || !qcPurgeResult) throw new Error("Request ID and Software QC result are required.");
+
+  await requireReversePickupStatus(id, ["QC_CLEANED"], "Recording Software QC");
 
   const existing = await prisma.reversePickupRequest.findUnique({
     where: { id },
@@ -992,6 +1034,17 @@ export async function uploadPodDocument(formData: FormData) {
 
   if (!id || !podDocumentUrl) throw new Error("Request ID and POD document URL are required.");
 
+  // The POD is warehouse-side evidence the courier handed the unit over, so it
+  // only belongs on a request that has actually reached the warehouse.
+  const request = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: { status: true },
+  });
+  if (!request) throw new Error("Reverse pickup request not found.");
+  if (!hasReachedWarehouse(request.status)) {
+    throw new Error("A POD can only be uploaded once the unit has reached the warehouse.");
+  }
+
   await prisma.reversePickupRequest.update({
     where: { id },
     data: { podDocumentUrl },
@@ -1068,6 +1121,14 @@ export async function assignReversePickupDocket(formData: FormData) {
   const docketNumber = formData.get("docketNumber") as string;
   if (!id || !docketNumber) throw new Error("Request ID and docket number are required.");
 
+  // The docket is supplied after the e-way bill is generated (or straight after
+  // the docket is requested), matching the Logistics reverse pipeline.
+  await requireReversePickupStatus(
+    id,
+    ["EWAY_BILL_GENERATED", "DOCKET_REQUESTED"],
+    "Assigning a docket"
+  );
+
   await prisma.reversePickupRequest.update({
     where: { id },
     data: { docketNumber, status: "DOCKET_ASSIGNED" },
@@ -1082,9 +1143,25 @@ export async function generateReversePickupEwayBill(formData: FormData) {
   requirePermission(user, "reverse-pickup", "canEdit");
 
   const id = formData.get("id") as string;
-  const eWayBillNo = formData.get("eWayBillNo") as string;
+  const eWayBillNo = (formData.get("eWayBillNo") as string)?.trim() ?? "";
   const eWayBillDocumentUrl = (formData.get("eWayBillDocumentUrl") as string) || null;
   if (!id || !eWayBillNo) throw new Error("Request ID and e-way bill number are required.");
+
+  const formatError = validateEwayBillNumber(eWayBillNo);
+  if (formatError) throw new Error(formatError);
+
+  // The 12-digit number is unique across the GST portal, so it must be unique
+  // here too — otherwise two consignments end up sharing one bill.
+  const duplicate = await prisma.reversePickupRequest.findFirst({
+    where: { eWayBillNo, id: { not: id } },
+    select: { requestNumber: true },
+  });
+  if (duplicate) {
+    throw new Error(`E-Way Bill number is already used by request ${duplicate.requestNumber}.`);
+  }
+
+  // The bill is generated only after Finance has been asked for it.
+  await requireReversePickupStatus(id, ["EWAY_BILL_REQUESTED"], "Generating an e-way bill");
 
   await prisma.reversePickupRequest.update({
     where: { id },

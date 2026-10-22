@@ -7,58 +7,9 @@ import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/lib/order-sync";
 import { nextSequenceNumber } from "@/lib/sequence-number";
 import { withUniqueRetry } from "@/lib/retry";
-
-// GST place-of-supply depends on the state of the shipper and the consignee.
-// Locations in this app are free-form strings that may carry a full state name
-// ("Kolkata, West Bengal, 700001"), just a city ("Kolkata"), or a state code.
-// City names are common — the warehouse defaults are 'Kolkata', 'Bangalore',
-// 'Gurgaon' — so cities are mapped to their state before falling back to null.
-const CITY_TO_STATE: Record<string, string> = {
-  kolkata: "west bengal", howrah: "west bengal", siliguri: "west bengal", durgapur: "west bengal",
-  bangalore: "karnataka", bengaluru: "karnataka", mysore: "karnataka", mangalore: "karnataka", hubli: "karnataka",
-  gurgaon: "haryana", gurugram: "haryana", faridabad: "haryana", panipat: "haryana", hisar: "haryana",
-  mumbai: "maharashtra", pune: "maharashtra", nagpur: "maharashtra", nashik: "maharashtra", thane: "maharashtra",
-  chennai: "tamil nadu", coimbatore: "tamil nadu", madurai: "tamil nadu", trichy: "tamil nadu", salem: "tamil nadu",
-  noida: "uttar pradesh", lucknow: "uttar pradesh", kanpur: "uttar pradesh", agra: "uttar pradesh", varanasi: "uttar pradesh", ghaziabad: "uttar pradesh",
-  delhi: "delhi", "new delhi": "delhi",
-  hyderabad: "telangana", secunderabad: "telangana", warangal: "telangana",
-  ahmedabad: "gujarat", surat: "gujarat", vadodara: "gujarat", rajkot: "gujarat", gandhinagar: "gujarat",
-  jaipur: "rajasthan", jodhpur: "rajasthan", udaipur: "rajasthan",
-  chandigarh: "chandigarh", mohali: "punjab", ludhiana: "punjab", amritsar: "punjab", jalandhar: "punjab",
-  indore: "madhya pradesh", bhopal: "madhya pradesh", jabalpur: "madhya pradesh", gwalior: "madhya pradesh",
-  patna: "bihar", gaya: "bihar", muzaffarpur: "bihar",
-  ranchi: "jharkhand", jamshedpur: "jharkhand", dhanbad: "jharkhand",
-  bhubaneswar: "odisha", cuttack: "odisha", rourkela: "odisha",
-  kochi: "kerala", cochin: "kerala", thiruvananthapuram: "kerala", kozhikode: "kerala",
-  guwahati: "assam", dispur: "assam",
-  raipur: "chhattisgarh", bilaspur: "chhattisgarh",
-  dehradun: "uttarakhand", haridwar: "uttarakhand",
-  goa: "goa", panaji: "goa",
-  shimla: "himachal pradesh", solan: "himachal pradesh",
-  srinagar: "jammu and kashmir", jammu: "jammu and kashmir",
-  puducherry: "puducherry", pondicherry: "puducherry",
-  visakhapatnam: "andhra pradesh", vijayawada: "andhra pradesh", guntur: "andhra pradesh", tirupati: "andhra pradesh",
-};
-
-function getStateFromLocation(loc: string | null | undefined): string | null {
-  if (!loc) return null;
-  const text = loc.toLowerCase();
-  const states = [
-    "andhra pradesh", "arunachal pradesh", "assam", "bihar", "chhattisgarh", "goa", "gujarat", "haryana", "himachal pradesh", "jharkhand", "karnataka", "kerala", "madhya pradesh", "maharashtra", "manipur", "meghalaya", "mizoram", "nagaland", "odisha", "punjab", "rajasthan", "sikkim", "tamil nadu", "telangana", "tripura", "uttar pradesh", "uttarakhand", "west bengal",
-    "delhi", "jammu and kashmir", "ladakh", "chandigarh", "puducherry", "andaman and nicobar", "daman and diu", "dadra and nagar haveli", "lakshadweep",
-  ];
-  for (const s of states) {
-    if (text.includes(s)) return s;
-  }
-  // Match a standalone city token (whole word) to avoid false positives inside
-  // other words.
-  const tokens = text.match(/[a-z]+/g) ?? [];
-  for (const token of tokens) {
-    const mapped = CITY_TO_STATE[token];
-    if (mapped) return mapped;
-  }
-  return null;
-}
+import { isIntraStateSupply } from "@/lib/dc-gst";
+import { DOCKET_EDITABLE_STATUSES } from "@/lib/order-status";
+import { parseDateOnlyUtc, todayDateOnlyUtc } from "@/lib/date-only";
 
 function numberToWords(num: number): string {
   if (num === 0) return "Zero";
@@ -216,7 +167,25 @@ export async function generateDC(orderId: string, data: DcFormData) {
   const targetStatus = isRto ? "RTO_DC_GENERATED" : "DC_GENERATED";
   const trackingStatus = isRto ? "RTO_DC_GENERATED" : "DC_GENERATED";
 
-  const dcDate = new Date();
+  // Every line has to be a real consignment line. Rejecting bad quantities and
+  // rates here stops a NaN or negative value from corrupting the stored taxable
+  // value and tax totals.
+  if (!Array.isArray(data.items) || data.items.length === 0) {
+    throw new Error("At least one item is required.");
+  }
+  for (const [index, item] of data.items.entries()) {
+    if (!item.description?.trim()) {
+      throw new Error(`Item ${index + 1}: description is required.`);
+    }
+    if (!Number.isFinite(item.quantity) || !Number.isInteger(item.quantity) || item.quantity < 1) {
+      throw new Error(`Item ${index + 1}: quantity must be a whole number of at least 1.`);
+    }
+    if (!Number.isFinite(item.rate) || item.rate < 0) {
+      throw new Error(`Item ${index + 1}: rate must be a non-negative number.`);
+    }
+  }
+
+  const dcDate = todayDateOnlyUtc();
 
   // Product Master stays the source of truth for the HSN and GST rate
   const hsnByModel: Record<string, string> = {};
@@ -241,9 +210,10 @@ export async function generateDC(orderId: string, data: DcFormData) {
   }
 
   // Determine if intra-state or inter-state
-  const shipperState = getStateFromLocation(data.warehouseLocation || order.warehouseLocation);
-  const consigneeState = getStateFromLocation(data.shipToLocation || order.deliveryLocation);
-  const isIntraState = shipperState && consigneeState && shipperState === consigneeState;
+  const isIntraState = isIntraStateSupply(
+    data.warehouseLocation || order.warehouseLocation,
+    data.shipToLocation || order.deliveryLocation
+  );
 
   const items = await Promise.all(
     data.items.map(async (item) => {
@@ -339,10 +309,10 @@ export async function generateDC(orderId: string, data: DcFormData) {
           billToLocation: data.billToLocation,
           modeOfPayment: data.modeOfPayment || null,
           referenceNo: data.referenceNo,
-          referenceDate: data.referenceDate ? new Date(data.referenceDate) : null,
+          referenceDate: data.referenceDate ? parseDateOnlyUtc(data.referenceDate) : null,
           otherReferences: data.otherReferences,
           buyersOrderNo: data.buyersOrderNo,
-          buyersOrderDate: data.buyersOrderDate ? new Date(data.buyersOrderDate) : null,
+          buyersOrderDate: data.buyersOrderDate ? parseDateOnlyUtc(data.buyersOrderDate) : null,
           dispatchDocNo: data.dispatchDocNo,
           dispatchedThrough: data.dispatchedThrough,
           destination: data.destination,
@@ -529,6 +499,34 @@ async function resolveProductHsn(serialNumber: string | null, model: string | nu
   return lookupProductHsn(null, model?.trim());
 }
 
+// Product Master is the source of truth for the GST rate. The DC preview needs
+// it per line so it can show the same CGST/SGST or IGST split the server will
+// store, instead of guessing a flat rate.
+async function lookupProductGstRate(partNo?: string | null, modelName?: string | null, hsnCode?: string | null): Promise<number | null> {
+  if (partNo) {
+    const pm = await prisma.productMaster.findFirst({
+      where: { partNo: { equals: partNo, mode: "insensitive" } },
+      select: { gstRate: true },
+    });
+    if (pm?.gstRate != null) return Number(pm.gstRate);
+  }
+  if (modelName) {
+    const pm = await prisma.productMaster.findFirst({
+      where: { model: { equals: modelName, mode: "insensitive" } },
+      select: { gstRate: true },
+    });
+    if (pm?.gstRate != null) return Number(pm.gstRate);
+  }
+  if (hsnCode) {
+    const pm = await prisma.productMaster.findFirst({
+      where: { hsnCode: { equals: hsnCode, mode: "insensitive" } },
+      select: { gstRate: true },
+    });
+    if (pm?.gstRate != null) return Number(pm.gstRate);
+  }
+  return null;
+}
+
 export async function getReversePickupForDc(rpId: string) {
   await requireAuth();
   const rp = await prisma.reversePickupRequest.findUnique({
@@ -538,6 +536,7 @@ export async function getReversePickupForDc(rpId: string) {
 
   const fullAddress = [rp.pickupAddress, rp.city, rp.state, rp.pinCode].filter(Boolean).join(", ");
   const hsnCode = await resolveProductHsn(rp.serialNumber, rp.model);
+  const gstRate = await lookupProductGstRate(null, rp.model, hsnCode);
 
   return {
     id: rp.id,
@@ -550,7 +549,7 @@ export async function getReversePickupForDc(rpId: string) {
     // Reverse pickup is a return leg, so the DC leaves through the same pickup
     // partner that collected the asset rather than a forward courier.
     partnerName: rp.partnerName || "",
-    items: [{ description: rp.model || "Laptop", hsnSac: hsnCode ?? "", quantity: 1, rate: 0 }],
+    items: [{ description: rp.model || "Laptop", hsnSac: hsnCode ?? "", quantity: 1, rate: 0, gstRate }],
   };
 }
 
@@ -561,12 +560,30 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
   const rp = await prisma.reversePickupRequest.findUnique({ where: { id: rpId } });
   if (!rp) throw new Error("Reverse pickup request not found");
 
-  const dcDate = new Date();
+  // A reverse DC carries a single return line; reject anything that would store
+  // a broken quantity or rate.
+  if (!Array.isArray(data.items) || data.items.length === 0) {
+    throw new Error("At least one item is required.");
+  }
+  for (const [index, item] of data.items.entries()) {
+    if (!item.description?.trim()) {
+      throw new Error(`Item ${index + 1}: description is required.`);
+    }
+    if (!Number.isFinite(item.quantity) || !Number.isInteger(item.quantity) || item.quantity < 1) {
+      throw new Error(`Item ${index + 1}: quantity must be a whole number of at least 1.`);
+    }
+    if (!Number.isFinite(item.rate) || item.rate < 0) {
+      throw new Error(`Item ${index + 1}: rate must be a non-negative number.`);
+    }
+  }
+
+  const dcDate = todayDateOnlyUtc();
   const resolvedHsn = await resolveProductHsn(rp.serialNumber, rp.model);
 
-  const shipperState = getStateFromLocation(rp.warehouseLocation);
-  const consigneeState = getStateFromLocation(rp.pickupAddress) || getStateFromLocation(`${rp.pickupAddress}, ${rp.city}, ${rp.state}, ${rp.pinCode}`);
-  const isIntraState = shipperState && consigneeState && shipperState === consigneeState;
+  const isIntraState = isIntraStateSupply(
+    rp.warehouseLocation,
+    rp.pickupAddress || `${rp.pickupAddress}, ${rp.city}, ${rp.state}, ${rp.pinCode}`
+  );
 
   const items = await Promise.all(
     data.items.map(async (item) => {
@@ -649,10 +666,10 @@ export async function generateReversePickupDc(rpId: string, data: DcFormData) {
           billToLocation: data.billToLocation,
           modeOfPayment: null,
           referenceNo: data.referenceNo,
-          referenceDate: data.referenceDate ? new Date(data.referenceDate) : null,
+          referenceDate: data.referenceDate ? parseDateOnlyUtc(data.referenceDate) : null,
           otherReferences: data.otherReferences,
           buyersOrderNo: data.buyersOrderNo,
-          buyersOrderDate: data.buyersOrderDate ? new Date(data.buyersOrderDate) : null,
+          buyersOrderDate: data.buyersOrderDate ? parseDateOnlyUtc(data.buyersOrderDate) : null,
           dispatchDocNo: data.dispatchDocNo,
           dispatchedThrough: data.dispatchedThrough || rp.partnerName,
           destination: data.destination,
@@ -733,6 +750,29 @@ export async function updateDcDocket(docketId: string, docketNumber: string) {
   requirePermission(user, "finance", "canEdit");
   const value = docketNumber.trim();
   if (!value) throw new Error("Docket number is required.");
+
+  const existing = await prisma.docket.findUnique({
+    where: { id: docketId },
+    select: { id: true, orderId: true, order: { select: { status: true } } },
+  });
+  if (!existing) throw new Error("Docket not found.");
+
+  // The docket number is unique across orders; surface a clear error instead of
+  // letting the unique constraint bubble up as a raw database failure.
+  const duplicate = await prisma.docket.findFirst({
+    where: { docketNumber: value, id: { not: docketId } },
+    select: { id: true },
+  });
+  if (duplicate) throw new Error("Docket number already exists.");
+
+  // A docket can only be corrected while its order is still in the warehouse.
+  // Editing one after dispatch would rewrite the record for a parcel that has
+  // already left.
+  if (!DOCKET_EDITABLE_STATUSES.includes(existing.order.status)) {
+    throw new Error(
+      `A docket can only be edited while the order is in the warehouse; this order is "${existing.order.status}".`
+    );
+  }
 
   const docket = await prisma.docket.update({
     where: { id: docketId },
@@ -833,12 +873,17 @@ export async function getOrderForDc(orderId: string) {
   const productItems = await Promise.all(
     order.assets
       .filter(a => a.inventoryItem)
-      .map(async a => ({
-        description: a.inventoryItem!.model || "",
-        hsnSac: (await lookupProductHsn(a.inventoryItem!.partNo, a.inventoryItem!.model)) ?? "",
-        quantity: 1,
-        rate: 0,
-      }))
+      .map(async a => {
+        const hsnSac = (await lookupProductHsn(a.inventoryItem!.partNo, a.inventoryItem!.model)) ?? "";
+        const gstRate = await lookupProductGstRate(a.inventoryItem!.partNo, a.inventoryItem!.model, hsnSac);
+        return {
+          description: a.inventoryItem!.model || "",
+          hsnSac,
+          quantity: 1,
+          rate: 0,
+          gstRate,
+        };
+      })
   );
 
   const warehouse = order.warehouseLocation || "";
@@ -861,6 +906,6 @@ export async function getOrderForDc(orderId: string) {
     warehouseLocation: warehouse,
     docketNumber,
     dispatchCourier,
-    items: productItems.length > 0 ? productItems : [{ description: "", hsnSac: "", quantity: 1, rate: 0 }],
+    items: productItems.length > 0 ? productItems : [{ description: "", hsnSac: "", quantity: 1, rate: 0, gstRate: null }],
   };
 }

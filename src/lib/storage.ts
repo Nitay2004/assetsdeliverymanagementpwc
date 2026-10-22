@@ -44,6 +44,13 @@ function assertSafePodPath(subPath: string): string {
   if (!normalized.startsWith(`${POD_BUCKET}/`)) {
     throw new Error("Path must be scoped to the pod bucket");
   }
+  // Every POD is stored as a single flat file directly under the pod bucket
+  // (`pod/<generated-name>.<ext>`). Rejecting anything with a nested segment
+  // keeps a caller from reaching sibling files by path alone.
+  const rest = normalized.slice(POD_BUCKET.length + 1);
+  if (!rest || rest.includes("/")) {
+    throw new Error("Invalid POD path");
+  }
   return normalized;
 }
 

@@ -125,12 +125,17 @@ export function FinanceOrderRow({ order, canManage, elementId, financeSubTab = "
   const statusStyle = STATUS_LABELS[order.status] ?? { label: order.status, color: "bg-gray-100 text-gray-600" };
 
   async function handleSave() {
+    const quantity = Number(formData.totalQuantity);
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      toast({ title: "Validation", description: "Total quantity must be a whole number of at least 1.", variant: "error" });
+      return;
+    }
     setSaving(true);
     try {
       await updateOrderFinance(order.id, {
         clientName: formData.clientName,
         deliveryLocation: formData.deliveryLocation,
-        totalQuantity: parseInt(formData.totalQuantity) || 0,
+        totalQuantity: quantity,
         dcNumber: formData.dcNumber || "",
         status: formData.status,
       });

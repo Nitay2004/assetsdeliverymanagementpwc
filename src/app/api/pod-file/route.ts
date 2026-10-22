@@ -10,7 +10,10 @@ const CONTENT_TYPES: Record<string, string> = {
   png: "image/png",
 };
 
-const POD_VIEW_MODULES = ["logistics", "reverse-pickup", "warehouse"] as const;
+// The POD link lives in the inventory drawer, so inventory view access is what
+// grants it. This list must match pod-url's so a user who can resolve a POD URL
+// can also stream the file it points at.
+const POD_VIEW_MODULES = ["inventory", "logistics", "reverse-pickup", "warehouse"] as const;
 
 export async function GET(req: NextRequest) {
   const user = await getSession();

@@ -44,6 +44,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Only PDF, JPG, and PNG files are allowed" }, { status: 400 });
     }
 
+    // Reject an oversized upload from the declared size before buffering the
+    // whole body into memory.
+    if (file.size === 0) {
+      return NextResponse.json({ error: "Empty file" }, { status: 400 });
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: "File exceeds the 10 MB limit" }, { status: 413 });
+    }
+
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 

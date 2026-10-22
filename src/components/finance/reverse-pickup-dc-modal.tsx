@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { X, Plus, Trash2, Loader2, FileText, ChevronDown } from "lucide-react";
 import { getWarehouses, createWarehouse, deleteWarehouse, getNextDcNumber, generateReversePickupDc, getReversePickupForDc, getBillToLocationOptions, addBillToLocationOption, deleteBillToLocationOption, getDispatchedThroughOptions, addDispatchedThroughOption, deleteDispatchedThroughOption } from "@/app/actions/dc";
+import { isIntraStateSupply } from "@/lib/dc-gst";
 import { DropdownField } from "@/components/shared/dropdown-field";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -18,6 +19,7 @@ interface ItemRow {
   hsnSac: string;
   quantity: number;
   rate: number;
+  gstRate?: number | null;
 }
 
 interface Warehouse {
@@ -123,9 +125,31 @@ export function ReversePickupDcModal({ rpId, open, onClose }: ReversePickupDcMod
     { totalAmount: 0, totalQty: 0 }
   );
   const totalTaxableValue = totals.totalAmount;
-  const igstRate = 18;
-  const igstAmount = totalTaxableValue * (igstRate / 100);
-  const totalTaxAmount = igstAmount;
+
+  // Reverse pickup preview mirrors the server: intra/ inter-state split from
+  // the warehouse (shipper) and pickup address (consignee). Product Master
+  // provides the GST rate per line via getReversePickupForDc.
+  const gstWarehouse = warehouses.find(w => w.id === warehouseId);
+  const shipperLocation = gstWarehouse?.location ?? gstWarehouse?.name ?? "";
+  const intraState = isIntraStateSupply(shipperLocation, shipToLocation);
+
+  const taxPreview = items.reduce(
+    (acc, item) => {
+      const gstRate = item.gstRate ?? 18;
+      const taxable = item.quantity * item.rate;
+      if (intraState) {
+        acc.cgstAmount += taxable * (gstRate / 2 / 100);
+        acc.sgstAmount += taxable * (gstRate / 2 / 100);
+      } else {
+        acc.igstAmount += taxable * (gstRate / 100);
+      }
+      return acc;
+    },
+    { cgstAmount: 0, sgstAmount: 0, igstAmount: 0 }
+  );
+  const totalTaxAmount = intraState
+    ? taxPreview.cgstAmount + taxPreview.sgstAmount
+    : taxPreview.igstAmount;
 
   async function handleSubmit() {
     if (!shipToLocation.trim() || !billToLocation.trim()) {
@@ -415,8 +439,19 @@ export function ReversePickupDcModal({ rpId, open, onClose }: ReversePickupDcMod
             <div className="grid grid-cols-2 gap-4 max-w-md">
               <div className="text-xs text-muted-foreground">Total Amount (Taxable Value):</div>
               <div className="text-xs font-semibold text-right">{totalTaxableValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
-              <div className="text-xs text-muted-foreground">IGST @ {igstRate}%:</div>
-              <div className="text-xs font-semibold text-right">{igstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
+              {intraState ? (
+                <>
+                  <div className="text-xs text-muted-foreground">CGST:</div>
+                  <div className="text-xs font-semibold text-right">{taxPreview.cgstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
+                  <div className="text-xs text-muted-foreground">SGST:</div>
+                  <div className="text-xs font-semibold text-right">{taxPreview.sgstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xs text-muted-foreground">IGST:</div>
+                  <div className="text-xs font-semibold text-right">{taxPreview.igstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
+                </>
+              )}
               <div className="text-xs text-muted-foreground border-t pt-1 font-medium">Total Tax Amount:</div>
               <div className="text-xs font-semibold text-right border-t pt-1">{totalTaxAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
             </div>
