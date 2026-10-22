@@ -360,9 +360,6 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                     {item.invoicingWarehouse || "—"}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">{item.employeeName || "—"}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-muted-foreground">
-                    {item.expectedDeliveryDate ? new Date(item.expectedDeliveryDate).toLocaleDateString("en-IN") : "—"}
-                  </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     {item.trackingStatus ? (
                       <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
@@ -371,6 +368,9 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                         {item.trackingStatus}
                       </span>
                     ) : "—"}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-muted-foreground">
+                    {item.expectedDeliveryDate ? new Date(item.expectedDeliveryDate).toLocaleDateString("en-IN") : "—"}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
