@@ -70,6 +70,7 @@ interface InventoryItem {
   odaLocation: string | null;
   tat: string | null;
   deliveryTatDays: number | null;
+  deliveryTatDate: string | null;
   expectedDeliveryDate: string | null;
   actualDeliveryDate: string | null;
   slaStatus: string | null;
@@ -315,7 +316,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                 selected={Array.from(filters["trackingStatus"] ?? [])}
                 onApply={(v) => applyColumn("trackingStatus", v)}
               />
-              <th className="px-4 py-4 font-semibold text-muted-foreground">Expected Delivery</th>
+              <th className="px-4 py-4 font-semibold text-muted-foreground">Delivery TAT Date</th>
               <th className="px-4 py-4 font-semibold text-right">Actions</th>
             </tr>
           </thead>
@@ -370,7 +371,7 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                     ) : "—"}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-muted-foreground">
-                    {item.expectedDeliveryDate ? new Date(item.expectedDeliveryDate).toLocaleDateString("en-IN") : "—"}
+                    {item.deliveryTatDate ? new Date(item.deliveryTatDate).toLocaleDateString("en-IN") : "—"}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
