@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Package, ShieldCheck, Laptop, Database, ClipboardCheck } from "lucide-react";
 import { InventoryStatusTableModal } from "./inventory-status-table-modal";
-import { INVENTORY_STATUS_LABELS } from "@/lib/inventory-status";
 
 interface Props {
   totalCount: number;
@@ -39,8 +38,8 @@ export function InventoryStatCards({ totalCount, newCount, availableCount, qcPen
     <>
       <div className="grid gap-6 sm:grid-cols-5 mt-8">
         {card(<Package className="size-4" />, "Total Stock", totalCount, "text-primary")}
-        {card(<Database className="size-4" />, "Provision Pending", newCount, "text-purple-600", () => setModal("PROVISION_PENDING"))}
-        {card(<ShieldCheck className="size-4" />, "Asset Return to Warehouse", availableCount, "text-primary", () => setModal("ASSET_RETURN_TO_WAREHOUSE"))}
+        {card(<Database className="size-4" />, "New Assets", newCount, "text-purple-600", () => setModal("PROVISION_PENDING"))}
+        {card(<ShieldCheck className="size-4" />, "Asset Available for Deployment", availableCount, "text-primary", () => setModal("ASSET_RETURN_TO_WAREHOUSE"))}
         {card(<ClipboardCheck className="size-4" />, "QC Pending", qcPendingCount, "text-amber-600", () => setModal("QC_PENDING"))}
         {card(<Laptop className="size-4" />, "Deployed", allocatedCount, "text-primary", () => router.push("/dashboard/assigned-assets"))}
       </div>
@@ -48,7 +47,7 @@ export function InventoryStatCards({ totalCount, newCount, availableCount, qcPen
       <InventoryStatusTableModal
         open={modal === "PROVISION_PENDING"}
         onClose={() => setModal(null)}
-        title={`${INVENTORY_STATUS_LABELS.PROVISION_PENDING} Laptops`}
+        title="New Assets Laptops"
         status="PROVISION_PENDING"
         icon={<Database className="size-5 text-purple-600" />}
         iconBg="bg-purple-100"
@@ -56,7 +55,7 @@ export function InventoryStatCards({ totalCount, newCount, availableCount, qcPen
       <InventoryStatusTableModal
         open={modal === "ASSET_RETURN_TO_WAREHOUSE"}
         onClose={() => setModal(null)}
-        title={`${INVENTORY_STATUS_LABELS.ASSET_RETURN_TO_WAREHOUSE} Laptops`}
+        title="Asset Available for Deployment Laptops"
         status="ASSET_RETURN_TO_WAREHOUSE"
         icon={<ShieldCheck className="size-5 text-primary" />}
         iconBg="bg-blue-100"
