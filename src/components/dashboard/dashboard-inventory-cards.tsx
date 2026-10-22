@@ -5,17 +5,30 @@ import { useRouter } from "next/navigation";
 import { Laptop, Layers } from "lucide-react";
 import { QuickStat } from "./quick-stat";
 import { InventoryStatusTableModal } from "@/components/inventory/inventory-status-table-modal";
-import { INVENTORY_STATUS_LABELS } from "@/lib/inventory-status";
 
 interface Props {
   newStock: number;
+  newStockByWarehouse: [string, number][];
+  newStockNoWarehouse: number;
   availableStock: number;
+  availableByWarehouse: [string, number][];
+  availableNoWarehouse: number;
   totalInventory: number;
   allocatedStock: number;
   totalAssets: number;
 }
 
-export function DashboardInventoryCards({ newStock, availableStock, totalInventory, allocatedStock, totalAssets }: Props) {
+export function DashboardInventoryCards({
+  newStock,
+  newStockByWarehouse,
+  newStockNoWarehouse,
+  availableStock,
+  availableByWarehouse,
+  availableNoWarehouse,
+  totalInventory,
+  allocatedStock,
+  totalAssets,
+}: Props) {
   const [modal, setModal] = useState<"PROVISION_PENDING" | "ASSET_RETURN_TO_WAREHOUSE" | null>(null);
   const router = useRouter();
 
@@ -24,17 +37,21 @@ export function DashboardInventoryCards({ newStock, availableStock, totalInvento
       <QuickStat
         icon={<Laptop className="size-5 text-purple-600" />}
         iconBg="bg-purple-50"
-        label="Provision Pending"
+        label="New Assets"
         value={newStock}
         subtitle="Asset in warehouse"
+        breakdown={newStockByWarehouse}
+        breakdownNoWarehouse={newStockNoWarehouse}
         onClick={() => setModal("PROVISION_PENDING")}
       />
       <QuickStat
         icon={<Laptop className="size-5 text-blue-600" />}
         iconBg="bg-blue-50"
-        label="Asset Return to Warehouse"
+        label="Asset Available for Deployment"
         value={availableStock}
         subtitle={`of ${totalInventory} total`}
+        breakdown={availableByWarehouse}
+        breakdownNoWarehouse={availableNoWarehouse}
         onClick={() => setModal("ASSET_RETURN_TO_WAREHOUSE")}
       />
       <QuickStat
@@ -49,7 +66,7 @@ export function DashboardInventoryCards({ newStock, availableStock, totalInvento
       <InventoryStatusTableModal
         open={modal === "PROVISION_PENDING"}
         onClose={() => setModal(null)}
-        title={`${INVENTORY_STATUS_LABELS.PROVISION_PENDING} Laptops`}
+        title="New Assets Laptops"
         status="PROVISION_PENDING"
         icon={<Laptop className="size-5 text-purple-600" />}
         iconBg="bg-purple-100"
@@ -57,7 +74,7 @@ export function DashboardInventoryCards({ newStock, availableStock, totalInvento
       <InventoryStatusTableModal
         open={modal === "ASSET_RETURN_TO_WAREHOUSE"}
         onClose={() => setModal(null)}
-        title={`${INVENTORY_STATUS_LABELS.ASSET_RETURN_TO_WAREHOUSE} Laptops`}
+        title="Asset Available for Deployment Laptops"
         status="ASSET_RETURN_TO_WAREHOUSE"
         icon={<Laptop className="size-5 text-blue-600" />}
         iconBg="bg-blue-100"

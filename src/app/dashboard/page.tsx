@@ -79,7 +79,7 @@ export default async function DashboardPage(props: {
   const reverseWhere = createdAt ? { createdAt } : undefined;
 
   // Fetch all data in parallel Ã¢â‚¬â€ aggregate counts in the DB, no unbounded row loads.
-  const [orderStatuses, inventoryStatuses, slaMetCount, totalAssets, warrantyPendingCount, stockByWarehouseRows, recentOrders, recentInventory, reversePickupStatuses, reverseSlaMetCount, reverseRemarkCancelCount, deliveredInventoryCount, inTransitInventoryCount, rtoInventoryCount] = await Promise.all([
+  const [orderStatuses, inventoryStatuses, slaMetCount, totalAssets, warrantyPendingCount, stockByWarehouseRows, statusWarehouseRows, recentOrders, recentInventory, reversePickupStatuses, reverseSlaMetCount, reverseRemarkCancelCount, deliveredInventoryCount, inTransitInventoryCount, rtoInventoryCount] = await Promise.all([
     prisma.order.groupBy({
       by: ["status"],
       where: orderWhere,
@@ -100,6 +100,14 @@ export default async function DashboardPage(props: {
     prisma.inventoryItem.groupBy({
       by: ["invoicingWarehouse"],
       where: inventoryWhere,
+      _count: { _all: true },
+    }),
+    prisma.inventoryItem.groupBy({
+      by: ["status", "invoicingWarehouse"],
+      where: {
+        ...(inventoryWhere ?? {}),
+        status: { in: ["PROVISION_PENDING", "ASSET_RETURN_TO_WAREHOUSE"] },
+      },
       _count: { _all: true },
     }),
     prisma.order.findMany({
@@ -208,6 +216,25 @@ export default async function DashboardPage(props: {
   const stockByWarehouse = Array.from(warehouseMap.entries())
     .sort((a, b) => b[1] - a[1]);
 
+  // Warehouse breakdown for the two "available stock" inventory cards.
+  function warehouseBreakdown(status: InventoryStatus) {
+    const map = new Map<string, number>();
+    let noWarehouse = 0;
+    for (const row of statusWarehouseRows) {
+      if (row.status !== status) continue;
+      const wh = (row.invoicingWarehouse ?? "").trim();
+      if (wh) map.set(wh, (map.get(wh) || 0) + row._count._all);
+      else noWarehouse += row._count._all;
+    }
+    return {
+      breakdown: Array.from(map.entries()).sort((a, b) => b[1] - a[1]) as [string, number][],
+      noWarehouse,
+    };
+  }
+
+  const newStockByWarehouse = warehouseBreakdown("PROVISION_PENDING");
+  const availableByWarehouse = warehouseBreakdown("ASSET_RETURN_TO_WAREHOUSE");
+
   // Pipeline data
   const statusCounts = Object.fromEntries(orderCounts);
 
@@ -282,7 +309,11 @@ export default async function DashboardPage(props: {
           <TotalStockCard totalInventory={totalInventory} stockByWarehouse={stockByWarehouse} unallocatedCount={unallocatedCount} href="/dashboard/inventory" />
           <DashboardInventoryCards
             newStock={newStock}
+            newStockByWarehouse={newStockByWarehouse.breakdown}
+            newStockNoWarehouse={newStockByWarehouse.noWarehouse}
             availableStock={availableStock}
+            availableByWarehouse={availableByWarehouse.breakdown}
+            availableNoWarehouse={availableByWarehouse.noWarehouse}
             totalInventory={totalInventory}
             allocatedStock={allocatedStock}
             totalAssets={totalAssets}
