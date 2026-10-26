@@ -63,7 +63,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const formData = await req.formData();
+    // A caller that omits the multipart boundary makes formData() throw. That is a
+    // client error, not a server fault, so answer 400 instead of letting the outer
+    // catch below turn it into a 500.
+    let formData: FormData;
+    try {
+      formData = await req.formData();
+    } catch {
+      return NextResponse.json(
+        { error: "Request must be multipart/form-data with field 'file'." },
+        { status: 400 },
+      );
+    }
     const file = formData.get("file") as File | null;
     const docketNumberRaw = (formData.get("docketNumber") as string | null)?.trim() ?? "";
     const deliveryDateRaw = (formData.get("deliveryDate") as string | null)?.trim() || null;
