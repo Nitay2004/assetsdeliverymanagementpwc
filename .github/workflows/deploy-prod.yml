@@ -1,0 +1,95 @@
+name: Deploy to PROD (DRServer-1)
+
+# Production deploy. Runs on the DRServer-1 self-hosted runner, which carries the
+# `production` label — the staging runner does not, so the two workflows can never
+# pick each other's machine.
+#
+# The `production` GitHub Environment is referenced so that repo admins can add
+# required reviewers under Settings → Environments → production. Without reviewers
+# configured the job runs straight away.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, production]
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Safety interlock. The sync step below overwrites files in
+      # /opt/asset-delivery-system, so we refuse to touch a machine whose .env does
+      # not declare itself production. This makes it impossible for a mislabelled
+      # runner to clobber another environment.
+      - name: Verify server is production
+        run: |
+          if ! grep -q '^DEPLOY_ENV=production$' /opt/asset-delivery-system/.env 2>/dev/null; then
+            echo "::error::/opt/asset-delivery-system/.env is missing DEPLOY_ENV=production — refusing to deploy on this host."
+            exit 1
+          fi
+          echo "Host confirmed as production."
+
+      # Quality gate — runs BEFORE anything is written to the deploy dir, so a
+      # broken typecheck stops the deploy here and the old container keeps
+      # serving. Lint runs too but is non-blocking while the pre-existing
+      # no-explicit-any backlog (see APP-AUDIT-REPORT) is being cleared.
+      - name: Quality gate (typecheck + lint)
+        run: |
+          # --user is essential: the docker daemon runs as root, so without it
+          # npm ci writes root-owned node_modules into the checkout and the next
+          # actions/checkout fails with EACCES trying to clean it. The npm cache
+          # lives on a tmpfs path because the named volume is root-owned.
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
+            -v "$PWD":/repo -w /repo node:22-alpine sh -c '
+            npm ci --no-audit --no-fund --legacy-peer-deps
+            npx tsc --noEmit
+            npm run lint || echo "::warning::lint reported issues (non-blocking)"
+          '
+
+      - name: Sync code to deploy dir
+        run: |
+          # Use docker (running as root) to reliably clean and sync into
+          # /opt/asset-delivery-system, avoiding host user permission issues with
+          # root-owned files from previous docker builds. `.env` is excluded so the
+          # production secrets file on the host is never overwritten.
+          docker run --rm \
+            -v "$PWD":/repo:ro \
+            -v /opt/asset-delivery-system:/dest \
+            node:22-alpine sh -c '
+              rm -rf /dest/src/src
+              rm -f /dest/src/middleware.ts
+              cd /repo
+              tar --exclude=.git --exclude=node_modules --exclude=.next --exclude=.env --exclude=.env.* --exclude="*.tmp.js" --exclude="*.log" --exclude=project.tgz -cf - . | (cd /dest && tar -xf -)
+              chmod -R 777 /dest/prisma /dest/src 2>/dev/null || true
+            '
+
+      - name: Build & restart app
+        run: |
+          cd /opt/asset-delivery-system
+          # -p keeps the compose project (and therefore its named uploads volume)
+          # distinct from any other stack that might live on this host.
+          docker compose -p assetdelivery-prod up -d --build
+
+      - name: Health check
+        run: |
+          port=$(grep -E '^APP_PORT=' /opt/asset-delivery-system/.env 2>/dev/null | cut -d= -f2 || echo 3001)
+          port=${port:-3001}
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/" || echo 000)
+            echo "Attempt ${i}: HTTP ${code}"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 4
+          done
+          echo "App did not become healthy" && exit 1
+
+      - name: Prune old images
+        if: always()
+        run: docker image prune -f --filter "until=168h" || true

@@ -22,7 +22,9 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      - "8001:3000"
+      # Host port is per-environment: staging keeps 8001, production uses 3001.
+      # Set APP_PORT in the .env next to this file.
+      - "${APP_PORT:-8001}:3000"
     environment:
       - PORT=3000
       - DATABASE_URL=${DATABASE_URL:-}
@@ -38,8 +40,14 @@ services:
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
       - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-}
       - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-false}
+      # POD documents live on the host so they survive image rebuilds and can be
+      # backed up with a plain copy. The path must be writable by the container's
+      # runtime user (uid 1001 = nextjs).
+      - UPLOAD_DIR=${UPLOAD_DIR:-/app/uploads}
     volumes:
-      - uploads:/app/uploads
+      # UPLOAD_PATH unset  → named docker volume `uploads` (previous behaviour).
+      # UPLOAD_PATH=/some/host/dir → bind mount, so files are browsable on the host.
+      - ${UPLOAD_PATH:-uploads}:/app/uploads
 
 volumes:
   uploads:

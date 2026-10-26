@@ -11,7 +11,10 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    # The `staging` label keeps this job away from the production runner, which
+    # also carries the default `self-hosted` label. Requires the STAG-APP1 runner
+    # to have a `staging` label (Settings → Actions → Runners → edit labels).
+    runs-on: [self-hosted, staging]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
