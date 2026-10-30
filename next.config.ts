@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const securityHeaders = [
@@ -11,6 +12,13 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // The folder above this repo (PWC/PWC) carries its own package-lock.json.
+  // Turbopack uses the nearest lockfile to guess the workspace root, so without
+  // this it would pick that folder and then warn that the lockfile sits outside
+  // the git repository. Pin the root to this project instead.
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   async headers() {
     return [
       {
