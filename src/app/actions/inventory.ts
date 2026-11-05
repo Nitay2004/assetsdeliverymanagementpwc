@@ -11,6 +11,7 @@ import { hasPriorDelivery } from "@/app/actions/assignment";
 import { calculateZone, calculateTier, calculateTatDays, calculateExpectedDeliveryDate, normalizeOdaLocation } from "@/lib/location-utils";
 import { calculateSlaStatus } from "@/lib/sla-utils";
 import { DEPLOYED_STATUSES, deployedStatus, isDeployedStatus } from "@/lib/inventory-status";
+import { canEditEntity } from "@/lib/entity-lock";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -163,6 +164,10 @@ export async function updateInventoryItem(id: string, formData: FormData) {
   const isDelivered = trackingValue.includes("delivered") || trackingValue.includes("confirmed") || trackingValue.includes("dispatched") || trackingValue.includes("invoiced") || trackingValue.includes("payment") || trackingValue.includes("warranty");
 
   const current = await prisma.inventoryItem.findUnique({ where: { id } });
+  // An entity, once saved, is part of the customer's record. Non-admins keep the
+  // stored value even when the form posts a different one (the field is disabled
+  // in the UI, so a disabled input submits nothing at all).
+  const entityEditable = canEditEntity(user?.role, current?.entity);
   const newEmployeeName = (formData.get("employeeName") as string)?.trim() || null;
   const clearingUser = !!current?.employeeName && !newEmployeeName;
 
@@ -223,7 +228,9 @@ export async function updateInventoryItem(id: string, formData: FormData) {
         specs: (formData.get("specs") as string) || null,
         partner: (formData.get("partner") as string) || null,
         sr: parseIntValue(formData.get("sr") as string),
-        entity: (formData.get("entity") as string) || null,
+        entity: entityEditable
+          ? (formData.get("entity") as string) || null
+          : current?.entity ?? null,
         userBaseLocation: (formData.get("userBaseLocation") as string) || null,
         imageType: (formData.get("imageType") as string) || null,
         purpose: (formData.get("purpose") as string) || null,
@@ -625,7 +632,7 @@ export async function reassignItem(id: string, formData: FormData) {
   const pwcRemarks = (formData.get("pwcRemarks") as string) || null;
   const partner = (formData.get("partner") as string) || null;
   const sr = parseIntValue(formData.get("sr") as string);
-  const entity = (formData.get("entity") as string) || null;
+  const submittedEntity = (formData.get("entity") as string) || null;
 
   const emailReceivedHour = (formData.get("emailReceivedHour") as string) || null;
   const cutOffStatus = (formData.get("cutOffStatus") as string) || null;
@@ -650,6 +657,10 @@ export async function reassignItem(id: string, formData: FormData) {
   // Always save current assignment to history before applying the new one
   const existing = await prisma.inventoryItem.findUnique({ where: { id } });
   if (!existing) throw new Error("Item not found.");
+
+  // Same freeze as updateInventoryItem: an entity that is already saved stays put
+  // unless an ADMIN is the one reassigning.
+  const entity = canEditEntity(user?.role, existing.entity) ? submittedEntity : existing.entity;
 
   // Actual Delivery Date is stamped by the delivery flow, never typed in here — keep
   // whatever the item already carries so a reassignment can never wipe or overwrite it.

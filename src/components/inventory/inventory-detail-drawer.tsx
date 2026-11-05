@@ -604,17 +604,32 @@ export function InventoryDetailDrawer({
                   <div className="grid grid-cols-3 gap-2">
                     <input name="partner" placeholder="Partner" defaultValue="DEVIT" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
                     <input name="sr" placeholder="Sr #" type="number" className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />
-                    <ManageableDropdown
-                      name="entity"
-                      placeholder="Entity"
-                      value={selectedEntity}
-                      onChange={setSelectedEntity}
-                      options={entities}
-                      allOptions={allOptions}
-                      category="entity"
-                      onAdd={handleAddOption as any}
-                      onDelete={handleDeleteOption}
-                    />
+                    {!isAdmin && !!displayItem.entity?.trim() ? (
+                      <div className="space-y-1">
+                        <input
+                          type="text"
+                          defaultValue={displayItem.entity}
+                          disabled
+                          placeholder="Entity"
+                          className="w-full cursor-not-allowed rounded-lg border bg-muted px-3 py-2 text-sm text-muted-foreground"
+                        />
+                        <span className="block text-[10px] leading-tight text-muted-foreground">
+                          Locked — only an admin can change the entity.
+                        </span>
+                      </div>
+                    ) : (
+                      <ManageableDropdown
+                        name="entity"
+                        placeholder="Entity"
+                        value={selectedEntity}
+                        onChange={setSelectedEntity}
+                        options={entities}
+                        allOptions={allOptions}
+                        category="entity"
+                        onAdd={handleAddOption as any}
+                        onDelete={handleDeleteOption}
+                      />
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input name="employeeName" placeholder="Employee Name" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" />

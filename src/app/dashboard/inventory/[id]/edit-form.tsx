@@ -87,7 +87,7 @@ interface Item {
   outwardDate1: string | null;
 }
 
-export function EditInventoryForm({ item }: { item: Item }) {
+export function EditInventoryForm({ item, entityLocked = false }: { item: Item; entityLocked?: boolean }) {
   const { toast } = useToast();
   const { showAlert } = useAlert();
   const router = useRouter();
@@ -347,6 +347,29 @@ export function EditInventoryForm({ item }: { item: Item }) {
                           <option value="No">No</option>
                           <option value="Yes">Yes</option>
                         </select>
+                      </div>
+                    );
+                  }
+
+                  // The entity is frozen once saved: it belongs to the customer's
+                  // paperwork, so a non-admin sees it read-only instead of editing
+                  // a field the server would refuse to change anyway.
+                  if (fieldName === "entity" && entityLocked) {
+                    return (
+                      <div key={f.label} className="space-y-1.5">
+                        <label htmlFor={fieldName} className="text-xs font-medium text-foreground">
+                          {f.label}
+                        </label>
+                        <input
+                          id={fieldName}
+                          type="text"
+                          defaultValue={getValue(fieldName)}
+                          disabled
+                          className="flex h-9 w-full cursor-not-allowed rounded-lg border bg-muted px-3 py-2 text-sm text-muted-foreground"
+                        />
+                        <span className="text-[10px] text-muted-foreground block leading-tight">
+                          Locked — only an admin can change the entity.
+                        </span>
                       </div>
                     );
                   }

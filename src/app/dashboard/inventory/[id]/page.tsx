@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { canEditEntity } from "@/lib/entity-lock";
 import { EditInventoryForm } from "./edit-form";
 
 function safeISO(date: Date | null | undefined): string | null {
@@ -14,7 +16,11 @@ export default async function EditInventoryPage(props: { params: Promise<{ id: s
   const item = await prisma.inventoryItem.findUnique({ where: { id } });
   if (!item) notFound();
 
-  return <EditInventoryForm item={{
+  const user = await getSession();
+
+  return <EditInventoryForm
+    entityLocked={!canEditEntity(user?.role, item.entity)}
+    item={{
     ...item,
     requestDate: safeISO(item.requestDate),
     slaStartDate: safeISO(item.slaStartDate),
