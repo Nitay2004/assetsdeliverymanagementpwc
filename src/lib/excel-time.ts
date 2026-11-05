@@ -1,17 +1,22 @@
+import { formatTime24 } from "@/lib/time-format";
+
 /**
  * Excel stores a time-only cell (e.g. "13:31") as a fraction of a 24-hour day.
  * When SheetJS reads such a cell without `raw: false` it returns that fraction
  * as a number (e.g. 0.5631944444444444), not a formatted time. This converts a
  * pure day-fraction string back to a 24-hour "HH:MM" string.
  *
- * Anything that is not a fraction in [0, 1) is returned unchanged, so already
- * formatted times ("13:31", "1:31 PM") and free text are preserved as-is.
+ * Anything that is not a fraction in [0, 1) is still run through formatTime24,
+ * so a 12-hour sheet value ("1:31 PM") is stored as "13:31" too. Free text that
+ * is not a time at all is returned unchanged.
  */
 export function formatExcelTime(value: string): string {
   const trimmed = value.trim();
   if (trimmed === "") return value;
   const num = Number(trimmed);
-  if (isNaN(num) || num < 0 || num >= 1) return value;
+  if (isNaN(num) || num < 0 || num >= 1) {
+    return formatTime24(value) ?? value;
+  }
   const totalMinutes = Math.round(num * 24 * 60);
   const h = Math.floor(totalMinutes / 60) % 24;
   const m = totalMinutes % 60;

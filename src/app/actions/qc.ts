@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { hasPriorDelivery, markItemAllocated } from "@/app/actions/assignment";
 import { calculateExpectedDeliveryDate, normalizeOdaLocation } from "@/lib/location-utils";
 import { calculateSlaStatus } from "@/lib/sla-utils";
+import { formatTime24 } from "@/lib/time-format";
 
 function requireQcWorkPermission(
   user: { permissions: unknown; role: string } | null
@@ -107,7 +108,7 @@ export async function sendToQc(id: string, formData: FormData) {
   const sr = parseIntValue(formData.get("sr") as string);
   const entity = (formData.get("entity") as string) || null;
 
-  const emailReceivedHour = (formData.get("emailReceivedHour") as string) || null;
+  const emailReceivedHour = formatTime24(formData.get("emailReceivedHour") as string) || null;
   const cutOffStatus = (formData.get("cutOffStatus") as string) || null;
   const slaStartDate = parseDate(formData.get("slaStartDate") as string);
   const slaState = (formData.get("slaState") as string) || null;

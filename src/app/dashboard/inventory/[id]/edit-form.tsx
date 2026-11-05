@@ -10,6 +10,7 @@ import { useDropdownData, SmartDropdownField } from "@/components/inventory/mana
 import { PincodeInput } from "@/components/shared/pincode-input";
 import { normalizeOdaLocation } from "@/lib/location-utils";
 import { calculateSlaStatus } from "@/lib/sla-utils";
+import { formatTime24 } from "@/lib/time-format";
 import { getProductsForDropdown, getProductByPartNo } from "@/app/actions/product-master";
 import { useToast } from "@/hooks/use-toast";
 import { useAlert } from "@/hooks/use-alert";
@@ -137,6 +138,9 @@ export function EditInventoryForm({ item, entityLocked = false }: { item: Item; 
   }
 
   function getValue(field: string): string | number | undefined {
+    // Times are shown in 24-hour format even when an imported row still holds
+    // the old 12-hour string; saving then stores the normalised value.
+    if (field === "emailReceivedHour") return formatTime24(item.emailReceivedHour) ?? undefined;
     if (field === "inwardDate") return formatDate(item.inwardDate1);
     if (field === "outwardDate") return formatDate(item.outwardDate1);
     const key = field as keyof Item;
@@ -399,6 +403,7 @@ export function EditInventoryForm({ item, entityLocked = false }: { item: Item; 
                           name={fieldName}
                           type={getType(f.type)}
                           defaultValue={getValue(fieldName)}
+                          placeholder={fieldName === "emailReceivedHour" ? "HH:MM (24-hour)" : undefined}
                           required={f.required}
                           className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
@@ -406,6 +411,11 @@ export function EditInventoryForm({ item, entityLocked = false }: { item: Item; 
                       {f.type === "date" && (
                         <span className="text-[10px] text-muted-foreground block leading-tight">
                           Format: YYYY-MM-DD
+                        </span>
+                      )}
+                      {fieldName === "emailReceivedHour" && (
+                        <span className="text-[10px] text-muted-foreground block leading-tight">
+                          Format: HH:MM (24-hour) — e.g. 14:30
                         </span>
                       )}
                     </div>

@@ -614,7 +614,7 @@ export function ReversePickupForm({ initialData }: { initialData?: Record<string
           <ManualInput
             name="emailReceivedHour"
             label="Email Received Hour"
-            placeholder="10:00 AM"
+            placeholder="14:30"
             value={emailReceivedHour}
             onChange={setEmailReceivedHour}
           />

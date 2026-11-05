@@ -12,6 +12,7 @@ import { calculateZone, calculateTier, calculateTatDays, calculateExpectedDelive
 import { calculateSlaStatus } from "@/lib/sla-utils";
 import { DEPLOYED_STATUSES, deployedStatus, isDeployedStatus } from "@/lib/inventory-status";
 import { canEditEntity } from "@/lib/entity-lock";
+import { formatTime24 } from "@/lib/time-format";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -92,7 +93,7 @@ export async function addInventoryItem(formData: FormData) {
         laptopModel: (formData.get("laptopModel") as string) || null,
         invoiceProductDescription: (formData.get("invoiceProductDescription") as string) || null,
         description: (formData.get("description") as string) || null,
-        emailReceivedHour: (formData.get("emailReceivedHour") as string) || null,
+        emailReceivedHour: formatTime24(formData.get("emailReceivedHour") as string) || null,
         cutOffStatus: (formData.get("cutOffStatus") as string) || null,
         slaStartDate: parseDate(formData.get("slaStartDate") as string),
         slaState: (formData.get("slaState") as string) || null,
@@ -249,7 +250,7 @@ export async function updateInventoryItem(id: string, formData: FormData) {
         laptopModel: (formData.get("laptopModel") as string) || null,
         invoiceProductDescription: (formData.get("invoiceProductDescription") as string) || null,
         description: (formData.get("description") as string) || null,
-        emailReceivedHour: (formData.get("emailReceivedHour") as string) || null,
+        emailReceivedHour: formatTime24(formData.get("emailReceivedHour") as string) || null,
         cutOffStatus: (formData.get("cutOffStatus") as string) || null,
         slaStartDate: parseDate(formData.get("slaStartDate") as string),
         slaState: (formData.get("slaState") as string) || null,
@@ -634,7 +635,7 @@ export async function reassignItem(id: string, formData: FormData) {
   const sr = parseIntValue(formData.get("sr") as string);
   const submittedEntity = (formData.get("entity") as string) || null;
 
-  const emailReceivedHour = (formData.get("emailReceivedHour") as string) || null;
+  const emailReceivedHour = formatTime24(formData.get("emailReceivedHour") as string) || null;
   const cutOffStatus = (formData.get("cutOffStatus") as string) || null;
   const slaStartDate = parseDate(formData.get("slaStartDate") as string);
   const slaState = (formData.get("slaState") as string) || null;

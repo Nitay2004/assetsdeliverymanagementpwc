@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { formatTime24 } from "@/lib/time-format";
 import * as XLSX from "xlsx";
 
 const itemColumns: { label: string; field: string }[] = [
@@ -116,6 +117,7 @@ function getVal(obj: any, field: string): unknown {
     if (isNaN(val.getTime())) return "";
     return val.toISOString().split("T")[0];
   }
+  if (field === "emailReceivedHour") return formatTime24(String(val)) ?? "";
   return String(val);
 }
 

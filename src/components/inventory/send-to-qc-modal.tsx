@@ -193,7 +193,7 @@ export function SendToQcModal({ open, onClose, item }: Props) {
             <div className="pt-2 border-t mt-2">
               <p className="text-xs font-semibold text-muted-foreground mb-2">Timeline &amp; SLA</p>
               <div className="grid grid-cols-2 gap-2 mb-2">
-                <input name="emailReceivedHour" placeholder="Email Received Hour" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" onChange={(e) => {
+                <input name="emailReceivedHour" placeholder="Email Received Hour (14:30)" required className="w-full rounded-lg border px-3 py-2 text-sm bg-background" onChange={(e) => {
                   const result = calculateCutoff(e.target.value);
                   const form = e.currentTarget.closest("form");
                   if (!form) return;

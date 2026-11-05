@@ -13,6 +13,7 @@ import {
 import { WAREHOUSE_OWNED_STATUSES } from "@/lib/reverse-pickup-config";
 import { getNextStatus, hasReachedWarehouse } from "@/lib/reverse-pickup-config";
 import { resolveStatus } from "@/lib/reverse-pickup-status";
+import { formatTime24 } from "@/lib/time-format";
 
 interface RequestData {
   id: string;
@@ -428,7 +429,7 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
               {request.emailReceivedHour && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Email Received Hour</span>
-                  <span>{request.emailReceivedHour}</span>
+                  <span>{formatTime24(request.emailReceivedHour)}</span>
                 </div>
               )}
               {request.cutOffStatus && (

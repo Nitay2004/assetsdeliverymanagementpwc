@@ -312,9 +312,15 @@ export default function AddInventoryPage() {
                           id={fieldName}
                           name={fieldName}
                           type={f.type}
+                          placeholder={fieldName === "emailReceivedHour" ? "HH:MM (24-hour)" : undefined}
                           required={f.required}
                           className="flex h-9 w-full rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
+                      )}
+                      {fieldName === "emailReceivedHour" && (
+                        <span className="text-[10px] text-muted-foreground block leading-tight">
+                          Format: HH:MM (24-hour) — e.g. 14:30
+                        </span>
                       )}
                     </div>
                   );

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { canViewModule } from "@/lib/permissions";
 import { DEPLOYED_STATUSES } from "@/lib/inventory-status";
+import { formatTime24 } from "@/lib/time-format";
 import * as XLSX from "xlsx";
 
 const columns: { label: string; field: string }[] = [
@@ -84,6 +85,7 @@ function getVal(obj: Record<string, unknown>, field: string): unknown {
     if (isNaN(val.getTime())) return "";
     return val.toISOString().split("T")[0];
   }
+  if (field === "emailReceivedHour") return formatTime24(String(val)) ?? "";
   return String(val);
 }
 

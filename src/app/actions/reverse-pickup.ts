@@ -13,6 +13,7 @@ import { hasPriorDelivery } from "@/app/actions/assignment";
 import { isDeployedStatus } from "@/lib/inventory-status";
 import { hasReachedWarehouse } from "@/lib/reverse-pickup-config";
 import { validateEwayBillNumber } from "@/lib/eway-bill";
+import { formatTime24 } from "@/lib/time-format";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -285,7 +286,7 @@ export async function createReversePickupRequest(formData: FormData) {
 
   const city = (formData.get("city") as string) || null;
   const state = (formData.get("state") as string) || null;
-  const emailReceivedHour = (formData.get("emailReceivedHour") as string) || null;
+  const emailReceivedHour = formatTime24(formData.get("emailReceivedHour") as string) || null;
   const odaLocation = normalizeOdaLocation(formData.get("odaLocation") as string);
   const pickupDate = parseDate(formData.get("pickupDate") as string);
 
