@@ -126,6 +126,7 @@ export default async function InventoryPage(props: { searchParams: Promise<Recor
             warrantyEndPeriod: safeISO(i.warrantyEndPeriod),
             deliveryDate: safeISO(i.deliveryDate),
             pickupDate: safeISO(i.pickupDate),
+            returnPickupDate: safeISO(i.returnPickupDate),
             dateOfWs1Update: safeISO(i.dateOfWs1Update),
             servicesStartDate: safeISO(i.servicesStartDate),
             date: safeISO(i.date),

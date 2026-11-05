@@ -231,6 +231,8 @@ model InventoryItem {
   trackingStatus            String?         @map("tracking_status")
   trackingSubStatus         String?         @map("tracking_sub_status")
   pickupDate                DateTime?       @map("pickup_date") @db.Date
+  // Day the unit came back inward to the warehouse via reverse pickup.
+  returnPickupDate          DateTime?       @map("return_pickup_date") @db.Date
   alternatePhoneNumber      String?         @map("alternate_phone_number")
   processStatus             String?         @map("process_status")
   machineWs1Status          String?         @map("machine_ws1_status")

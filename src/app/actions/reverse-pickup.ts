@@ -551,7 +551,13 @@ export async function markAsPickedUp(formData: FormData) {
 // Archives the item's current user into assignment history (so it shows up
 // under "previous") and returns the unit to stock. Shared by the inward and
 // complete steps; the alreadyRecorded check keeps it safe to run twice.
-async function restockInventoryItem(tx: Prisma.TransactionClient, inventoryItem: InventoryItem) {
+// `returnPickupDate` is only passed at inward time (Warehouse "Receive at
+// Warehouse"); the later completion call leaves the stored date untouched.
+async function restockInventoryItem(
+  tx: Prisma.TransactionClient,
+  inventoryItem: InventoryItem,
+  returnPickupDate?: Date | null,
+) {
   if (inventoryItem.employeeName) {
     const alreadyRecorded = await tx.assignmentRecord.findFirst({
       where: {
@@ -613,6 +619,9 @@ async function restockInventoryItem(tx: Prisma.TransactionClient, inventoryItem:
       dcNumber: null,
       docketNumber: null,
       deliveryDate: null,
+      // Only the inward (receive) call overwrites this; the completion call
+      // passes nothing so an already-captured date survives.
+      ...(returnPickupDate ? { returnPickupDate } : {}),
     },
   });
 }
@@ -659,9 +668,10 @@ export async function receiveAtWarehouse(formData: FormData) {
       : await tx.inventoryItem.findUnique({ where: { serialNumber: current.serialNumber } });
 
     // Inward = unit is back in our hands: the current user moves to assignment
-    // history and the serial becomes warehouse stock again.
+    // history and the serial becomes warehouse stock again. The day it came
+    // inward becomes the item's Return Pickup Date (fallback: today).
     if (item) {
-      await restockInventoryItem(tx, item);
+      await restockInventoryItem(tx, item, receivedDate ?? new Date());
     }
 
     // Optimistic status guard: exactly one row may leave RECEIVABLE state.
