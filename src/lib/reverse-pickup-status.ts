@@ -110,3 +110,74 @@ export function resolveStatus(raw: string | null | undefined): string | null {
   if (byLabel) return byLabel;
   return null;
 }
+
+// ─── Effective stage ─────────────────────────────────────────────────────────
+//
+// Imported tracking sheets keep the workflow status at REQUESTED and carry the
+// real progress in the free-text displayStatus column. The detail page's stepper
+// and the server-side guards therefore both need the same "where is this request
+// really" answer, so the derivation lives here instead of inside the component.
+
+const INITIAL_STAGE_STATUSES = [
+  "GATEPASS_PENDING",
+  "PENDING",
+  "PWC_CONFIRMATION_AWAITED",
+  "ALIGN_FOR_PICKUP",
+  "ON_HOLD",
+];
+
+const PICKED_UP_EQUIVALENT_STATUSES = ["IN_TRANSIT"];
+
+/**
+ * Stage a request is really on: the stored workflow status, refined by the
+ * imported display status while the workflow status is still untouched, with the
+ * initial/alias states folded onto the canonical step.
+ */
+export function resolveEffectiveStatus(
+  status: string,
+  displayStatus?: string | null,
+  qcCleanResult?: string | null
+): string {
+  let effective = status;
+
+  const displayDerived = resolveStatus(displayStatus ?? "");
+  if (["REQUESTED", ...INITIAL_STAGE_STATUSES].includes(status) && displayDerived && displayDerived !== "COMPLETED") {
+    effective = displayDerived;
+  }
+  if (INITIAL_STAGE_STATUSES.includes(effective)) effective = "REQUESTED";
+  else if (PICKED_UP_EQUIVALENT_STATUSES.includes(effective)) effective = "PICKED_UP";
+
+  // A request parked on an HP case still sits at whichever QC stage it stopped
+  // at, so the stepper (and the address window) reflect real progress.
+  if (status === "CASE_LOGGED_WITH_HP") {
+    effective = qcCleanResult === "FAIL" ? "QC_CLEANED" : "QC_COMPLETED";
+  }
+
+  return effective;
+}
+
+/**
+ * The pickup address is what the courier is sent to. It stays correctable while
+ * the request is still being set up — up to and including the day the docket is
+ * assigned — and is frozen afterwards: from the pickup onward the address on the
+ * docket/e-way bill is the one the courier actually visited, so rewriting it
+ * would desync the paperwork from the physical return leg.
+ */
+export const ADDRESS_EDITABLE_STATUSES: string[] = [
+  "REQUESTED",
+  "PARTNER_ASSIGNED",
+  "DC_REQUESTED",
+  "DC_GENERATED",
+  "EWAY_BILL_REQUESTED",
+  "EWAY_BILL_GENERATED",
+  "DOCKET_REQUESTED",
+  "DOCKET_ASSIGNED",
+];
+
+export function canEditReversePickupAddress(
+  status: string,
+  displayStatus?: string | null,
+  qcCleanResult?: string | null
+): boolean {
+  return ADDRESS_EDITABLE_STATUSES.includes(resolveEffectiveStatus(status, displayStatus, qcCleanResult));
+}

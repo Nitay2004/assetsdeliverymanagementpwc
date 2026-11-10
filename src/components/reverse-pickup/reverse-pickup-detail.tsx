@@ -3,16 +3,17 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, AlertTriangle, Check, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileText, Package, Circle, Loader2 } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Check, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileText, Package, Circle, Loader2, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   recordInspection,
   markAsPickedUp,
   uploadPodDocument,
+  updateReversePickupAddress,
 } from "@/app/actions/reverse-pickup";
 import { WAREHOUSE_OWNED_STATUSES } from "@/lib/reverse-pickup-config";
 import { getNextStatus, hasReachedWarehouse } from "@/lib/reverse-pickup-config";
-import { resolveStatus } from "@/lib/reverse-pickup-status";
+import { canEditReversePickupAddress, resolveEffectiveStatus } from "@/lib/reverse-pickup-status";
 import { formatTime24 } from "@/lib/time-format";
 
 interface RequestData {
@@ -126,6 +127,8 @@ interface Props {
   request: RequestData;
   userRole: string;
   dcId: string | null;
+  /** The viewer holds reverse-pickup `canEdit`; the server action re-checks it. */
+  canEditAddress: boolean;
 }
 
 const STEPS = [
@@ -147,42 +150,53 @@ const STEPS = [
   { key: "COMPLETED", label: "Completed", icon: Package },
 ];
 
-export function ReversePickupDetail({ request, userRole, dcId }: Props) {
+export function ReversePickupDetail({ request, userRole, dcId, canEditAddress }: Props) {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState<string | null>(null);
+  const [editingAddress, setEditingAddress] = useState(false);
 
   const canManage = userRole === "ADMIN" || userRole === "REVERSE_PICKUP" || userRole === "WAREHOUSE" || userRole === "PROVISIONING";
 
-  const INITIAL_STAGE_STATUSES = ["GATEPASS_PENDING", "PENDING", "PWC_CONFIRMATION_AWAITED", "ALIGN_FOR_PICKUP", "ON_HOLD"];
-  const PICKED_UP_EQUIVALENT = ["IN_TRANSIT"];
   const NON_EDITABLE_STATUSES = ["COMPLETED", "PICKUP_CANCELLED", "DUPLICATE", "ALREADY_SUBMITTED_TO_PWC_OFFICE", "RTO_CASE", "LOST_DEVICE"];
 
-  let effectiveStatus = request.status;
-  // The imported tracking sheets carry the real workflow state in the free-text
-  // displayStatus column even when the DB status never moved past REQUESTED, so
-  // fall back to it to open on the stage that matches actual progress. It is only
-  // a fallback while the status is still untouched: once a real action advances
-  // the status, that becomes authoritative, otherwise a stale display value (for
-  // example "Pickup Initiated") would pin the page to Partner Assigned forever.
-  const displayDerived = resolveStatus(request.displayStatus ?? "");
-  const statusUntouched = ["REQUESTED", ...INITIAL_STAGE_STATUSES].includes(request.status);
-  if (statusUntouched && displayDerived && displayDerived !== "COMPLETED") {
-    effectiveStatus = displayDerived;
-  }
-  if (INITIAL_STAGE_STATUSES.includes(effectiveStatus)) effectiveStatus = "REQUESTED";
-  else if (PICKED_UP_EQUIVALENT.includes(effectiveStatus)) effectiveStatus = "PICKED_UP";
+  // The effective stage comes from the shared resolver so the edit window shown
+  // here is exactly the window the server action enforces. Imported requests keep
+  // their real progress in displayStatus while the workflow status stays
+  // REQUESTED, which is why the raw status alone is not enough.
+  const effectiveStatus = resolveEffectiveStatus(
+    request.status,
+    request.displayStatus,
+    request.qcCleanResult
+  );
   // A request parked on an HP case still sits at whichever QC stage it stopped
   // at, so the stepper shows real progress rather than an unknown state with
   // nothing done yet. No next step is offered while it is parked: it only moves
   // again once provisioning sends it back for a fresh QC run.
   const hpParked = request.status === "CASE_LOGGED_WITH_HP";
-  if (hpParked) effectiveStatus = request.qcCleanResult === "FAIL" ? "QC_CLEANED" : "QC_COMPLETED";
+  const addressEditable =
+    canEditAddress &&
+    canEditReversePickupAddress(request.status, request.displayStatus, request.qcCleanResult);
 
   const isReadOnly = NON_EDITABLE_STATUSES.includes(request.status);
   const stepStatus = effectiveStatus;
   const currentStepIndex = STEPS.findIndex(s => s.key === stepStatus);
   const nextAction = hpParked ? null : getNextStatus(stepStatus);
+
+  const handleSaveAddress = async (formData: FormData) => {
+    setLoading("updateAddress");
+    try {
+      formData.append("id", request.id);
+      await updateReversePickupAddress(formData);
+      toast({ title: "Pickup address updated", variant: "success" });
+      setEditingAddress(false);
+      router.refresh();
+    } catch (err) {
+      toast({ title: "Could not update address", description: String(err), variant: "error" });
+    } finally {
+      setLoading(null);
+    }
+  };
 
   const handleAction = async (actionName: string, formData: FormData) => {
     setLoading(actionName);
@@ -410,14 +424,106 @@ export function ReversePickupDetail({ request, userRole, dcId }: Props) {
         </div>
 
         <div className="rounded-xl glass shadow-sm p-5 space-y-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Pickup Address</h3>
-          <p className="text-sm">{request.pickupAddress}</p>
-          {request.city && (
-            <p className="text-sm text-muted-foreground">
-              {request.city}{request.state ? `, ${request.state}` : ""}{request.pinCode ? ` - ${request.pinCode}` : ""}
-            </p>
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Pickup Address</h3>
+            {addressEditable && !editingAddress && (
+              <button
+                type="button"
+                onClick={() => setEditingAddress(true)}
+                className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-accent"
+              >
+                <Pencil className="size-3.5" />
+                Edit
+              </button>
+            )}
+          </div>
+
+          {editingAddress ? (
+            <form action={handleSaveAddress} className="space-y-3">
+              <div className="space-y-1.5">
+                <label htmlFor="pickupAddress" className="text-xs font-medium text-foreground">Address</label>
+                <textarea
+                  id="pickupAddress"
+                  name="pickupAddress"
+                  rows={3}
+                  required
+                  defaultValue={request.pickupAddress}
+                  className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label htmlFor="landmark" className="text-xs font-medium text-foreground">Landmark</label>
+                  <input
+                    id="landmark"
+                    name="landmark"
+                    defaultValue={request.landmark ?? ""}
+                    className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="city" className="text-xs font-medium text-foreground">City</label>
+                  <input
+                    id="city"
+                    name="city"
+                    defaultValue={request.city ?? ""}
+                    className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="state" className="text-xs font-medium text-foreground">State</label>
+                  <input
+                    id="state"
+                    name="state"
+                    defaultValue={request.state ?? ""}
+                    className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="pinCode" className="text-xs font-medium text-foreground">PIN Code</label>
+                  <input
+                    id="pinCode"
+                    name="pinCode"
+                    defaultValue={request.pinCode ?? ""}
+                    className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The linked delivery challan and the inventory record are updated with the same address.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={isPending("updateAddress")}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {isPending("updateAddress") ? <Loader2 className="size-4 animate-spin" /> : null}
+                  {isPending("updateAddress") ? "Saving..." : "Save Address"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingAddress(false)}
+                  className="rounded-lg border px-3 py-2 text-sm font-semibold transition-colors hover:bg-accent"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <p className="text-sm">{request.pickupAddress}</p>
+              {request.city && (
+                <p className="text-sm text-muted-foreground">
+                  {request.city}{request.state ? `, ${request.state}` : ""}{request.pinCode ? ` - ${request.pinCode}` : ""}
+                </p>
+              )}
+              {request.landmark && <p className="text-sm text-muted-foreground">Landmark: {request.landmark}</p>}
+              {addressEditable && (
+                <p className="text-xs text-muted-foreground">Editable up to the Docket Assigned stage.</p>
+              )}
+            </>
           )}
-          {request.landmark && <p className="text-sm text-muted-foreground">Landmark: {request.landmark}</p>}
         </div>
 
         {/* SLA & TAT â€” all values derived on the server from the email hour, the

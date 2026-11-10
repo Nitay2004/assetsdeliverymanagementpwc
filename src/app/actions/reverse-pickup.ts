@@ -14,6 +14,7 @@ import { isDeployedStatus } from "@/lib/inventory-status";
 import { hasReachedWarehouse } from "@/lib/reverse-pickup-config";
 import { validateEwayBillNumber } from "@/lib/eway-bill";
 import { formatTime24 } from "@/lib/time-format";
+import { canEditReversePickupAddress } from "@/lib/reverse-pickup-status";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -432,6 +433,94 @@ export async function createReversePickupRequest(formData: FormData) {
   revalidatePath("/dashboard/reverse-pickup");
   revalidatePath("/dashboard/inventory");
   redirect("/dashboard/reverse-pickup");
+}
+
+/**
+ * Corrects the pickup address of a request that is still being set up.
+ *
+ * The address is what the courier is sent to, so it can only change up to the
+ * Docket Assigned stage (see `canEditReversePickupAddress`). Because the delivery
+ * challan and the inventory row both hold a copy of that address, all three are
+ * updated together — the printed challan, the inventory record and the request
+ * never disagree after a correction.
+ */
+export async function updateReversePickupAddress(formData: FormData) {
+  const user = await getSession();
+  requirePermission(user, "reverse-pickup", "canEdit");
+
+  const id = ((formData.get("id") as string | null) ?? "").trim();
+  if (!id) throw new Error("Request id is required.");
+
+  const pickupAddress = ((formData.get("pickupAddress") as string | null) ?? "").trim();
+  if (!pickupAddress) throw new Error("Pickup address is required.");
+
+  const text = (name: string): string | null => {
+    const value = formData.get(name);
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    return trimmed || null;
+  };
+
+  const landmark = text("landmark");
+  const city = text("city");
+  const state = text("state");
+  const pinCode = text("pinCode");
+
+  const existing = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: {
+      status: true,
+      displayStatus: true,
+      qcCleanResult: true,
+      city: true,
+      state: true,
+      inventoryItemId: true,
+    },
+  });
+  if (!existing) throw new Error("Reverse pickup request not found.");
+  if (!canEditReversePickupAddress(existing.status, existing.displayStatus, existing.qcCleanResult)) {
+    throw new Error("The pickup address can only be changed up to the Docket Assigned stage.");
+  }
+
+  // City and state drive the zone, tier, TAT and expected pickup date, so the SLA
+  // chain is re-derived only when they actually change. A street-level correction
+  // must not move the promise date.
+  const changed = (a: string | null, b: string | null) =>
+    (a ?? "").trim().toLowerCase() !== (b ?? "").trim().toLowerCase();
+  const sla =
+    changed(existing.city, city) || changed(existing.state, state)
+      ? await recomputeSlaForRequest(id, { city, state })
+      : {};
+
+  const fullAddress = [pickupAddress, city, state, pinCode].filter(Boolean).join(", ");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.reversePickupRequest.update({
+      where: { id },
+      data: { pickupAddress, landmark, city, state, pinCode, ...sla },
+    });
+
+    // The DC stores the address as it was when it was generated. Keep that
+    // snapshot in step so the PDF a courier carries shows the corrected place.
+    await tx.deliveryChallan.updateMany({
+      where: { reversePickupRequestId: id },
+      data: { shipToLocation: fullAddress },
+    });
+
+    // The inventory row carries the same shipping address (it is what the request
+    // form prefilled), so future flows and exports see the correction too.
+    if (existing.inventoryItemId) {
+      await tx.inventoryItem.update({
+        where: { id: existing.inventoryItemId },
+        data: { shippingAddress: pickupAddress, landMark: landmark, city, state, pinCode },
+      });
+    }
+  });
+
+  revalidatePath(`/dashboard/reverse-pickup/${id}`);
+  revalidatePath("/dashboard/reverse-pickup");
+  revalidatePath("/dashboard/logistics");
+  revalidatePath("/dashboard/finance");
+  revalidatePath("/dashboard/inventory");
 }
 
 export async function assignPartner(formData: FormData) {

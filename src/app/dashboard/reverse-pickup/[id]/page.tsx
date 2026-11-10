@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { canModuleAction } from "@/lib/permissions";
 import { notFound, redirect } from "next/navigation";
 import { ReversePickupDetail } from "@/components/reverse-pickup/reverse-pickup-detail";
 
@@ -46,6 +47,7 @@ export default async function ReversePickupDetailPage(props: { params: Promise<{
         hpCaseResolvedAt: request.hpCaseResolvedAt?.toISOString() ?? null,
       }}
       userRole={user.role}
+      canEditAddress={canModuleAction(user.permissions, user.role, "reverse-pickup", "canEdit")}
     />
   );
 }
