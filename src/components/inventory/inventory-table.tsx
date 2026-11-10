@@ -93,6 +93,7 @@ interface InventoryItem {
   podAttemptedAt: string | Date | null;
   pickupDate: string | null;
   returnPickupDate: string | null;
+  assetReceivedDate: string | null;
   alternatePhoneNumber: string | null;
   processStatus: string | null;
   machineWs1Status: string | null;
@@ -319,13 +320,14 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
               />
               <th className="px-4 py-4 font-semibold text-muted-foreground">Delivery TAT Date</th>
               <th className="px-4 py-4 font-semibold text-muted-foreground">Return Pickup Date</th>
+              <th className="px-4 py-4 font-semibold text-muted-foreground">Asset Received in Warehouse</th>
               <th className="px-4 py-4 font-semibold text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-6 py-8 text-center text-muted-foreground">
+                <td colSpan={11} className="px-6 py-8 text-center text-muted-foreground">
                   No inventory found.
                 </td>
               </tr>
@@ -377,6 +379,9 @@ export function InventoryTable({ items, isAdmin, selectedId, totalCount, current
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-muted-foreground">
                     {item.returnPickupDate ? new Date(item.returnPickupDate).toLocaleDateString("en-IN") : "—"}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-muted-foreground">
+                    {item.assetReceivedDate ? new Date(item.assetReceivedDate).toLocaleDateString("en-IN") : "—"}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>

@@ -421,7 +421,16 @@ export async function createReversePickupRequest(formData: FormData) {
     }
   }
 
+  // The day a reverse pickup request is raised is shown on the Inventory table
+  // as "Return Pickup Date". A single office request may cover several serials,
+  // so stamp every matching inventory row with the same day.
+  await prisma.inventoryItem.updateMany({
+    where: { serialNumber: { in: serialsToValidate } },
+    data: { returnPickupDate: new Date() },
+  });
+
   revalidatePath("/dashboard/reverse-pickup");
+  revalidatePath("/dashboard/inventory");
   redirect("/dashboard/reverse-pickup");
 }
 
@@ -551,12 +560,12 @@ export async function markAsPickedUp(formData: FormData) {
 // Archives the item's current user into assignment history (so it shows up
 // under "previous") and returns the unit to stock. Shared by the inward and
 // complete steps; the alreadyRecorded check keeps it safe to run twice.
-// `returnPickupDate` is only passed at inward time (Warehouse "Receive at
+// `assetReceivedDate` is only passed at inward time (Warehouse "Receive at
 // Warehouse"); the later completion call leaves the stored date untouched.
 async function restockInventoryItem(
   tx: Prisma.TransactionClient,
   inventoryItem: InventoryItem,
-  returnPickupDate?: Date | null,
+  assetReceivedDate?: Date | null,
 ) {
   if (inventoryItem.employeeName) {
     const alreadyRecorded = await tx.assignmentRecord.findFirst({
@@ -621,7 +630,7 @@ async function restockInventoryItem(
       deliveryDate: null,
       // Only the inward (receive) call overwrites this; the completion call
       // passes nothing so an already-captured date survives.
-      ...(returnPickupDate ? { returnPickupDate } : {}),
+      ...(assetReceivedDate ? { assetReceivedDate } : {}),
     },
   });
 }
@@ -668,8 +677,8 @@ export async function receiveAtWarehouse(formData: FormData) {
       : await tx.inventoryItem.findUnique({ where: { serialNumber: current.serialNumber } });
 
     // Inward = unit is back in our hands: the current user moves to assignment
-    // history and the serial becomes warehouse stock again. The day it came
-    // inward becomes the item's Return Pickup Date (fallback: today).
+    // history and the serial becomes warehouse stock again. The day it was
+    // received becomes the item's "Asset Received in Warehouse" date.
     if (item) {
       await restockInventoryItem(tx, item, receivedDate ?? new Date());
     }

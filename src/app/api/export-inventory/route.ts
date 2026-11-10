@@ -66,6 +66,7 @@ const itemColumns: { label: string; field: string }[] = [
   { label: "Tracking Sub Status", field: "trackingSubStatus" },
   { label: "Pickup Date", field: "pickupDate" },
   { label: "Return Pickup Date", field: "returnPickupDate" },
+  { label: "Asset Received in Warehouse", field: "assetReceivedDate" },
   { label: "Process Status", field: "processStatus" },
   { label: "Invoiced Quantity", field: "invoicedQuantity" },
   { label: "Services Start Date", field: "servicesStartDate" },

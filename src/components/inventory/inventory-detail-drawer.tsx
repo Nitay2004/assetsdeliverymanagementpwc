@@ -73,6 +73,7 @@ interface InventoryItem {
   trackingSubStatus: string | null;
   pickupDate: string | null;
   returnPickupDate?: string | null;
+  assetReceivedDate?: string | null;
   alternatePhoneNumber: string | null;
   processStatus: string | null;
   machineWs1Status: string | null;
@@ -810,10 +811,14 @@ export function InventoryDetailDrawer({
               </h3>
               <div className="space-y-2.5">
                 {(section === "Delivery & Tracking"
-                  // Captured automatically when Warehouse marks the unit as
-                  // received; never a manual field, so it is not part of the
-                  // shared editable form config.
-                  ? [...sectionFields, { label: "Return Pickup Date", type: "date" }]
+                  // Both are captured by the reverse-pickup flow; they are never
+                  // manual fields, so they stay out of the shared editable form
+                  // config.
+                  ? [
+                      ...sectionFields,
+                      { label: "Return Pickup Date", type: "date" },
+                      { label: "Asset Received in Warehouse", type: "date" },
+                    ]
                   : sectionFields
                 ).map((field) => {
                   const fieldName = toFieldName(field.label);
