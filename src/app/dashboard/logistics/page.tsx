@@ -7,7 +7,6 @@ import { ReversePickupPipelineSection } from "@/components/logistics/reverse-pic
 import { LogisticsExportButton } from "@/components/logistics/logistics-export-button";
 import { PodExportButton } from "@/components/logistics/pod-export-button";
 import { InventorySyncButton } from "@/components/logistics/inventory-sync-button";
-import { DELIVERED_INVENTORY_WHERE, UNSYNCED_DELIVERED_INVENTORY_WHERE } from "@/lib/inventory-order-materialize";
 import { getWarehouses } from "@/app/actions/dc";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { ForwardReverseTabs } from "@/components/shared/forward-reverse-tabs";
@@ -175,15 +174,11 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
 
   // Stat cards must cover the whole filtered result set — computing them from
   // `rawOrders` (one page) made the numbers depend on which page you were on.
-  const [needsDocket, awaitingFinance, readyToPack, inTransit, deliveredInventoryTotal, pendingInventorySync] = await Promise.all([
+  const [needsDocket, awaitingFinance, readyToPack, inTransit] = await Promise.all([
     prisma.order.count({ where: { AND: [where, { status: "DOCKET_REQUESTED" }] } }),
     prisma.order.count({ where: { AND: [where, { status: { in: ["DOCKET_ASSIGNED", "DC_REQUESTED", "EWAY_BILL_REQUESTED", "RTO_DC_REQUESTED", "RTO_EWAY_BILL_REQUESTED"] } }] } }),
     prisma.order.count({ where: { AND: [where, { status: { in: ["DC_GENERATED", "EWAY_BILL_GENERATED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_GENERATED"] } }] } }),
     prisma.order.count({ where: { AND: [where, { status: { in: ["DISPATCHED", "DELIVERED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"] } }] } }),
-    // Delivered assets are counted from Inventory, not from orders: bulk Excel
-    // imports never created an order, so the order table alone undercounts them.
-    prisma.inventoryItem.count({ where: DELIVERED_INVENTORY_WHERE }),
-    prisma.inventoryItem.count({ where: UNSYNCED_DELIVERED_INVENTORY_WHERE }),
   ]);
 
   const warehouses = await getWarehouses();
@@ -286,7 +281,6 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {canManage && <InventorySyncButton pendingCount={pendingInventorySync} />}
           <PodExportButton />
           <LogisticsExportButton />
         </div>
@@ -340,19 +334,7 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
             <p className="text-2xl font-bold text-primary mt-1">{totalCount}</p>
           </div>
         </div>
-        <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-green-100">
-            <Laptop className="size-5 text-green-600" />
-          </div>
-          <div>
-            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Delivered in Inventory</p>
-            <p className="text-2xl font-bold text-primary mt-1">{deliveredInventoryTotal}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              {pendingInventorySync > 0 ? `${pendingInventorySync} pending sync` : "All synced"}
-            </p>
-          </div>
         </div>
-      </div>
 
       {activeTab === "forward" ? (
         <>
