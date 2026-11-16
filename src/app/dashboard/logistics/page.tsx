@@ -286,26 +286,15 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {canManage && pendingInventorySync > 0 && (
+            <InventorySyncButton pendingCount={pendingInventorySync} />
+          )}
           <PodExportButton />
           <LogisticsExportButton />
         </div>
       </div>
 
       <ForwardReverseTabs reverseCount={reversePending} />
-
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Logistics Module</h1>
-        <p className="text-muted-foreground mt-2">
-          Request DC, assign dockets, pack, label, and manage E-Way bills.
-        </p>
-      </div>
-
-      {/* Inventory sync button - restored */}
-      {canManage && pendingInventorySync > 0 && (
-        <div className="flex items-center gap-2">
-          <InventorySyncButton pendingCount={pendingInventorySync} />
-        </div>
-      )}
 
       <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-4">
         <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">

@@ -79,7 +79,7 @@ export default async function DashboardPage(props: {
   const reverseWhere = createdAt ? { createdAt } : undefined;
 
   // Fetch all data in parallel Ã¢â‚¬â€ aggregate counts in the DB, no unbounded row loads.
-  const [orderStatuses, inventoryStatuses, slaMetCount, totalAssets, warrantyPendingCount, stockByWarehouseRows, statusWarehouseRows, recentOrders, recentInventory, reversePickupStatuses, reverseSlaMetCount, reverseRemarkCancelCount, deliveredInventoryCount, inTransitInventoryCount, rtoInventoryCount] = await Promise.all([
+  const [orderStatuses, inventoryStatuses, slaMetCount, totalAssets, warrantyPendingCount, stockByWarehouseRows, statusWarehouseRows, recentOrders, recentInventory, reversePickupStatuses, reverseSlaMetCount, reverseRemarkCancelCount] = await Promise.all([
     prisma.order.groupBy({
       by: ["status"],
       where: orderWhere,
@@ -135,35 +135,6 @@ export default async function DashboardPage(props: {
         remark: { contains: "cancel", mode: "insensitive" },
       },
     }),
-    prisma.inventoryItem.count({
-      where: {
-        status: { in: DEPLOYED_STATUSES },
-        OR: [
-          { trackingStatus: { contains: "shipped to user", mode: "insensitive" } },
-          { trackingStatus: { contains: "delivered", mode: "insensitive" } },
-          { trackingSubStatus: { contains: "shipped to user", mode: "insensitive" } },
-          { trackingSubStatus: { contains: "delivered", mode: "insensitive" } },
-        ],
-      },
-    }),
-    prisma.inventoryItem.count({
-      where: {
-        status: { in: DEPLOYED_STATUSES },
-        OR: [
-          { trackingStatus: { contains: "in transit", mode: "insensitive" } },
-          { trackingSubStatus: { contains: "in transit", mode: "insensitive" } },
-        ],
-      },
-    }),
-    prisma.inventoryItem.count({
-      where: {
-        status: { in: DEPLOYED_STATUSES },
-        OR: [
-          { trackingStatus: { contains: "rto", mode: "insensitive" } },
-          { trackingSubStatus: { contains: "rto", mode: "insensitive" } },
-        ],
-      },
-    }),
   ]);
 
   const orderCounts = new Map(orderStatuses.map(r => [r.status, r._count._all]));
@@ -172,13 +143,14 @@ export default async function DashboardPage(props: {
   const orderStatusCount = (s: OrderStatus) => orderCounts.get(s) ?? 0;
   const inventoryStatusCount = (s: InventoryStatus) => inventoryCounts.get(s) ?? 0;
 
-  // Compute stats
-  const inProvisioningCount = orderStatusCount("IN_PROVISIONING");
+  // Compute stats — pure order-status counts, no inventory tracking mixing.
+  // "In Provisioning" includes ALLOCATED + IN_PROVISIONING to match Provisioning module.
+  const inProvisioningCount = orderStatusCount("ALLOCATED") + orderStatusCount("IN_PROVISIONING");
   const pendingAllocationCount = orderStatusCount("ORDER_PLACED");
-  const inTransitCount = orderStatusCount("DISPATCHED") + inTransitInventoryCount;
-  const packedAndLabelledCount = orderStatusCount("PACKED_AND_LABELLED") + deliveredInventoryCount;
-  const deliveredCount = orderStatusCount("DELIVERED") + orderStatusCount("DELIVERY_CONFIRMED") + deliveredInventoryCount;
-  const rtoCount = (["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"] as OrderStatus[]).reduce((sum, s) => sum + orderStatusCount(s), 0) + rtoInventoryCount;
+  const inTransitCount = orderStatusCount("DISPATCHED");
+  const packedAndLabelledCount = orderStatusCount("PACKED_AND_LABELLED");
+  const deliveredCount = orderStatusCount("DELIVERED") + orderStatusCount("DELIVERY_CONFIRMED");
+  const rtoCount = (["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"] as OrderStatus[]).reduce((sum, s) => sum + orderStatusCount(s), 0);
 
   const totalInventory = inventoryStatuses.reduce((sum, r) => sum + r._count._all, 0);
   const newStock = inventoryStatusCount("PROVISION_PENDING");
@@ -345,7 +317,7 @@ export default async function DashboardPage(props: {
           modalTitle="In Provisioning Orders"
           modalIcon={<Clock className="size-5 text-purple-600" />}
           modalIconBg="bg-purple-100"
-          statuses={["IN_PROVISIONING"]}
+          statuses={["ALLOCATED", "IN_PROVISIONING"]}
         />
         <OrderStatCard
           icon={<Package className="size-5 text-violet-600" />}
@@ -357,7 +329,6 @@ export default async function DashboardPage(props: {
           modalIcon={<Package className="size-5 text-violet-600" />}
           modalIconBg="bg-violet-100"
           statuses={["PACKED_AND_LABELLED"]}
-          inventoryTrackingKeywords={["shipped to user", "delivered"]}
         />
         <OrderStatCard
           icon={<Truck className="size-5 text-orange-600" />}
@@ -369,7 +340,6 @@ export default async function DashboardPage(props: {
           modalIcon={<Truck className="size-5 text-orange-600" />}
           modalIconBg="bg-orange-100"
           statuses={["DISPATCHED"]}
-          inventoryTrackingKeywords={["in transit"]}
         />
         <OrderStatCard
           icon={<CheckCircle className="size-5 text-green-600" />}
@@ -381,7 +351,6 @@ export default async function DashboardPage(props: {
           modalIcon={<CheckCircle className="size-5 text-green-600" />}
           modalIconBg="bg-green-100"
           statuses={["DELIVERED", "DELIVERY_CONFIRMED"]}
-          inventoryTrackingKeywords={["shipped to user", "delivered"]}
         />
         <OrderStatCard
           icon={<AlertTriangle className="size-5 text-red-500" />}
@@ -393,7 +362,6 @@ export default async function DashboardPage(props: {
           modalIcon={<AlertTriangle className="size-5 text-red-500" />}
           modalIconBg="bg-red-50"
           statuses={["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"]}
-          inventoryTrackingKeywords={["rto"]}
         />
         {!isPwc && (
           <InventorySlaStatCard
