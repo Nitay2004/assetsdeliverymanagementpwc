@@ -288,7 +288,7 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
 
       <ForwardReverseTabs reverseCount={reversePending} />
 
-      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
           <div className="p-3 rounded-lg bg-blue-100">
             <Hash className="size-5 text-blue-600" />
