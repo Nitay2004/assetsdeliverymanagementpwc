@@ -35,6 +35,7 @@ export default function ImportInventoryPage() {
     errors?: string[] | null;
     warning?: string | null;
     matched?: { header: string; field: string }[];
+    inventorySync?: { ordersCreated: number; assetsCreated: number; remaining: number } | null;
     error?: string;
   } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -326,6 +327,14 @@ export default function ImportInventoryPage() {
                         {result.notFound ? <p className="text-amber-600">{result.notFound} serial number(s) not found in inventory.</p> : null}
                       </>
                     )}
+                    {result.inventorySync && result.inventorySync.ordersCreated > 0 ? (
+                      <p className="text-green-700">
+                        {result.inventorySync.ordersCreated} Logistics order(s) created for {result.inventorySync.assetsCreated} delivered asset(s)
+                        {result.inventorySync.remaining > 0
+                          ? ` · ${result.inventorySync.remaining} still pending — sync from Logistics.`
+                          : "."}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </div>

@@ -8,6 +8,7 @@ import { toDenseRow, toDenseRows } from "@/lib/sheet-cells";
 import { normalizeOdaLocation } from "@/lib/location-utils";
 import { calculateSlaStatus } from "@/lib/sla-utils";
 import { formatExcelTime } from "@/lib/excel-time";
+import { materializeDeliveredInventoryOrders } from "@/lib/inventory-order-materialize";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
@@ -1061,12 +1062,38 @@ export async function POST(request: Request) {
     revalidatePath("/dashboard");
   }
 
+  // A bulk sheet only writes InventoryItem rows, but the stage modules read
+  // Orders. Materialise any delivered rows that still have no order so the
+  // uploaded assets are visible in Logistics without a manual step. Capped so a
+  // very large backlog cannot time the import out; the Logistics sync button
+  // finishes the rest.
+  let inventorySync: { ordersCreated: number; assetsCreated: number; remaining: number } | null = null;
+  if (mode !== "update") {
+    try {
+      const sync = await materializeDeliveredInventoryOrders({ maxGroups: 200 });
+      inventorySync = {
+        ordersCreated: sync.ordersCreated,
+        assetsCreated: sync.assetsCreated,
+        remaining: sync.remaining,
+      };
+      if (sync.ordersCreated > 0) {
+        revalidatePath("/dashboard/logistics");
+        revalidatePath("/dashboard/finance");
+        revalidatePath("/dashboard/warehouse");
+        revalidatePath("/dashboard/provisioning");
+      }
+    } catch (err: any) {
+      errors.push(`Inventory → Logistics sync failed: ${err?.message ?? "Unknown error"}`);
+    }
+  }
+
   const uniqueUnknown = errors.filter(e => e.includes("Unrecognized columns"));
   const warning = uniqueUnknown.length > 0 ? uniqueUnknown.join(" | ") : null;
 
   return NextResponse.json({
     success: true,
     ...total,
+    inventorySync,
     matched: matchedHeaders,
     errors: errors.length > 0 ? errors : null,
     warning,

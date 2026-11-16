@@ -25,6 +25,11 @@ function createPrismaClient() {
     max: 5,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 30_000,
+    // A long aggregate sends no traffic until it finishes. Without keepalive an
+    // intermediate NAT/pooler can drop the socket mid-query and surface it as
+    // "Connection terminated unexpectedly".
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
   });
 
   return new PrismaClient({

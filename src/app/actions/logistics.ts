@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/lib/order-sync";
 import { isValidOrderStatus, orderTransitionError, DOCKET_EDITABLE_STATUSES } from "@/lib/order-status";
 import { validateEwayBillNumber } from "@/lib/eway-bill";
+import { materializeDeliveredInventoryOrders } from "@/lib/inventory-order-materialize";
 
 export async function markAsRto(
   orderId: string,
@@ -313,4 +314,34 @@ export async function deleteLogisticsCourierOption(id: string) {
   await prisma.dropdownOption.delete({ where: { id } });
 
   revalidatePath("/dashboard/logistics");
+}
+
+// ─── Backfill: bulk-imported inventory → Logistics orders ───
+//
+// Bulk Excel uploads only create InventoryItem rows, so delivered assets from
+// those sheets are invisible to the stage modules. This action materialises the
+// missing Order/Asset/Docket records. It is idempotent: items already linked to
+// an order are skipped, so the button can be pressed again after a new upload.
+
+export async function previewDeliveredInventorySync() {
+  const user = await getSession();
+  requirePermission(user, "logistics", "canView");
+
+  return materializeDeliveredInventoryOrders({ dryRun: true, maxGroups: 25 });
+}
+
+export async function syncDeliveredInventoryToLogistics() {
+  const user = await getSession();
+  requirePermission(user, "logistics", "canEdit");
+
+  const result = await materializeDeliveredInventoryOrders();
+
+  revalidatePath("/dashboard/logistics");
+  revalidatePath("/dashboard/finance");
+  revalidatePath("/dashboard/warehouse");
+  revalidatePath("/dashboard/provisioning");
+  revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard");
+
+  return result;
 }
