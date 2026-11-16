@@ -14,7 +14,7 @@ import { ProvisioningTabs } from "@/components/provisioning/provisioning-tabs";
 import { ReverseQcSubTabs } from "@/components/provisioning/reverse-qc-sub-tabs";
 import { type QcItem } from "@/components/qc/qc-panel";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
-import { ORDER_PIPELINE_STATUSES, ACTIVE_PROVISIONING_STATUSES, HANDED_OVER_STATUSES } from "@/lib/order-status";
+import { FORWARD_PROVISIONING_STATUSES, ACTIVE_PROVISIONING_STATUSES, HANDED_OVER_STATUSES } from "@/lib/order-status";
 import {
   REVERSE_QC_HARDWARE_STATUSES,
   REVERSE_QC_SOFTWARE_STATUSES,
@@ -62,9 +62,9 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
       where: { id: selectedId },
       select: { updatedAt: true, status: true },
     });
-    if (selOrder && !ORDER_PIPELINE_STATUSES.includes(selOrder.status)) {
+    if (selOrder && !FORWARD_PROVISIONING_STATUSES.includes(selOrder.status)) {
       const pos = await prisma.order.count({
-        where: { status: { in: ORDER_PIPELINE_STATUSES }, updatedAt: { gt: selOrder.updatedAt } },
+        where: { status: { in: FORWARD_PROVISIONING_STATUSES }, updatedAt: { gt: selOrder.updatedAt } },
       });
       const correctPage = Math.floor(pos / limit) + 1;
       if (correctPage !== page) {
@@ -73,7 +73,10 @@ export default async function ProvisioningPage(props: { searchParams: Promise<Re
     }
   }
 
-  const baseWhere: Prisma.OrderWhereInput = { status: { in: ORDER_PIPELINE_STATUSES } };
+  // Cumulative forward window (see FORWARD_PROVISIONING_STATUSES): every order
+  // from allocation onwards stays listed, split into active / handed over /
+  // further stages below.
+  const baseWhere: Prisma.OrderWhereInput = { status: { in: FORWARD_PROVISIONING_STATUSES } };
   const where: Prisma.OrderWhereInput = search ? {
     ...baseWhere,
     OR: [

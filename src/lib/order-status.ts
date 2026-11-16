@@ -1,7 +1,8 @@
 import type { OrderStatus } from "@prisma/client";
 
-// Full order pipeline statuses. Every module datatable uses this list so that
-// an order never disappears from a datatable once it has entered the pipeline.
+// Full order pipeline statuses: the whole lifecycle an order can be in once it
+// has left ORDER_PLACED. Individual modules narrow this to their own window with
+// the FORWARD_*_STATUSES sets below.
 export const ORDER_PIPELINE_STATUSES: OrderStatus[] = [
   "ALLOCATED",
   "IN_PROVISIONING",
@@ -27,32 +28,87 @@ export const ORDER_PIPELINE_STATUSES: OrderStatus[] = [
   "CANCELLED",
 ];
 
-// Forward finance sub-tab status sets. Both sub-tabs are sticky: once an order
-// has shown in a sub-tab it never leaves it, so advancing stages (DC generated
-// → e-way requested → e-way generated → onward) never empties a table.
+// ─── Forward stage ownership ─────────────────────────────────────────────────
 //
-// DC sub-tab: the full pipeline — a row stays visible from its first entry all
-// the way through dispatch, delivery, RTO and everything after. Orders that
-// reach the e-way stage keep showing here as well (the E-Way sub-tab is a
-// focused overlay of the same rows, not a move).
-export const FORWARD_DC_STATUSES: OrderStatus[] = ORDER_PIPELINE_STATUSES;
+// Forward visibility is cumulative ("sticky"): a module lists an order from the
+// stage that module first acts on and keeps listing it through every later
+// stage — including dispatch, delivery, RTO and closure. Nothing is dropped
+// when the next team takes over, so a delivered order is visible in Warehouse,
+// Provisioning, Finance and Logistics at the same time.
+//
+// First stage per module:
+//   Warehouse     ALLOCATED        the warehouse allocates the stock
+//   Provisioning  ALLOCATED        an engineer provisions the allocated units
+//   Finance       IN_PROVISIONING  finance can raise the DC from here
+//   Logistics     DC_REQUESTED     provisioning hands the order over
+//
+// CANCELLED stays in every window: an order that was already visible keeps
+// showing after it is cancelled instead of vanishing from the audit trail.
+//
+// The lists are written in lifecycle order rather than sliced from
+// ORDER_PIPELINE_STATUSES (that list is grouped by owning team, so e.g. packing
+// appears before the e-way stages there). Keeping them explicit means
+// re-ordering the pipeline array can never silently widen or narrow a window.
 
-// E-Way sub-tab: e-way work onwards. Once an order enters here it stays —
-// generated, packed, dispatched, delivered rows are all kept visible.
-export const FORWARD_EWAY_STATUSES: OrderStatus[] = [
-  "PACKED_AND_LABELLED",
-  "EWAY_BILL_REQUESTED",
-  "EWAY_BILL_GENERATED",
+// Tail shared by every window: dispatch, delivery, RTO and closure.
+const LATE_STAGE_STATUSES: OrderStatus[] = [
   "DISPATCHED",
   "DELIVERED",
+  "DELIVERY_CONFIRMED",
+  "INVOICED",
+  "WARRANTY_UPDATED",
+  "RTO",
+  "RTO_DC_REQUESTED",
+  "RTO_DC_GENERATED",
   "RTO_EWAY_BILL_REQUESTED",
   "RTO_EWAY_BILL_GENERATED",
   "RTO_IN_TRANSIT",
   "RTO_DELIVERED_TO_WAREHOUSE",
-  "DELIVERY_CONFIRMED",
-  "INVOICED",
-  "WARRANTY_UPDATED",
   "CANCELLED",
+];
+
+// Warehouse: the order exists from allocation onwards, so this is the whole
+// pipeline. Rows never leave the allocated-assets table.
+export const FORWARD_WAREHOUSE_STATUSES: OrderStatus[] = ORDER_PIPELINE_STATUSES;
+
+// Provisioning: same window — an allocated order is already provisioning work,
+// and it stays listed (active → handed over → further stages) after handover.
+export const FORWARD_PROVISIONING_STATUSES: OrderStatus[] = ORDER_PIPELINE_STATUSES;
+
+// Logistics: the order enters when provisioning requests the DC (that is the
+// handover) and stays through docket, packing, dispatch, delivery and RTO.
+export const FORWARD_LOGISTICS_STATUSES: OrderStatus[] = [
+  "DC_REQUESTED",
+  "DC_GENERATED",
+  "DOCKET_REQUESTED",
+  "DOCKET_ASSIGNED",
+  "EWAY_BILL_REQUESTED",
+  "EWAY_BILL_GENERATED",
+  "PACKED_AND_LABELLED",
+  ...LATE_STAGE_STATUSES,
+];
+
+// Finance: finance can raise the DC while the order is still in provisioning,
+// so its window opens one stage earlier than Logistics and then runs on.
+export const FORWARD_FINANCE_STATUSES: OrderStatus[] = [
+  "IN_PROVISIONING",
+  ...FORWARD_LOGISTICS_STATUSES,
+];
+
+// Finance DC sub-tab. Sticky: the row stays visible from its first entry all
+// the way through dispatch, delivery, RTO and everything after. Orders that
+// reach the e-way stage keep showing here too — the E-Way sub-tab is a focused
+// overlay of the same rows, not a move.
+export const FORWARD_DC_STATUSES: OrderStatus[] = FORWARD_FINANCE_STATUSES;
+
+// Finance E-Way sub-tab: e-way work onwards. Once an order enters here
+// (logistics requested the bill) it stays through packing, dispatch, delivery,
+// RTO and closure.
+export const FORWARD_EWAY_STATUSES: OrderStatus[] = [
+  "EWAY_BILL_REQUESTED",
+  "EWAY_BILL_GENERATED",
+  "PACKED_AND_LABELLED",
+  ...LATE_STAGE_STATUSES,
 ];
 
 // Statuses that still need provisioning work.

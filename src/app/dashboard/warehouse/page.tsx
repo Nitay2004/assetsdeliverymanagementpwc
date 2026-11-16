@@ -13,6 +13,7 @@ import { WarehouseTabs } from "@/components/warehouse/warehouse-tabs";
 import { PaginationBar } from "@/components/shared/pagination-bar";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
 import { WAREHOUSE_PIPELINE_SUB_STATUSES, WAREHOUSE_BLANCO_STATUSES, WAREHOUSE_RECEIVABLE_STATUSES, warehousePipelineScope, warehouseBlancoScope } from "@/lib/reverse-pickup-config";
+import { FORWARD_WAREHOUSE_STATUSES } from "@/lib/order-status";
 import type { Prisma, OrderStatus, ReversePickupStatus } from "@prisma/client";
 
 const ALLOCATED_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity", "serialNumbers", "docketNumber", "dcNumber", "ewayBill", "status"];
@@ -44,7 +45,9 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "WAREHOUSE"));
 
-  const allocatedWhere: Prisma.OrderWhereInput = { status: { not: "ORDER_PLACED" }, ...(search ? {
+  // Forward stage window (cumulative — see FORWARD_WAREHOUSE_STATUSES): an
+  // order stays in this table from allocation onwards, never disappears.
+  const allocatedWhere: Prisma.OrderWhereInput = { status: { in: FORWARD_WAREHOUSE_STATUSES }, ...(search ? {
     OR: [
       { clientName: { contains: search, mode: "insensitive" as const } },
       { deliveryLocation: { contains: search, mode: "insensitive" as const } },

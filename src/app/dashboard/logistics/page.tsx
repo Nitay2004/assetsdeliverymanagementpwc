@@ -11,10 +11,13 @@ import { PaginationBar } from "@/components/shared/pagination-bar";
 import { ForwardReverseTabs } from "@/components/shared/forward-reverse-tabs";
 import { getCorrectOrderPage } from "@/lib/order-page";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
-import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
+import { FORWARD_LOGISTICS_STATUSES } from "@/lib/order-status";
 import type { Prisma, OrderStatus, ReversePickupStatus } from "@prisma/client";
 
-const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
+// Logistics owns the order from the DC request (provisioning's handover)
+// onwards and keeps it through docket, dispatch, delivery and RTO — see
+// FORWARD_LOGISTICS_STATUSES.
+const STATUS_FILTER = FORWARD_LOGISTICS_STATUSES;
 const LOGISTICS_FILTER_KEYS = ["clientName", "dcNumber", "deliveryLocation", "totalQuantity", "serialNumber", "dockets", "ewayBill", "status"];
 // The reverse pipeline is a single queue, so it owns one set of filter params.
 const PIPELINE_FILTER_KEYS = ["aserial", "amodel", "aemployee", "acity", "astatus"];

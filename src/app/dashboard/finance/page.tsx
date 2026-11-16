@@ -9,10 +9,11 @@ import { PaginationBar } from "@/components/shared/pagination-bar";
 import { ForwardReverseTabs } from "@/components/shared/forward-reverse-tabs";
 import { getCorrectOrderPage } from "@/lib/order-page";
 import { parseColumnFilters, blankTokenConditions, collectBlankTokenConditions, andFilterConditions } from "@/lib/column-filters";
-import { ORDER_PIPELINE_STATUSES, FORWARD_DC_STATUSES, FORWARD_EWAY_STATUSES } from "@/lib/order-status";
+import { FORWARD_DC_STATUSES, FORWARD_EWAY_STATUSES, FORWARD_FINANCE_STATUSES } from "@/lib/order-status";
 import type { Prisma, OrderStatus, ReversePickupStatus } from "@prisma/client";
 
-const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
+// Finance owns the order from IN_PROVISIONING onwards and keeps it through
+// every later stage (see FORWARD_FINANCE_STATUSES in lib/order-status).
 const FINANCE_FILTER_KEYS = ["clientName", "deliveryLocation", "totalQuantity", "serialNumber", "dcNumber", "ewayBill", "status"];
 // Reverse finance filters are namespaced so they never collide with the
 // forward table's params, which share this route.
@@ -87,8 +88,8 @@ export default async function FinancePage(props: { searchParams: Promise<Record<
   andFilterConditions(where, collectBlankTokenConditions(columnFilters, { dcNumber: "dcNumber" }));
 
   const pipelineStatuses = columnFilters.status
-    ? (columnFilters.status as OrderStatus[]).filter(s => STATUS_FILTER.includes(s))
-    : STATUS_FILTER;
+    ? (columnFilters.status as OrderStatus[]).filter(s => FORWARD_FINANCE_STATUSES.includes(s))
+    : FORWARD_FINANCE_STATUSES;
   const dcPendingStatuses = (["IN_PROVISIONING", "DC_REQUESTED", "RTO_DC_REQUESTED"] as OrderStatus[])
     .filter(s => !columnFilters.status || (columnFilters.status as OrderStatus[]).includes(s));
 

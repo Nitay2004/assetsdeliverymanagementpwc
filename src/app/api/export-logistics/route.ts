@@ -3,9 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { canViewModule } from "@/lib/permissions";
 import * as XLSX from "xlsx";
-import { ORDER_PIPELINE_STATUSES } from "@/lib/order-status";
+import { FORWARD_LOGISTICS_STATUSES } from "@/lib/order-status";
 
-const STATUS_FILTER = ORDER_PIPELINE_STATUSES;
+// Same cumulative window as the Logistics page: DC request onwards.
+const STATUS_FILTER = FORWARD_LOGISTICS_STATUSES;
 
 const STATUS_MAP: Record<string, string> = {
   ALLOCATED: "Allocated",
