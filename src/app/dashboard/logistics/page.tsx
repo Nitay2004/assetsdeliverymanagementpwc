@@ -178,7 +178,8 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
     prisma.order.count({ where: { AND: [where, { status: "DOCKET_REQUESTED" }] } }),
     prisma.order.count({ where: { AND: [where, { status: { in: ["DOCKET_ASSIGNED", "DC_REQUESTED", "EWAY_BILL_REQUESTED", "RTO_DC_REQUESTED", "RTO_EWAY_BILL_REQUESTED"] } }] } }),
     prisma.order.count({ where: { AND: [where, { status: { in: ["DC_GENERATED", "EWAY_BILL_GENERATED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_GENERATED"] } }] } }),
-    prisma.order.count({ where: { AND: [where, { status: { in: ["DISPATCHED", "DELIVERED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"] } }] } }),
+    // inTransit: only true forward-logistics in-transit statuses (not delivered/return)
+    prisma.order.count({ where: { AND: [where, { status: "RTO_IN_TRANSIT" }] } }),
   ]);
 
   const warehouses = await getWarehouses();
@@ -288,7 +289,7 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
 
       <ForwardReverseTabs reverseCount={reversePending} />
 
-      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-4">
         <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
           <div className="p-3 rounded-lg bg-blue-100">
             <Hash className="size-5 text-blue-600" />
@@ -325,16 +326,7 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
             <p className="text-2xl font-bold text-primary mt-1">{inTransit}</p>
           </div>
         </div>
-        <div className="p-5 rounded-xl glass shadow-sm flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-blue-100">
-            <ClipboardList className="size-5 text-blue-600" />
-          </div>
-          <div>
-            <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Total Orders</p>
-            <p className="text-2xl font-bold text-primary mt-1">{totalCount}</p>
-          </div>
-        </div>
-        </div>
+      </div>
 
       {activeTab === "forward" ? (
         <>
