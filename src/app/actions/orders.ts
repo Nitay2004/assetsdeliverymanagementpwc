@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { ASSET_STATUS } from "@/lib/asset-status";
 
 const MAX_ORDER_QUANTITY = 1000;
 
@@ -40,7 +41,7 @@ export async function addOrder(formData: FormData) {
       deliveryLocation,
       assets: {
         create: Array.from({ length: totalQuantity }, () => ({
-          status: "pending",
+          status: ASSET_STATUS.PENDING,
         })),
       },
     },
@@ -88,7 +89,7 @@ export async function updateOrder(id: string, formData: FormData) {
       await tx.asset.createMany({
         data: Array.from({ length: diff }, () => ({
           orderId: id,
-          status: "pending",
+          status: ASSET_STATUS.PENDING,
         })),
       });
     } else if (diff < 0) {

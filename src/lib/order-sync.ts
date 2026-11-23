@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { calculateSlaStatus } from "@/lib/sla-utils";
 import { revalidatePath } from "next/cache";
+import { ASSET_STATUS, isTerminalOrderStatus } from "@/lib/asset-status";
 
 // NOT a "use server" file: this is a shared internal helper, not a server
 // action. Keeping it here means it is not exposed as a public POST endpoint —
@@ -33,19 +34,6 @@ const orderStatusTrackingMap: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
-// Orders in these states no longer hold their asset allocation. Marking the
-// Asset rows "released" keeps the history row while freeing the physical item
-// for a future order (enforced by the partial unique index on
-// assets.inventory_item_id in the database).
-const TERMINAL_ORDER_STATUSES = new Set([
-  "DELIVERED",
-  "DELIVERY_CONFIRMED",
-  "INVOICED",
-  "WARRANTY_UPDATED",
-  "RTO_DELIVERED_TO_WAREHOUSE",
-  "CANCELLED",
-]);
-
 export async function syncOrderTrackingStatus(orderId: string, orderStatus: string) {
   const assets = await prisma.asset.findMany({
     where: { orderId, inventoryItemId: { not: null } },
@@ -57,10 +45,10 @@ export async function syncOrderTrackingStatus(orderId: string, orderStatus: stri
   // Once the order reaches a terminal state it no longer owns these assets.
   // The rows stay for history, but "released" is excluded from the partial
   // unique index so the same physical item can be allocated to a new order.
-  if (TERMINAL_ORDER_STATUSES.has(orderStatus)) {
+  if (isTerminalOrderStatus(orderStatus)) {
     await prisma.asset.updateMany({
-      where: { orderId, status: { not: "released" } },
-      data: { status: "released" },
+      where: { orderId, status: { not: ASSET_STATUS.RELEASED } },
+      data: { status: ASSET_STATUS.RELEASED },
     });
   }
 

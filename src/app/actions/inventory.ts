@@ -13,6 +13,7 @@ import { calculateSlaStatus } from "@/lib/sla-utils";
 import { DEPLOYED_STATUSES, deployedStatus, isDeployedStatus } from "@/lib/inventory-status";
 import { canEditEntity } from "@/lib/entity-lock";
 import { formatTime24 } from "@/lib/time-format";
+import { ASSET_STATUS, TERMINAL_ORDER_STATUSES } from "@/lib/asset-status";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -475,7 +476,7 @@ export async function cancelItemAssignment(id: string) {
     const asset = await tx.asset.findFirst({
       where: {
         inventoryItemId: id,
-        order: { status: { notIn: ["DELIVERED", "DELIVERY_CONFIRMED", "INVOICED", "WARRANTY_UPDATED", "RTO_DELIVERED_TO_WAREHOUSE", "CANCELLED"] } },
+        order: { status: { notIn: TERMINAL_ORDER_STATUSES } },
       },
       select: { orderId: true },
     });
@@ -881,7 +882,7 @@ export async function sendToWarehouse(inventoryItemIds: string[]) {
     const alreadyInOrder = await tx.asset.findFirst({
       where: {
         inventoryItemId: { in: items.map(i => i.id) },
-        order: { status: { notIn: ["DELIVERED", "DELIVERY_CONFIRMED", "INVOICED", "WARRANTY_UPDATED", "RTO_DELIVERED_TO_WAREHOUSE", "CANCELLED"] } },
+        order: { status: { notIn: TERMINAL_ORDER_STATUSES } },
       },
       include: { order: { select: { id: true, status: true } } },
     });
@@ -913,7 +914,7 @@ export async function sendToWarehouse(inventoryItemIds: string[]) {
     await tx.asset.createMany({
       data: items.map(item => ({
         orderId: order.id,
-        status: "allocated",
+        status: ASSET_STATUS.ALLOCATED,
         inventoryItemId: item.id,
       })),
     });
@@ -964,7 +965,7 @@ export async function fixInventoryStatusConsistency() {
   const r3 = await prisma.inventoryItem.updateMany({
     where: {
       status: "ASSET_RETURN_TO_WAREHOUSE",
-      assets: { some: { status: "allocated" } },
+      assets: { some: { status: ASSET_STATUS.ALLOCATED } },
     },
     data: { status: "ASSET_REDEPLOYED" },
   });

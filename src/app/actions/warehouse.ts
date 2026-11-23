@@ -8,6 +8,7 @@ import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/lib/order-sync";
 import { orderTransitionError } from "@/lib/order-status";
+import { ASSET_STATUS, TERMINAL_ORDER_STATUSES } from "@/lib/asset-status";
 
 export async function allocateInventoryToOrder(
   orderId: string,
@@ -30,7 +31,7 @@ export async function allocateInventoryToOrder(
       `;
 
     const pendingAssets = await tx.asset.findMany({
-      where: { orderId, inventoryItemId: null, status: "pending" },
+      where: { orderId, inventoryItemId: null, status: ASSET_STATUS.PENDING },
     });
 
     if (uniqueIds.length > pendingAssets.length) {
@@ -42,7 +43,7 @@ export async function allocateInventoryToOrder(
         inventoryItemId: { in: uniqueIds },
         order: {
           status: {
-            notIn: ["DELIVERED", "DELIVERY_CONFIRMED", "INVOICED", "WARRANTY_UPDATED", "RTO_DELIVERED_TO_WAREHOUSE", "CANCELLED"],
+            notIn: TERMINAL_ORDER_STATUSES,
           },
         },
       },
@@ -64,8 +65,8 @@ export async function allocateInventoryToOrder(
     // update guarantees a stale/double submit cannot overwrite another one.
     for (let idx = 0; idx < uniqueIds.length; idx++) {
       const updated = await tx.asset.updateMany({
-        where: { id: pendingAssets[idx].id, inventoryItemId: null, status: "pending" },
-        data: { inventoryItemId: uniqueIds[idx], status: "allocated" },
+        where: { id: pendingAssets[idx].id, inventoryItemId: null, status: ASSET_STATUS.PENDING },
+        data: { inventoryItemId: uniqueIds[idx], status: ASSET_STATUS.ALLOCATED },
       });
       if (updated.count === 0) {
         throw new Error("Asset allocation changed while you were saving. Refresh and try again.");

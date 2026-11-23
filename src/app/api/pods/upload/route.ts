@@ -7,6 +7,7 @@ import { canModuleAction } from "@/lib/permissions";
 import { calculateSlaStatus } from "@/lib/sla-utils";
 import { parseDateOnlyUtc, todayDateOnlyUtc } from "@/lib/date-only";
 import { timingSafeEqual } from "crypto";
+import { ASSET_STATUS } from "@/lib/asset-status";
 
 const ALLOWED_EXT = ["pdf", "jpg", "jpeg", "png"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -254,8 +255,8 @@ export async function POST(req: NextRequest) {
         // Terminal order: free the physical asset for a future allocation
         // (the partial unique index ignores "released" history rows).
         await tx.asset.updateMany({
-          where: { orderId, status: { not: "released" } },
-          data: { status: "released" },
+          where: { orderId, status: { not: ASSET_STATUS.RELEASED } },
+          data: { status: ASSET_STATUS.RELEASED },
         });
         updated.push({ orderId, items: itemIds.length });
       }

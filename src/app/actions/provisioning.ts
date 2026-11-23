@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession, requireAuth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
+import { ASSET_STATUS } from "@/lib/asset-status";
 import { syncOrderTrackingStatus } from "@/lib/order-sync";
 
 async function syncInventoryWarehouseLocation(orderId: string, warehouseLocation: string) {
@@ -163,8 +164,8 @@ export async function bulkMarkOsInstalled(assetIds: string[]) {
   requirePermission(user, "provisioning", "canEdit");
 
   await prisma.asset.updateMany({
-    where: { id: { in: assetIds }, status: "allocated" },
-    data: { status: "os_installed" },
+    where: { id: { in: assetIds }, status: ASSET_STATUS.ALLOCATED },
+    data: { status: ASSET_STATUS.OS_INSTALLED },
   });
 
   revalidatePath("/dashboard/provisioning");

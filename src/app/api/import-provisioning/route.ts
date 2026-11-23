@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import { revalidatePath } from "next/cache";
 import { toDenseRow, toDenseRows } from "@/lib/sheet-cells";
 import { isDeployedStatus } from "@/lib/inventory-status";
+import { ASSET_STATUS } from "@/lib/asset-status";
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
@@ -452,7 +453,7 @@ export async function POST(request: Request) {
     const assetData = group.serialNumbers.map(sn => ({
       orderId: order.id,
       inventoryItemId: sn.inventoryItemId,
-      status: "allocated" as const,
+      status: ASSET_STATUS.ALLOCATED,
     }));
 
     await prisma.asset.createMany({ data: assetData });

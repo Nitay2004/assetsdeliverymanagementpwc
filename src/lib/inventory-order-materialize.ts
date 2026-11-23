@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEPLOYED_STATUSES } from "@/lib/inventory-status";
+import { assetStatusForOrderStatus } from "@/lib/asset-status";
 
 // Bulk Excel imports only create InventoryItem rows. The stage modules
 // (Warehouse, Provisioning, Finance, Logistics) are driven by Order records, so
@@ -378,7 +379,10 @@ export async function materializeDeliveredInventoryOrders(options?: {
             id: randomUUID(),
             orderId,
             inventoryItemId: itemId,
-            status: "allocated",
+            // DELIVERED is terminal: the history row must be "released", just
+            // as syncOrderTrackingStatus() would mark it. Only DISPATCHED
+            // groups still hold a live allocation.
+            status: assetStatusForOrderStatus(group.summary.status),
           });
         }
 
