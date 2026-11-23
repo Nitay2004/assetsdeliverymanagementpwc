@@ -3,15 +3,14 @@ import { Prisma } from "@prisma/client";
 /**
  * Retries `fn` when it fails with a Prisma P2002 unique-constraint violation.
  *
- * Read-then-write sequence numbers (DC numbers, reverse-pickup request numbers)
- * collide when two callers derive the same value in the same instant: both
- * `SELECT max(...)` the same row, both compute `+1`, and the second insert dies
- * on the unique column. Re-deriving inside a short retry loop is simpler than
- * serialising every caller with an advisory lock, and it is the pattern this
- * codebase already uses in `reverse-pickup.ts`.
+ * Sequence numbers themselves are now allocated atomically by
+ * `lib/sequence-number.ts`, so P2002 on the number column should not happen.
+ * This helper is kept for the other unique constraints around a document create
+ * (for example "one DC per order") and for the status-claim update: a stale tab
+ * can lose that race, and re-running the callback re-checks the preconditions.
  *
- * The callback owns the whole re-derivation (fetch a fresh number, then write),
- * so a retry sees a value no other caller has claimed yet.
+ * The callback owns the whole operation (allocate a fresh number, check state,
+ * write), so a retry starts from a clean snapshot.
  */
 export async function withUniqueRetry<T>(
   fn: () => Promise<T>,

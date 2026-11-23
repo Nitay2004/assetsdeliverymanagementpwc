@@ -57,6 +57,7 @@ function requireReverseQcWork(user: { permissions: unknown; role: string } | nul
 const RPU_NUMBER = /^RPU-([0-9]+)$/;
 
 async function nextReversePickupRequestNumber(): Promise<string> {
+  // Atomic DB allocation — no read-then-write race between concurrent submits.
   const seq = await nextSequenceNumber({
     table: "reverse_pickup_requests",
     column: "requestNumber",
@@ -406,21 +407,11 @@ export async function createReversePickupRequest(formData: FormData) {
     throw new Error(serialsToValidate.length > 1 ? `Serial ${firstBlocked}: ${reason}` : reason);
   }
 
-  // The number is read-then-write, so two engineers submitting at the same
-  // moment can still land on the same value. Re-derive it and retry instead of
-  // surfacing a raw unique-constraint error to the user.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      await prisma.reversePickupRequest.create({
-        data: { ...data, requestNumber: await nextReversePickupRequestNumber() },
-      });
-      break;
-    } catch (error) {
-      const requestNumberTaken =
-        error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" && attempt < 2;
-      if (!requestNumberTaken) throw error;
-    }
-  }
+  // Request numbers are reserved atomically in the DB, so two engineers
+  // submitting at the same moment always get different values.
+  await prisma.reversePickupRequest.create({
+    data: { ...data, requestNumber: await nextReversePickupRequestNumber() },
+  });
 
   // The day a reverse pickup request is raised is shown on the Inventory table
   // as "Return Pickup Date". A single office request may cover several serials,

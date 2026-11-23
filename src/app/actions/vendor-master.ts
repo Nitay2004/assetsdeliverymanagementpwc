@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { nextSequenceNumber } from "@/lib/sequence-number";
 
 async function getNextGrnNumber(): Promise<string> {
+  // Atomic DB allocation — two vendors saved together cannot share a GRN.
   const nextSeq = await nextSequenceNumber({
     table: "vendor_master",
     column: "grn_number",

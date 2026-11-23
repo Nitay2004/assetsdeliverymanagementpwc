@@ -8,7 +8,7 @@ import { Prisma } from "@prisma/client";
 import { normalizeOdaLocation } from "@/lib/location-utils";
 import { resolveReversePickupSla } from "@/lib/reverse-pickup-sla";
 import { resolveStatus } from "@/lib/reverse-pickup-status";
-import { nextSequenceNumber } from "@/lib/sequence-number";
+import { allocateSequenceNumbers } from "@/lib/sequence-number";
 import { toDenseRow, toDenseRows } from "@/lib/sheet-cells";
 import { isDeployedStatus } from "@/lib/inventory-status";
 import { formatExcelTime } from "@/lib/excel-time";
@@ -388,24 +388,12 @@ export async function POST(request: Request) {
 
   const errors: string[] = [];
 
-  // Numbering continues from the highest RPU- number already stored. Counting
-  // rows instead would hand out numbers that were used and later deleted, which
-  // collides on the unique requestNumber column.
-  let requestCounter = await nextSequenceNumber({
-    table: "reverse_pickup_requests",
-    column: "requestNumber",
-    valuePattern: /^RPU-([0-9]+)$/,
-  });
-
   const rows: { data: Record<string, unknown>; rowNum: number }[] = [];
   for (let r = 0; r < records.length; r++) {
     const row = records[r];
     if (row.length === 0 || row.every(c => (c ?? "").trim() === "")) continue;
 
     const data = buildPrismaData(headers, row, unknownHeaders, resolvedMap);
-
-    data.requestNumber = `RPU-${String(requestCounter).padStart(4, "0")}`;
-    requestCounter++;
 
     // The shared tracking sheet carries the real workflow state in a
     // "Display Status"-style column (e.g. "Asset Received in Warehouse",
@@ -610,6 +598,22 @@ export async function POST(request: Request) {
     }
 
     rowsToInsert.push(row);
+  }
+
+  // Reserve the whole block atomically just before the writes. An earlier
+  // read-then-write here let two parallel imports hand out the same RPU range.
+  if (rowsToInsert.length > 0) {
+    const { start } = await allocateSequenceNumbers(
+      {
+        table: "reverse_pickup_requests",
+        column: "requestNumber",
+        valuePattern: /^RPU-([0-9]+)$/,
+      },
+      rowsToInsert.length,
+    );
+    rowsToInsert.forEach((row, index) => {
+      row.data.requestNumber = `RPU-${String(start + index).padStart(4, "0")}`;
+    });
   }
 
   let imported = 0;

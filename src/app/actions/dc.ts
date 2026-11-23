@@ -59,6 +59,7 @@ export async function getNextDcNumber(): Promise<string> {
   const nextShortYear = (fyStart + 1) % 100;
   const fy = `${String(shortYear).padStart(2, "0")}-${String(nextShortYear).padStart(2, "0")}`;
 
+  // Atomic allocator: concurrent DC creation can never derive the same number.
   const nextSeq = await nextSequenceNumber({
     table: "delivery_challans",
     column: "dc_number",
