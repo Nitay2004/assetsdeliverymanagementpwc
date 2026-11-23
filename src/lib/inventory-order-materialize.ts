@@ -18,7 +18,7 @@ import { DEPLOYED_STATUSES } from "@/lib/inventory-status";
 // What counts as "delivered or already out with a user" in the inventory sheet.
 // Kept as an OR because the source files use different columns: some rows carry
 // a status, some a tracking text, some only a delivery date.
-const DELIVERY_EVIDENCE_OR: Prisma.InventoryItemWhereInput[] = [
+export const DELIVERY_EVIDENCE_OR: Prisma.InventoryItemWhereInput[] = [
   { status: { in: DEPLOYED_STATUSES } },
   { trackingStatus: { contains: "deliver", mode: "insensitive" } },
   { latestTrackingStatus: { contains: "deliver", mode: "insensitive" } },

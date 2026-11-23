@@ -6,6 +6,7 @@ import { X, ChevronLeft, ChevronRight, Loader2, Laptop } from "lucide-react";
 import { getOrdersByStatus, getInventoryItemsByTrackingKeywords } from "@/app/actions/dashboard";
 import type { OrderStatus } from "@prisma/client";
 import type { TableInventoryDeliveryData } from "@/app/actions/dashboard";
+import { ORDER_STATUS_LABELS as STATUS_LABELS } from "@/lib/order-status";
 
 interface Props {
   open: boolean;
@@ -17,33 +18,12 @@ interface Props {
   inventoryTrackingKeywords?: string[];
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  ORDER_PLACED: "Order Placed",
-  ALLOCATED: "Allocated",
-  IN_PROVISIONING: "In Provisioning",
-  DC_GENERATED: "DC Generated",
-  PACKED_AND_LABELLED: "Packed & Labelled",
-  DOCKET_ASSIGNED: "Docket Assigned",
-  EWAY_BILL_REQUESTED: "E-Way Bill Requested",
-  EWAY_BILL_GENERATED: "E-Way Bill Generated",
-  DISPATCHED: "Dispatched",
-  DELIVERED: "Delivered",
-  DELIVERY_CONFIRMED: "Delivery Confirmed",
-  INVOICED: "Invoiced",
-  RTO: "RTO",
-  RTO_DC_REQUESTED: "RTO DC Requested",
-  RTO_DC_GENERATED: "RTO DC Generated",
-  RTO_EWAY_BILL_REQUESTED: "RTO E-Way Bill Requested",
-  RTO_EWAY_BILL_GENERATED: "RTO E-Way Bill Generated",
-  RTO_IN_TRANSIT: "RTO In Transit",
-  RTO_DELIVERED_TO_WAREHOUSE: "RTO Delivered to Warehouse",
-  WARRANTY_UPDATED: "Warranty Updated",
-};
-
 const STATUS_COLORS: Record<string, string> = {
   ORDER_PLACED: "bg-yellow-100 text-yellow-700",
   ALLOCATED: "bg-blue-100 text-blue-700",
   IN_PROVISIONING: "bg-purple-100 text-purple-700",
+  DOCKET_REQUESTED: "bg-amber-100 text-amber-700",
+  DC_REQUESTED: "bg-indigo-100 text-indigo-700",
   DC_GENERATED: "bg-indigo-100 text-indigo-700",
   PACKED_AND_LABELLED: "bg-cyan-100 text-cyan-700",
   DOCKET_ASSIGNED: "bg-blue-100 text-blue-700",
@@ -53,6 +33,13 @@ const STATUS_COLORS: Record<string, string> = {
   DELIVERED: "bg-green-100 text-green-700",
   DELIVERY_CONFIRMED: "bg-green-200 text-green-800",
   RTO: "bg-red-100 text-red-700",
+  RTO_DC_REQUESTED: "bg-rose-100 text-rose-700",
+  RTO_DC_GENERATED: "bg-rose-100 text-rose-700",
+  RTO_EWAY_BILL_REQUESTED: "bg-pink-100 text-pink-700",
+  RTO_EWAY_BILL_GENERATED: "bg-pink-100 text-pink-700",
+  RTO_IN_TRANSIT: "bg-rose-200 text-rose-800",
+  RTO_DELIVERED_TO_WAREHOUSE: "bg-rose-200 text-rose-800",
+  CANCELLED: "bg-gray-100 text-gray-600",
 };
 
 const PAGE_SIZE = 50;
@@ -191,7 +178,7 @@ export function OrderTableModal({ open, onClose, title, icon, iconBg, statuses, 
                       <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{order.dcNumber ?? "—"}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"}`}>
-                          {STATUS_LABELS[order.status] ?? order.status}
+                          {STATUS_LABELS[order.status as keyof typeof STATUS_LABELS] ?? order.status}
                         </span>
                       </td>
                     </tr>

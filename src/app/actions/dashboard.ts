@@ -2,7 +2,11 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { DEPLOYED_STATUSES } from "@/lib/inventory-status";
+import {
+  UNSYNCED_DELIVERED_WHERE,
+  UNSYNCED_IN_TRANSIT_WHERE,
+  UNSYNCED_RTO_WHERE,
+} from "@/lib/dashboard-pipeline";
 import type { OrderStatus, ReversePickupStatus, InventoryStatus, Prisma } from "@prisma/client";
 
 export interface TableOrderData {
@@ -243,15 +247,15 @@ export async function getInventoryItemsByTrackingKeywords(
   await requireAuth();
   const skip = (page - 1) * limit;
 
-  const orConditions = keywords.flatMap(keyword => [
-    { trackingStatus: { contains: keyword, mode: "insensitive" as const } },
-    { trackingSubStatus: { contains: keyword, mode: "insensitive" as const } },
-  ]);
-
-  const where: Prisma.InventoryItemWhereInput = {
-    status: { in: DEPLOYED_STATUSES },
-    OR: orConditions,
-  };
+  // Reuse the exact predicates the card counts come from. Otherwise the modal's
+  // row count drifts from the number printed on the card (double-counted or
+  // missing rows, especially for delivery-date-only Excel rows).
+  const stageWhere = keywords.includes("deliver")
+    ? UNSYNCED_DELIVERED_WHERE
+    : keywords.includes("rto")
+      ? UNSYNCED_RTO_WHERE
+      : UNSYNCED_IN_TRANSIT_WHERE;
+  const where: Prisma.InventoryItemWhereInput = stageWhere;
 
   const [raw, total] = await Promise.all([
     prisma.inventoryItem.findMany({

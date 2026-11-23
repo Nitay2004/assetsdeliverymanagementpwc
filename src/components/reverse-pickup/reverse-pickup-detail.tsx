@@ -396,11 +396,11 @@ export function ReversePickupDetail({ request, userRole, dcId, canEditAddress }:
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Email</span>
-              <span>{request.emailId || "â€”"}</span>
+              <span>{request.emailId || "—"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Mobile</span>
-              <span>{request.mobileNumber || "â€”"}</span>
+              <span>{request.mobileNumber || "—"}</span>
             </div>
           </div>
         </div>
@@ -418,7 +418,7 @@ export function ReversePickupDetail({ request, userRole, dcId, canEditAddress }:
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Specs</span>
-              <span>{request.specs || "â€”"}</span>
+              <span>{request.specs || "—"}</span>
             </div>
           </div>
         </div>
@@ -526,7 +526,7 @@ export function ReversePickupDetail({ request, userRole, dcId, canEditAddress }:
           )}
         </div>
 
-        {/* SLA & TAT â€” all values derived on the server from the email hour, the
+        {/* SLA & TAT — all values derived on the server from the email hour, the
             pickup location and the ODA flag. */}
         {(request.emailReceivedHour || request.zone1 || request.tier1 || request.sla) && (
           <div className="rounded-xl glass shadow-sm p-5 space-y-3">
@@ -552,27 +552,27 @@ export function ReversePickupDetail({ request, userRole, dcId, canEditAddress }:
               )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Zone</span>
-                <span>{request.zone1 || "â€”"}</span>
+                <span>{request.zone1 || "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Tier</span>
-                <span>{request.tier1 || "â€”"}</span>
+                <span>{request.tier1 || "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">ODA Location</span>
-                <span>{request.odaLocation || "â€”"}</span>
+                <span>{request.odaLocation || "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">TAT</span>
-                <span>{request.tat ? `${request.tat} days` : "â€”"}</span>
+                <span>{request.tat ? `${request.tat} days` : "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Expected Pickup Date</span>
-                <span>{request.expectedPickupDate ? new Date(request.expectedPickupDate).toLocaleDateString("en-GB") : "â€”"}</span>
+                <span>{request.expectedPickupDate ? new Date(request.expectedPickupDate).toLocaleDateString("en-GB") : "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Actual Pickup Date</span>
-                <span>{request.pickupDate ? new Date(request.pickupDate).toLocaleDateString("en-GB") : "â€”"}</span>
+                <span>{request.pickupDate ? new Date(request.pickupDate).toLocaleDateString("en-GB") : "—"}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">SLA</span>

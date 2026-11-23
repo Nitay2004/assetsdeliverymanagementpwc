@@ -16,7 +16,7 @@ import {
   Warehouse,
   ClipboardCheck,
 } from "lucide-react";
-import type { OrderStatus, InventoryStatus } from "@prisma/client";
+import type { InventoryStatus } from "@prisma/client";
 import Link from "next/link";
 import { OrderPipeline } from "@/components/dashboard/order-pipeline";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
@@ -28,22 +28,17 @@ import { CancelledReverseStatCard } from "@/components/dashboard/cancelled-rever
 import { InventorySlaStatCard } from "@/components/dashboard/inventory-sla-stat-card";
 import { DashboardInventoryCards } from "@/components/dashboard/dashboard-inventory-cards";
 import { DEPLOYED_STATUSES } from "@/lib/inventory-status";
+import { ORDER_STATUSES, ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "@/lib/order-status";
+import {
+  getForwardPipelineCounts,
+  DASHBOARD_DELIVERED_KEYWORDS,
+  DASHBOARD_IN_TRANSIT_KEYWORDS,
+  DASHBOARD_RTO_KEYWORDS,
+} from "@/lib/dashboard-pipeline";
 
-const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  ORDER_PLACED: { label: "Order Placed", color: "#eab308" },
-  ALLOCATED: { label: "Allocated", color: "#3b82f6" },
-  IN_PROVISIONING: { label: "Provisioning", color: "#a855f7" },
-  DC_GENERATED: { label: "DC Generated", color: "#6366f1" },
-  PACKED_AND_LABELLED: { label: "Packed", color: "#8b5cf6" },
-  DOCKET_ASSIGNED: { label: "Docketed", color: "#06b6d4" },
-  EWAY_BILL_REQUESTED: { label: "E-Way Req", color: "#14b8a6" },
-  EWAY_BILL_GENERATED: { label: "E-Way Gen", color: "#10b981" },
-  DISPATCHED: { label: "Dispatched", color: "#f97316" },
-  DELIVERED: { label: "Delivered", color: "#22c55e" },
-  DELIVERY_CONFIRMED: { label: "Confirmed", color: "#16a34a" },
-  INVOICED: { label: "Invoiced", color: "#0ea5e9" },
-  WARRANTY_UPDATED: { label: "Warranty", color: "#7c3aed" },
-};
+const STATUS_CONFIG = Object.fromEntries(
+  ORDER_STATUSES.map(status => [status, { label: ORDER_STATUS_LABELS[status], color: ORDER_STATUS_COLORS[status] }])
+) as Record<string, { label: string; color: string }>;
 
 function timeAgo(date: Date): string {
   const now = new Date();
@@ -78,13 +73,13 @@ export default async function DashboardPage(props: {
   const inventoryWhere = createdAt ? { createdAt } : undefined;
   const reverseWhere = createdAt ? { createdAt } : undefined;
 
-  // Fetch all data in parallel Ã¢â‚¬â€ aggregate counts in the DB, no unbounded row loads.
-  const [orderStatuses, inventoryStatuses, slaMetCount, totalAssets, warrantyPendingCount, stockByWarehouseRows, statusWarehouseRows, recentOrders, recentInventory, reversePickupStatuses, reverseSlaMetCount, reverseRemarkCancelCount] = await Promise.all([
-    prisma.order.groupBy({
-      by: ["status"],
-      where: orderWhere,
-      _count: { _all: true },
-    }),
+  // Forward-flow cards are computed by one shared helper so the numbers and the
+  // corresponding table modals always describe the same physical units.
+  const pipelinePromise = getForwardPipelineCounts(createdAt);
+
+  // Fetch all data in parallel — aggregate counts in the DB, no unbounded row loads.
+  const [pipeline, inventoryStatuses, slaMetCount, totalAssets, warrantyPendingCount, stockByWarehouseRows, statusWarehouseRows, recentOrders, recentInventory, reversePickupStatuses, reverseSlaMetCount, reverseRemarkCancelCount] = await Promise.all([
+    pipelinePromise,
     prisma.inventoryItem.groupBy({
       by: ["status"],
       where: inventoryWhere,
@@ -137,20 +132,20 @@ export default async function DashboardPage(props: {
     }),
   ]);
 
-  const orderCounts = new Map(orderStatuses.map(r => [r.status, r._count._all]));
   const inventoryCounts = new Map(inventoryStatuses.map(r => [r.status, r._count._all]));
-  const totalOrders = orderStatuses.reduce((sum, r) => sum + r._count._all, 0);
-  const orderStatusCount = (s: OrderStatus) => orderCounts.get(s) ?? 0;
   const inventoryStatusCount = (s: InventoryStatus) => inventoryCounts.get(s) ?? 0;
 
-  // Compute stats — pure order-status counts, no inventory tracking mixing.
-  // "In Provisioning" includes ALLOCATED + IN_PROVISIONING to match Provisioning module.
-  const inProvisioningCount = orderStatusCount("ALLOCATED") + orderStatusCount("IN_PROVISIONING");
-  const pendingAllocationCount = orderStatusCount("ORDER_PLACED");
-  const inTransitCount = orderStatusCount("DISPATCHED");
-  const packedAndLabelledCount = orderStatusCount("PACKED_AND_LABELLED");
-  const deliveredCount = orderStatusCount("DELIVERED") + orderStatusCount("DELIVERY_CONFIRMED");
-  const rtoCount = (["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"] as OrderStatus[]).reduce((sum, s) => sum + orderStatusCount(s), 0);
+  const {
+    inWarehouseAllocation: pendingAllocationCount,
+    inProvisioning: inProvisioningCount,
+    packedAndLabelled: packedAndLabelledCount,
+    inTransit: inTransitCount,
+    delivered: deliveredCount,
+    rto: rtoCount,
+    pendingMaterialization,
+    pipelineData,
+    totalOrders,
+  } = pipeline;
 
   const totalInventory = inventoryStatuses.reduce((sum, r) => sum + r._count._all, 0);
   const newStock = inventoryStatusCount("PROVISION_PENDING");
@@ -207,22 +202,11 @@ export default async function DashboardPage(props: {
   const newStockByWarehouse = warehouseBreakdown("PROVISION_PENDING");
   const availableByWarehouse = warehouseBreakdown("ASSET_RETURN_TO_WAREHOUSE");
 
-  // Pipeline data
-  const statusCounts = Object.fromEntries(orderCounts);
-
-  const pipelineData = Object.entries(STATUS_CONFIG)
-    .filter(([key]) => statusCounts[key])
-    .map(([key, cfg]) => ({
-      status: cfg.label,
-      count: statusCounts[key] || 0,
-      color: cfg.color,
-    }));
-
   // Recent activity
   const activities = [
     ...recentOrders.map((o) => ({
       id: `order-${o.id}`,
-      message: `Order for ${o.clientName} Ã¢â€ â€™ ${o.deliveryLocation} (${STATUS_CONFIG[o.status]?.label ?? o.status})`,
+      message: `Order for ${o.clientName} → ${o.deliveryLocation} (${STATUS_CONFIG[o.status]?.label ?? o.status})`,
       time: timeAgo(o.updatedAt),
       module: "Orders",
       href: `/dashboard/warehouse?selected=${o.id}`,
@@ -253,9 +237,9 @@ export default async function DashboardPage(props: {
     { label: "Inventory", href: "/dashboard/inventory", icon: <Package className="size-4" />, count: totalInventory, desc: "Total items" },
     { label: "Assigned Assets", href: "/dashboard/assigned-assets", icon: <Users className="size-4" />, count: allocatedStock, desc: "Allocated to users" },
     { label: "Warehouse", href: "/dashboard/warehouse", icon: <Layers className="size-4" />, count: pendingAllocationCount, desc: "Pending allocation" },
-    { label: "Provisioning", href: "/dashboard/provisioning", icon: <Laptop className="size-4" />, count: orderStatusCount("ALLOCATED") + orderStatusCount("IN_PROVISIONING"), desc: "In progress" },
-    { label: "Finance", href: "/dashboard/finance", icon: <CheckCircle className="size-4" />, count: orderStatusCount("IN_PROVISIONING") + orderStatusCount("DC_GENERATED") + orderStatusCount("INVOICED"), desc: "Pending finance" },
-    { label: "Logistics", href: "/dashboard/logistics", icon: <Truck className="size-4" />, count: orderStatusCount("DC_GENERATED") + orderStatusCount("PACKED_AND_LABELLED") + orderStatusCount("DISPATCHED"), desc: "In logistics" },
+    { label: "Provisioning", href: "/dashboard/provisioning", icon: <Laptop className="size-4" />, count: pipeline.statusCounts.ALLOCATED + pipeline.statusCounts.IN_PROVISIONING, desc: "In progress" },
+    { label: "Finance", href: "/dashboard/finance", icon: <CheckCircle className="size-4" />, count: pipeline.statusCounts.IN_PROVISIONING + pipeline.statusCounts.DC_GENERATED + pipeline.statusCounts.INVOICED, desc: "Pending finance" },
+    { label: "Logistics", href: "/dashboard/logistics", icon: <Truck className="size-4" />, count: pipeline.statusCounts.DC_GENERATED + pipeline.statusCounts.PACKED_AND_LABELLED + pipeline.statusCounts.DISPATCHED, desc: "In logistics" },
     { label: "Warranty", href: "/dashboard/warranty", icon: <ShieldCheck className="size-4" />, count: warrantyPendingCount, desc: "Needs warranty" },
   ];
 
@@ -295,7 +279,14 @@ export default async function DashboardPage(props: {
 
       {/* Forward Shipment Section */}
       <div>
-        <h2 className="text-lg font-semibold text-foreground mb-4">Forward Shipment</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <h2 className="text-lg font-semibold text-foreground">Forward Shipment</h2>
+          {pendingMaterialization > 0 && (
+            <span className="text-xs text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full">
+              {pendingMaterialization.toLocaleString()} delivered assets pending sync — included from Inventory
+            </span>
+          )}
+        </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <OrderStatCard
           icon={<Clock className="size-5 text-yellow-600" />}
@@ -340,6 +331,7 @@ export default async function DashboardPage(props: {
           modalIcon={<Truck className="size-5 text-orange-600" />}
           modalIconBg="bg-orange-100"
           statuses={["DISPATCHED"]}
+          inventoryTrackingKeywords={DASHBOARD_IN_TRANSIT_KEYWORDS}
         />
         <OrderStatCard
           icon={<CheckCircle className="size-5 text-green-600" />}
@@ -351,6 +343,7 @@ export default async function DashboardPage(props: {
           modalIcon={<CheckCircle className="size-5 text-green-600" />}
           modalIconBg="bg-green-100"
           statuses={["DELIVERED", "DELIVERY_CONFIRMED"]}
+          inventoryTrackingKeywords={DASHBOARD_DELIVERED_KEYWORDS}
         />
         <OrderStatCard
           icon={<AlertTriangle className="size-5 text-red-500" />}
@@ -362,6 +355,7 @@ export default async function DashboardPage(props: {
           modalIcon={<AlertTriangle className="size-5 text-red-500" />}
           modalIconBg="bg-red-50"
           statuses={["RTO", "RTO_DC_REQUESTED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_REQUESTED", "RTO_EWAY_BILL_GENERATED", "RTO_IN_TRANSIT", "RTO_DELIVERED_TO_WAREHOUSE"]}
+          inventoryTrackingKeywords={DASHBOARD_RTO_KEYWORDS}
         />
         {!isPwc && (
           <InventorySlaStatCard

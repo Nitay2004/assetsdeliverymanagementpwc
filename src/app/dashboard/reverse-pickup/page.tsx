@@ -379,7 +379,7 @@ export default async function ReversePickupPage({
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Reverse Pickup</h1>
           <p className="text-muted-foreground mt-2">
-            Manage asset returns from employees â€” from pickup request to restock.
+            Manage asset returns from employees — from pickup request to restock.
           </p>
         </div>
         <div className="flex items-center gap-2">

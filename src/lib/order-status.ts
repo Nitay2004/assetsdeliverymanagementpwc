@@ -141,6 +141,61 @@ export const DOCKET_EDITABLE_STATUSES: OrderStatus[] = [
 
 export const ORDER_STATUSES: OrderStatus[] = ["ORDER_PLACED", ...ORDER_PIPELINE_STATUSES];
 
+// Single source of truth for how every status is labelled and coloured. The
+// dashboard pipeline chart, stat-card modals and activity feed all read these,
+// so adding a new OrderStatus can never silently disappear from a view.
+export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  ORDER_PLACED: "Order Placed",
+  ALLOCATED: "Allocated",
+  IN_PROVISIONING: "Provisioning",
+  DOCKET_REQUESTED: "Docket Requested",
+  DOCKET_ASSIGNED: "Docketed",
+  DC_REQUESTED: "DC Requested",
+  DC_GENERATED: "DC Generated",
+  PACKED_AND_LABELLED: "Packed & Labelled",
+  EWAY_BILL_REQUESTED: "E-Way Req",
+  EWAY_BILL_GENERATED: "E-Way Gen",
+  DISPATCHED: "Dispatched",
+  DELIVERED: "Delivered",
+  DELIVERY_CONFIRMED: "Confirmed",
+  INVOICED: "Invoiced",
+  WARRANTY_UPDATED: "Warranty",
+  RTO: "RTO",
+  RTO_DC_REQUESTED: "RTO DC Req",
+  RTO_DC_GENERATED: "RTO DC Gen",
+  RTO_EWAY_BILL_REQUESTED: "RTO E-Way Req",
+  RTO_EWAY_BILL_GENERATED: "RTO E-Way Gen",
+  RTO_IN_TRANSIT: "RTO In Transit",
+  RTO_DELIVERED_TO_WAREHOUSE: "RTO At Warehouse",
+  CANCELLED: "Cancelled",
+};
+
+export const ORDER_STATUS_COLORS: Record<OrderStatus, string> = {
+  ORDER_PLACED: "#eab308",
+  ALLOCATED: "#3b82f6",
+  IN_PROVISIONING: "#a855f7",
+  DOCKET_REQUESTED: "#f59e0b",
+  DOCKET_ASSIGNED: "#06b6d4",
+  DC_REQUESTED: "#818cf8",
+  DC_GENERATED: "#6366f1",
+  PACKED_AND_LABELLED: "#8b5cf6",
+  EWAY_BILL_REQUESTED: "#14b8a6",
+  EWAY_BILL_GENERATED: "#10b981",
+  DISPATCHED: "#f97316",
+  DELIVERED: "#22c55e",
+  DELIVERY_CONFIRMED: "#16a34a",
+  INVOICED: "#0ea5e9",
+  WARRANTY_UPDATED: "#7c3aed",
+  RTO: "#ef4444",
+  RTO_DC_REQUESTED: "#f43f5e",
+  RTO_DC_GENERATED: "#e11d48",
+  RTO_EWAY_BILL_REQUESTED: "#ec4899",
+  RTO_EWAY_BILL_GENERATED: "#db2777",
+  RTO_IN_TRANSIT: "#be123c",
+  RTO_DELIVERED_TO_WAREHOUSE: "#9f1239",
+  CANCELLED: "#6b7280",
+};
+
 const ORDER_STATUS_SET = new Set<string>(ORDER_STATUSES);
 
 export function isValidOrderStatus(status: string): status is OrderStatus {
