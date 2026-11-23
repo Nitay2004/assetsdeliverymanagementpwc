@@ -5,6 +5,7 @@ import { getSession, requireAuth } from "@/lib/auth";
 import { requirePermission } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import { syncOrderTrackingStatus } from "@/lib/order-sync";
+import { syncOrderDocumentsToInventory } from "@/lib/document-sync";
 import { nextSequenceNumber } from "@/lib/sequence-number";
 import { withUniqueRetry } from "@/lib/retry";
 import { isIntraStateSupply } from "@/lib/dc-gst";
@@ -284,7 +285,7 @@ export async function generateDC(orderId: string, data: DcFormData) {
   const amountInWords = numberToWords(Math.round(totalAmount)) + " Only";
   const taxAmountInWords = numberToWords(Math.round(totalTaxAmount)) + " Only";
 
-  const { dc, freshNumber: dcNumber } = await withUniqueRetry(async () => {
+  const { dc } = await withUniqueRetry(async () => {
     const freshNumber = await getNextDcNumber();
     return prisma.$transaction(async (tx) => {
       // Re-check inside the transaction so two simultaneous submits cannot both
@@ -357,23 +358,12 @@ export async function generateDC(orderId: string, data: DcFormData) {
       if (claimed.count === 0) {
         throw new Error("Order status changed before the DC could be generated. Refresh and try again.");
       }
+      await syncOrderDocumentsToInventory(orderId, tx);
       return { dc: created, freshNumber };
     });
   });
 
   await syncOrderTrackingStatus(orderId, trackingStatus);
-
-  const linkedAssets = await prisma.asset.findMany({
-    where: { orderId, inventoryItemId: { not: null } },
-    select: { inventoryItemId: true },
-  });
-  const linkedItemIds = linkedAssets.map(a => a.inventoryItemId).filter(Boolean) as string[];
-  if (linkedItemIds.length > 0) {
-    await prisma.inventoryItem.updateMany({
-      where: { id: { in: linkedItemIds } },
-      data: { dcNumber },
-    });
-  }
 
   revalidatePath("/dashboard/finance");
   revalidatePath("/dashboard/inventory");
@@ -774,24 +764,15 @@ export async function updateDcDocket(docketId: string, docketNumber: string) {
     );
   }
 
-  const docket = await prisma.docket.update({
-    where: { id: docketId },
-    data: { docketNumber: value },
-  });
-
-  if (docket.orderId) {
-    const linkedAssets = await prisma.asset.findMany({
-      where: { orderId: docket.orderId, inventoryItemId: { not: null } },
-      select: { inventoryItemId: true },
+  const docket = await prisma.$transaction(async tx => {
+    const updated = await tx.docket.update({
+      where: { id: docketId },
+      data: { docketNumber: value },
+      select: { orderId: true },
     });
-    const linkedItemIds = linkedAssets.map(a => a.inventoryItemId).filter(Boolean) as string[];
-    if (linkedItemIds.length > 0) {
-      await prisma.inventoryItem.updateMany({
-        where: { id: { in: linkedItemIds } },
-        data: { docketNumber: value },
-      });
-    }
-  }
+    if (updated.orderId) await syncOrderDocumentsToInventory(updated.orderId, tx);
+    return updated;
+  });
 
   revalidatePath("/dashboard/finance");
   revalidatePath("/dashboard/logistics");

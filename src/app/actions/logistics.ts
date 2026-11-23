@@ -8,6 +8,7 @@ import { syncOrderTrackingStatus } from "@/lib/order-sync";
 import { isValidOrderStatus, orderTransitionError, DOCKET_EDITABLE_STATUSES } from "@/lib/order-status";
 import { validateEwayBillNumber } from "@/lib/eway-bill";
 import { materializeDeliveredInventoryOrders } from "@/lib/inventory-order-materialize";
+import { syncOrderDocumentsToInventory } from "@/lib/document-sync";
 
 export async function markAsRto(
   orderId: string,
@@ -60,6 +61,7 @@ export async function markAsRto(
   });
 
   await syncOrderTrackingStatus(orderId, "RTO");
+  await syncOrderDocumentsToInventory(orderId);
 
   revalidatePath("/dashboard/logistics");
   revalidatePath("/dashboard/finance");
@@ -98,13 +100,7 @@ export async function addDocket(formData: FormData) {
     }
   }
 
-  const linkedAssets = await prisma.asset.findMany({
-    where: { orderId, inventoryItemId: { not: null } },
-    select: { inventoryItemId: true },
-  });
-  const linkedItemIds = linkedAssets.map(a => a.inventoryItemId).filter(Boolean) as string[];
-
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async tx => {
     await tx.docket.create({
       data: {
         orderId,
@@ -114,12 +110,7 @@ export async function addDocket(formData: FormData) {
         podDocumentUrl: podDocumentUrl || null,
       },
     });
-    if (linkedItemIds.length > 0) {
-      await tx.inventoryItem.updateMany({
-        where: { id: { in: linkedItemIds } },
-        data: { docketNumber },
-      });
-    }
+    await syncOrderDocumentsToInventory(orderId, tx);
   });
 
   revalidatePath("/dashboard/logistics");
@@ -170,14 +161,17 @@ export async function updateDocket(id: string, formData: FormData) {
     );
   }
 
-  await prisma.docket.update({
-    where: { id },
-    data: {
-      docketNumber,
-      courierName,
-      ewayBillNumber: ewayBillNumber || null,
-      podDocumentUrl: podDocumentUrl || null,
-    },
+  await prisma.$transaction(async tx => {
+    await tx.docket.update({
+      where: { id },
+      data: {
+        docketNumber,
+        courierName,
+        ewayBillNumber: ewayBillNumber || null,
+        podDocumentUrl: podDocumentUrl || null,
+      },
+    });
+    if (docket.orderId) await syncOrderDocumentsToInventory(docket.orderId, tx);
   });
 
   revalidatePath("/dashboard/logistics");
@@ -188,10 +182,12 @@ export async function updateDocketPod(docketId: string, podDocumentUrl: string) 
   const user = await getSession();
   requirePermission(user, "logistics", "canEdit");
 
-  await prisma.docket.update({
+  const updated = await prisma.docket.update({
     where: { id: docketId },
     data: { podDocumentUrl: podDocumentUrl || null },
+    select: { orderId: true },
   });
+  if (updated.orderId) await syncOrderDocumentsToInventory(updated.orderId);
 
   revalidatePath("/dashboard/logistics");
   revalidatePath("/dashboard");
