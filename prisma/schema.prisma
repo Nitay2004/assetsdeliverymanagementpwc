@@ -757,3 +757,23 @@ model DeliveryChallanItem {
 
   @@map("delivery_challan_items")
 }
+
+// Shared infrastructure tables. They are also created idempotently at runtime
+// because CI does not run migrations; see src/lib/runtime-tables.ts.
+model RateLimitCounter {
+  key         String   @id
+  bucketStart BigInt   @map("bucket_start")
+  count       Int      @default(1)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([bucketStart])
+  @@map("rate_limit_counters")
+}
+
+model SequenceCounter {
+  key       String   @id
+  nextValue BigInt   @map("next_value")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("sequence_counters")
+}

@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { resolveModuleFromPath, canViewModule } from '@/lib/permissions';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 const SESSION_COOKIE_NAME = 'devit_session';
 const ABSOLUTE_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8 hours absolute maximum
@@ -22,34 +23,6 @@ function getClientIp(req: NextRequest): string {
   if (xreal) return xreal;
   return "unknown";
 }
-
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-
-function getRateLimit(key: string, maxRequests: number, windowMs: number): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(key);
-
-  if (!entry || now > entry.resetTime) {
-    rateLimitMap.set(key, { count: 1, resetTime: now + windowMs });
-    return true;
-  }
-
-  if (entry.count >= maxRequests) {
-    return false;
-  }
-
-  entry.count++;
-  return true;
-}
-
-const cleanupInterval = setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of rateLimitMap.entries()) {
-    if (now > entry.resetTime) {
-      rateLimitMap.delete(key);
-    }
-  }
-}, 60 * 1000).unref?.();
 
 const UPLOAD_WINDOW = 60 * 1000;
 const UPLOAD_MAX = 10;
@@ -110,10 +83,23 @@ export async function proxy(request: NextRequest) {
     const max = isUpload ? UPLOAD_MAX : GENERAL_MAX;
     const key = `api:${isUpload ? "upload" : "general"}:${ip}`;
 
-    if (!getRateLimit(key, max, windowMs)) {
+    let decision;
+    try {
+      decision = await checkRateLimit(key, max, windowMs);
+    } catch {
+      // Fail closed: if the shared store is unavailable we cannot prove the
+      // request is within its quota, so refusing is safer than silently
+      // resetting every process to an empty in-memory counter.
+      return NextResponse.json(
+        { error: "Service temporarily unavailable." },
+        { status: 503, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    if (!decision.allowed) {
       return NextResponse.json(
         { error: "Too many requests. Try again later." },
-        { status: 429, headers: { "Retry-After": String(Math.ceil(windowMs / 1000)), "Cache-Control": "no-store" } }
+        { status: 429, headers: { "Retry-After": String(decision.retryAfterSeconds), "Cache-Control": "no-store" } }
       );
     }
 
