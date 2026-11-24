@@ -181,3 +181,19 @@ export function canEditReversePickupAddress(
 ): boolean {
   return ADDRESS_EDITABLE_STATUSES.includes(resolveEffectiveStatus(status, displayStatus, qcCleanResult));
 }
+
+/**
+ * Shipment cancellation is allowed only while the reverse pickup is still in the
+ * pre-dispatch pipeline, up to and including Docket Assigned. Once the request
+ * advances beyond that point (inspected/picked up/in transit/warehouse/QC/...), the
+ * physical shipment is already in motion or received, so cancellation is blocked.
+ */
+export const CANCELLABLE_REVERSE_PICKUP_STATUSES: string[] = [...ADDRESS_EDITABLE_STATUSES];
+
+export function canCancelReversePickupShipment(
+  status: string,
+  displayStatus?: string | null,
+  qcCleanResult?: string | null
+): boolean {
+  return CANCELLABLE_REVERSE_PICKUP_STATUSES.includes(resolveEffectiveStatus(status, displayStatus, qcCleanResult));
+}

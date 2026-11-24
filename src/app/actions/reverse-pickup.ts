@@ -14,7 +14,7 @@ import { isDeployedStatus } from "@/lib/inventory-status";
 import { hasReachedWarehouse } from "@/lib/reverse-pickup-config";
 import { validateEwayBillNumber } from "@/lib/eway-bill";
 import { formatTime24 } from "@/lib/time-format";
-import { canEditReversePickupAddress } from "@/lib/reverse-pickup-status";
+import { canCancelReversePickupShipment, canEditReversePickupAddress } from "@/lib/reverse-pickup-status";
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -1270,6 +1270,41 @@ export async function generateReversePickupEwayBill(formData: FormData) {
 
   revalidatePath("/dashboard/finance");
   revalidatePath("/dashboard/reverse-pickup");
+}
+
+export async function cancelReversePickupShipment(formData: FormData) {
+  const user = await getSession();
+  requireModuleEditOrReversePickup(user, "logistics");
+
+  const id = ((formData.get("id") as string | null) ?? "").trim();
+  if (!id) throw new Error("Request ID is required.");
+
+  const existing = await prisma.reversePickupRequest.findUnique({
+    where: { id },
+    select: { status: true, displayStatus: true, qcCleanResult: true },
+  });
+  if (!existing) throw new Error("Reverse pickup request not found.");
+
+  if (!canCancelReversePickupShipment(existing.status, existing.displayStatus, existing.qcCleanResult)) {
+    throw new Error("Shipment can only be cancelled up to the Docket Assigned stage.");
+  }
+
+  const claimed = await prisma.reversePickupRequest.updateMany({
+    where: {
+      id,
+      status: existing.status,
+      NOT: { status: { in: [...TERMINAL_REVERSE_PICKUP_STATUSES] } },
+    },
+    data: { status: "PICKUP_CANCELLED" },
+  });
+  if (claimed.count === 0) {
+    throw new Error("This request can no longer be cancelled. Refresh and try again.");
+  }
+
+  revalidatePath("/dashboard/reverse-pickup");
+  revalidatePath(`/dashboard/reverse-pickup/${id}`);
+  revalidatePath("/dashboard/logistics");
+  revalidatePath("/dashboard");
 }
 
 export async function deleteReversePickupRequest(id: string) {

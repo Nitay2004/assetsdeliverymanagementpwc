@@ -3,9 +3,11 @@
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Truck, Loader2 } from "lucide-react";
+import { useAlert } from "@/hooks/use-alert";
 import { useToast } from "@/hooks/use-toast";
 import {
   assignPartner,
+  cancelReversePickupShipment,
   requestDc,
   requestEwayBill,
   assignReversePickupDocket,
@@ -90,6 +92,7 @@ const ACTION_BUTTON =
   "inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors";
 
 export function ReversePickupPipelineSection({ requests, canManage, totalPending, columnFilterValues }: Props) {
+  const { showAlert } = useAlert();
   const { toast } = useToast();
   const router = useRouter();
   const [saving, setSaving] = useState<string | null>(null);
@@ -218,42 +221,85 @@ export function ReversePickupPipelineSection({ requests, canManage, totalPending
     }
   }
 
+  async function handleCancelShipment(requestId: string, requestNumber: string) {
+    const ok = await showAlert({
+      title: "Cancel shipment?",
+      description: `Cancel reverse pickup ${requestNumber}? Shipment cancellation is allowed only up to the Docket Assigned stage.`,
+      confirmLabel: "Cancel Shipment",
+      cancelLabel: "Back",
+    });
+    if (!ok) return;
+    await run(requestId, cancelReversePickupShipment, {
+      title: "Shipment Cancelled",
+      description: "Reverse pickup shipment has been cancelled.",
+    });
+  }
+
   const columnCount = canManage ? 8 : 7;
 
   function renderAction(r: RpRequest) {
+    const cancelButton = (
+      <button
+        onClick={() => handleCancelShipment(r.id, r.requestNumber)}
+        disabled={saving === r.id}
+        className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 transition-colors"
+      >
+        Cancel Shipment
+      </button>
+    );
+
     if (PRE_PARTNER.has(r.status)) {
       return (
-        <button onClick={() => handleAssignPartner(r.id)} disabled={saving === r.id} className={ACTION_BUTTON}>
-          {saving === r.id && <Loader2 className="size-3 animate-spin" />}
-          {saving === r.id ? "Assigning..." : "Assign Partner"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => handleAssignPartner(r.id)} disabled={saving === r.id} className={ACTION_BUTTON}>
+            {saving === r.id && <Loader2 className="size-3 animate-spin" />}
+            {saving === r.id ? "Assigning..." : "Assign Partner"}
+          </button>
+          {cancelButton}
+        </div>
       );
     }
     if (r.status === "PARTNER_ASSIGNED") {
       return (
-        <button onClick={() => handleRequestDc(r.id)} disabled={saving === r.id} className={ACTION_BUTTON}>
-          {saving === r.id && <Loader2 className="size-3 animate-spin" />}
-          {saving === r.id ? "Requesting..." : "Request DC"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => handleRequestDc(r.id)} disabled={saving === r.id} className={ACTION_BUTTON}>
+            {saving === r.id && <Loader2 className="size-3 animate-spin" />}
+            {saving === r.id ? "Requesting..." : "Request DC"}
+          </button>
+          {cancelButton}
+        </div>
       );
     }
     if (r.status === "DC_REQUESTED") {
-      return <span className="text-xs text-muted-foreground italic">Awaiting Finance (DC)</span>;
+      return (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground italic">Awaiting Finance (DC)</span>
+          {cancelButton}
+        </div>
+      );
     }
     if (r.status === "DC_GENERATED") {
       return (
-        <button onClick={() => handleRequestEway(r.id)} disabled={saving === r.id} className={ACTION_BUTTON}>
-          {saving === r.id && <Loader2 className="size-3 animate-spin" />}
-          {saving === r.id ? "Requesting..." : "Request E-Way Bill"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => handleRequestEway(r.id)} disabled={saving === r.id} className={ACTION_BUTTON}>
+            {saving === r.id && <Loader2 className="size-3 animate-spin" />}
+            {saving === r.id ? "Requesting..." : "Request E-Way Bill"}
+          </button>
+          {cancelButton}
+        </div>
       );
     }
     if (r.status === "EWAY_BILL_REQUESTED") {
-      return <span className="text-xs text-muted-foreground italic">Awaiting Finance (E-Way)</span>;
+      return (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground italic">Awaiting Finance (E-Way)</span>
+          {cancelButton}
+        </div>
+      );
     }
     if (DOCKET_READY.has(r.status)) {
       return (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
             value={docketInputs[r.id] ?? ""}
             onChange={e => setDocketInputs(prev => ({ ...prev, [r.id]: e.target.value }))}
@@ -264,14 +310,18 @@ export function ReversePickupPipelineSection({ requests, canManage, totalPending
             {saving === r.id && <Loader2 className="size-3 animate-spin" />}
             {saving === r.id ? "Saving..." : "Generate Docket"}
           </button>
+          {cancelButton}
         </div>
       );
     }
     if (r.status === "DOCKET_ASSIGNED") {
       return (
-        <span className="text-xs text-muted-foreground">
-          Docket assigned{r.docketNumber ? `: ${r.docketNumber}` : ""}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            Docket assigned{r.docketNumber ? `: ${r.docketNumber}` : ""}
+          </span>
+          {cancelButton}
+        </div>
       );
     }
     return <span className="text-xs text-muted-foreground italic">No action needed</span>;

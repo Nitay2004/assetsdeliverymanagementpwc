@@ -3,9 +3,11 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, AlertTriangle, Check, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileText, Package, Circle, Loader2, Pencil } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Ban, Check, Truck, ClipboardCheck, Warehouse, ShieldCheck, FileText, Package, Circle, Loader2, Pencil } from "lucide-react";
+import { useAlert } from "@/hooks/use-alert";
 import { useToast } from "@/hooks/use-toast";
 import {
+  cancelReversePickupShipment,
   recordInspection,
   markAsPickedUp,
   uploadPodDocument,
@@ -13,7 +15,7 @@ import {
 } from "@/app/actions/reverse-pickup";
 import { WAREHOUSE_OWNED_STATUSES } from "@/lib/reverse-pickup-config";
 import { getNextStatus, hasReachedWarehouse } from "@/lib/reverse-pickup-config";
-import { canEditReversePickupAddress, resolveEffectiveStatus } from "@/lib/reverse-pickup-status";
+import { canCancelReversePickupShipment, canEditReversePickupAddress, resolveEffectiveStatus } from "@/lib/reverse-pickup-status";
 import { formatTime24 } from "@/lib/time-format";
 
 interface RequestData {
@@ -152,6 +154,7 @@ const STEPS = [
 
 export function ReversePickupDetail({ request, userRole, dcId, canEditAddress }: Props) {
   const router = useRouter();
+  const { showAlert } = useAlert();
   const { toast } = useToast();
   const [loading, setLoading] = useState<string | null>(null);
   const [editingAddress, setEditingAddress] = useState(false);
@@ -177,6 +180,9 @@ export function ReversePickupDetail({ request, userRole, dcId, canEditAddress }:
   const addressEditable =
     canEditAddress &&
     canEditReversePickupAddress(request.status, request.displayStatus, request.qcCleanResult);
+  const shipmentCancellable =
+    canManage &&
+    canCancelReversePickupShipment(request.status, request.displayStatus, request.qcCleanResult);
 
   const isReadOnly = NON_EDITABLE_STATUSES.includes(request.status);
   const stepStatus = effectiveStatus;
@@ -193,6 +199,29 @@ export function ReversePickupDetail({ request, userRole, dcId, canEditAddress }:
       router.refresh();
     } catch (err) {
       toast({ title: "Could not update address", description: String(err), variant: "error" });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleCancelShipment = async () => {
+    const ok = await showAlert({
+      title: "Cancel shipment?",
+      description: `Cancel reverse pickup ${request.requestNumber} for ${request.serialNumber}? This can only be done up to the Docket Assigned stage.`,
+      confirmLabel: "Cancel Shipment",
+      cancelLabel: "Back",
+    });
+    if (!ok) return;
+
+    setLoading("cancelShipment");
+    try {
+      const formData = new FormData();
+      formData.append("id", request.id);
+      await cancelReversePickupShipment(formData);
+      toast({ title: "Shipment cancelled", description: "Reverse pickup shipment has been cancelled.", variant: "success" });
+      router.refresh();
+    } catch (err) {
+      toast({ title: "Could not cancel shipment", description: String(err), variant: "error" });
     } finally {
       setLoading(null);
     }
@@ -1060,6 +1089,31 @@ export function ReversePickupDetail({ request, userRole, dcId, canEditAddress }:
         </div>
       )}
       </>
+      )}
+
+      {shipmentCancellable && (
+        <div className="rounded-xl border border-red-200 bg-red-50/50 shadow-sm p-6 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-red-100 shrink-0">
+              <Ban className="size-5 text-red-700" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Cancel Shipment</h2>
+              <p className="text-sm text-muted-foreground">
+                Shipment cancellation is allowed only up to the Docket Assigned stage. Once the request moves beyond Docket Assigned, it cannot be cancelled here.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCancelShipment}
+            disabled={isPending("cancelShipment")}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 disabled:opacity-50"
+          >
+            {isPending("cancelShipment") ? <Loader2 className="size-4 animate-spin" /> : <Ban className="size-4" />}
+            {isPending("cancelShipment") ? "Cancelling..." : "Cancel Shipment"}
+          </button>
+        </div>
       )}
 
       {/* Completed State */}
