@@ -45,275 +45,297 @@ export default async function WarehousePage(props: { searchParams: Promise<Recor
   const user = await getSession();
   const canManage = !!(user && (user.role === "ADMIN" || user.role === "WAREHOUSE"));
 
-  // Forward stage window (cumulative — see FORWARD_WAREHOUSE_STATUSES): an
-  // order stays in this table from allocation onwards, never disappears.
-  const allocatedWhere: Prisma.OrderWhereInput = { status: { in: FORWARD_WAREHOUSE_STATUSES }, ...(search ? {
-    OR: [
-      { clientName: { contains: search, mode: "insensitive" as const } },
-      { deliveryLocation: { contains: search, mode: "insensitive" as const } },
-      { dcNumber: { contains: search, mode: "insensitive" as const } },
-      { assets: { some: { inventoryItem: { serialNumber: { contains: search, mode: "insensitive" as const } } } } },
-      { dockets: { some: { docketNumber: { contains: search, mode: "insensitive" as const } } } },
-      { dockets: { some: { ewayBillNumber: { contains: search, mode: "insensitive" as const } } } },
-    ],
-  } : {}) };
+  const isProvisioning = activeTab === "provisioning";
+  const isQc = activeTab === "qc";
+  const isReverse = activeTab === "reverse";
 
-  const columnFilters = parseColumnFilters(searchParams, ALLOCATED_FILTER_KEYS);
-  if (columnFilters.serialNumbers) allocatedWhere.assets = { some: { inventoryItem: { serialNumber: { in: columnFilters.serialNumbers } } } };
-  const docketFilters: Prisma.DocketWhereInput[] = [];
-  if (columnFilters.docketNumber) docketFilters.push({ OR: blankTokenConditions("docketNumber", columnFilters.docketNumber) });
-  if (columnFilters.ewayBill) docketFilters.push({ OR: blankTokenConditions("ewayBillNumber", columnFilters.ewayBill) });
-  if (docketFilters.length) allocatedWhere.dockets = { some: { AND: docketFilters } };
-  if (columnFilters.clientName) allocatedWhere.clientName = { in: columnFilters.clientName };
-  if (columnFilters.deliveryLocation) allocatedWhere.deliveryLocation = { in: columnFilters.deliveryLocation };
-  if (columnFilters.status) allocatedWhere.status = { in: columnFilters.status as OrderStatus[] };
-  if (columnFilters.totalQuantity) allocatedWhere.totalQuantity = { in: columnFilters.totalQuantity.map(Number) };
-  andFilterConditions(allocatedWhere, collectBlankTokenConditions(columnFilters, { dcNumber: "dcNumber" }));
-
-  const qcFilters = parseColumnFilters(searchParams, QC_FILTER_KEYS);
-  const qcWhere: Prisma.InventoryItemWhereInput = {
-    OR: [{ status: "QC_PENDING" }, { qcCompletedAt: { not: null } }],
-    ...(qcFilters.serialNumber ? { serialNumber: { in: qcFilters.serialNumber } } : {}),
-    ...(qcFilters.model ? { model: { in: qcFilters.model } } : {}),
-    ...(qcFilters.employeeName ? { employeeName: { in: qcFilters.employeeName } } : {}),
-    ...(qcFilters.qcEngineer ? { qcEngineer: { in: qcFilters.qcEngineer } } : {}),
-    ...(qcFilters.qcCleanResult ? { qcCleanResult: { in: qcFilters.qcCleanResult } } : {}),
-    ...(qcFilters.qcPurgeResult ? { qcPurgeResult: { in: qcFilters.qcPurgeResult } } : {}),
-  };
-
-  const reverseFilters = parseColumnFilters(searchParams, REVERSE_FILTER_KEYS);
-  // Both Reverse sub-tabs are sticky (flag-based — see the scope builders in
-  // reverse-pickup-config), so a warehouse action never makes a row disappear.
-  const reverseSubScope = reverseSubTab === "blanco" ? warehouseBlancoScope() : warehousePipelineScope();
-  const reverseWhere: Prisma.ReversePickupRequestWhereInput = {
-    ...reverseSubScope,
-    ...(reverseFilters.rrequest ? { requestNumber: { in: reverseFilters.rrequest } } : {}),
-    ...(reverseFilters.rserial ? { serialNumber: { in: reverseFilters.rserial } } : {}),
-    ...(reverseFilters.rmodel ? { model: { in: reverseFilters.rmodel } } : {}),
-    ...(reverseFilters.remployee ? { employeeName: { in: reverseFilters.remployee } } : {}),
-    ...(reverseFilters.rstatus ? { status: { in: reverseFilters.rstatus as ReversePickupStatus[] } } : {}),
-  };
-  andFilterConditions(reverseWhere, collectBlankTokenConditions(reverseFilters, { rwarehouse: "warehouseLocation", rqcengineer: "qcEngineer", rclean: "qcCleanResult", rpurge: "qcPurgeResult" }));
-
-  const [pendingOrders, totalAllocated, allocatedOrders, availableInventory] = await Promise.all([
-    prisma.order.findMany({
-      where: { status: "ORDER_PLACED" },
-      include: {
-        assets: {
-          include: { inventoryItem: true },
-        },
-      },
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-    }),
-    prisma.order.count({ where: allocatedWhere }),
-    prisma.order.findMany({
-      where: allocatedWhere,
-      include: {
-        assets: {
-          include: { inventoryItem: true },
-        },
-        dockets: true,
-      },
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-    prisma.inventoryItem.findMany({
-      where: { status: "ASSET_RETURN_TO_WAREHOUSE" },
-      orderBy: [{ serialNumber: "asc" }, { id: "asc" }],
-    }),
-  ]);
-
-  // QC is its own paged queue now, so the total is counted up front and the
-  // rows are sliced rather than loading the whole assignment list.
-  const qcTotalCount = await prisma.inventoryItem.count({ where: qcWhere });
-  const qcTotalPages = Math.max(1, Math.ceil(qcTotalCount / limit));
-  const safeQcPage = Math.min(page, qcTotalPages);
-
-  const [qcPendingItems, qcSerialGroups, qcModelGroups, qcEmployeeGroups, qcEngineerGroups, qcCleanGroups, qcPurgeGroups, qcPendingCount] = await Promise.all([
-    prisma.inventoryItem.findMany({
-      where: qcWhere,
-      orderBy: [{ qcRequestedAt: "desc" }, { id: "desc" }],
-      skip: (safeQcPage - 1) * limit,
-      take: limit,
-    }),
-    prisma.inventoryItem.groupBy({ by: ["serialNumber"], where: qcWhere, _count: { _all: true } }),
-    prisma.inventoryItem.groupBy({ by: ["model"], where: qcWhere, _count: { _all: true } }),
-    prisma.inventoryItem.groupBy({ by: ["employeeName"], where: qcWhere, _count: { _all: true } }),
-    prisma.inventoryItem.groupBy({ by: ["qcEngineer"], where: qcWhere, _count: { _all: true } }),
-    prisma.inventoryItem.groupBy({ by: ["qcCleanResult"], where: qcWhere, _count: { _all: true } }),
-    prisma.inventoryItem.groupBy({ by: ["qcPurgeResult"], where: qcWhere, _count: { _all: true } }),
+  // Lightweight badge counts always needed for tab labels.
+  const [qcPendingCount, reversePendingCount] = await Promise.all([
     prisma.inventoryItem.count({ where: { status: "QC_PENDING", qcCompletedAt: null } }),
-  ]);
-
-  const qcColumnFilterValues: Record<string, { value: string; count: number }[]> = {
-    serialNumber: qcSerialGroups.map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    model: qcModelGroups.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    employeeName: qcEmployeeGroups.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    qcEngineer: qcEngineerGroups.map(r => ({ value: r.qcEngineer ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    qcCleanResult: qcCleanGroups.map(r => ({ value: r.qcCleanResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    qcPurgeResult: qcPurgeGroups.map(r => ({ value: r.qcPurgeResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-  };
-
-  const serializedQc = qcPendingItems.map(i => ({
-    id: i.id,
-    serialNumber: i.serialNumber,
-    model: i.model,
-    status: i.status,
-    employeeName: i.employeeName,
-    emailId: i.emailId,
-    mobileNumber: i.mobileNumber,
-    city: i.city,
-    state: i.state,
-    invoicingWarehouse: i.invoicingWarehouse,
-    qcLocation: i.qcLocation,
-    qcRequestedAt: safeISO(i.qcRequestedAt),
-    qcEngineer: i.qcEngineer,
-    qcAssignedAt: safeISO(i.qcAssignedAt),
-    qcCleanResult: i.qcCleanResult,
-    qcCleanRemarks: i.qcCleanRemarks,
-    qcCleanDate: safeISO(i.qcCleanDate),
-    qcCleanBy: i.qcCleanBy,
-    qcPurgeResult: i.qcPurgeResult,
-    qcPurgeRemarks: i.qcPurgeRemarks,
-    qcPurgeDate: safeISO(i.qcPurgeDate),
-    qcPurgeBy: i.qcPurgeBy,
-    qcFinalResult: i.qcFinalResult,
-    qcCompletedAt: safeISO(i.qcCompletedAt),
-  }));
-
-  // Reverse tab: the units the Warehouse team is responsible for receiving, plus
-  // the ones that have already reached a warehouse. Paged on its own rpage/rlimit
-  // so it never moves the allocation or QC tabs.
-  const reverseTotalCount = await prisma.reversePickupRequest.count({ where: reverseWhere });
-  const reverseTotalPages = Math.max(1, Math.ceil(reverseTotalCount / rlimit));
-  const safeReversePage = Math.min(rpage, reverseTotalPages);
-
-  const [
-    reverseRequests, reversePendingCount,
-    reverseRequestGroups, reverseSerialGroups, reverseModelGroups,
-    reverseEmployeeGroups, reverseStatusGroups, reverseWarehouseGroups,
-    reverseQcEngineerGroups, reverseCleanGroups, reversePurgeGroups,
-    warehouseLocationOptions, pipelineStageCount, blancoStageCount,
-  ] = await Promise.all([
-    prisma.reversePickupRequest.findMany({
-      where: reverseWhere,
-      select: {
-        id: true, requestNumber: true, serialNumber: true, model: true,
-        employeeName: true, status: true, warehouseLocation: true,
-        receivedDate: true, receivedBy: true,
-        qcEngineer: true, qcAssignedAt: true, qcLocation: true,
-        qcCleanResult: true, qcPurgeResult: true, qcResult: true,
-        blancoSentAt: true, blancoSentBy: true,
-        blancoClearResult: true, blancoPurgeResult: true,
-      },
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      skip: (safeReversePage - 1) * rlimit,
-      take: rlimit,
-    }),
     prisma.reversePickupRequest.count({
       where: { status: { in: WAREHOUSE_RECEIVABLE_STATUSES as ReversePickupStatus[] } },
     }),
-    prisma.reversePickupRequest.groupBy({ by: ["requestNumber"], where: reverseWhere, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["serialNumber"], where: reverseWhere, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["model"], where: reverseWhere, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: reverseWhere, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["status"], where: reverseWhere, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["warehouseLocation"], where: reverseWhere, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["qcEngineer"], where: reverseWhere, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["qcCleanResult"], where: reverseWhere, _count: { _all: true } }),
-    prisma.reversePickupRequest.groupBy({ by: ["qcPurgeResult"], where: reverseWhere, _count: { _all: true } }),
-    prisma.dropdownOption.findMany({ where: { category: "warehouseLocation" }, orderBy: { value: "asc" } }),
-    // Sub-tab badges count only what still needs work; the table scopes below
-    // are sticky, so a table can list more rows than its badge shows.
-    prisma.reversePickupRequest.count({ where: { status: { in: WAREHOUSE_PIPELINE_SUB_STATUSES as ReversePickupStatus[] } } }),
-    prisma.reversePickupRequest.count({ where: { status: { in: WAREHOUSE_BLANCO_STATUSES as ReversePickupStatus[] } } }),
   ]);
 
-  const reverseColumnFilterValues: Record<string, { value: string; count: number }[]> = {
-    rrequest: reverseRequestGroups.map(r => ({ value: r.requestNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    rserial: reverseSerialGroups.map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    rmodel: reverseModelGroups.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    remployee: reverseEmployeeGroups.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    rstatus: reverseStatusGroups.map(r => ({ value: r.status ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    rwarehouse: reverseWarehouseGroups.map(r => ({ value: r.warehouseLocation ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    rqcengineer: reverseQcEngineerGroups.map(r => ({ value: r.qcEngineer ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    rclean: reverseCleanGroups.map(r => ({ value: r.qcCleanResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-    rpurge: reversePurgeGroups.map(r => ({ value: r.qcPurgeResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
-  };
+  // ─── Provisioning tab (only fetched when active) ───
+  let pendingOrders: Awaited<ReturnType<typeof prisma.order.findMany<{
+    include: { assets: { include: { inventoryItem: true } } };
+  }>>> = [];
+  let totalAllocated = 0;
+  let allocatedOrders: Awaited<ReturnType<typeof prisma.order.findMany<{
+    include: { assets: { include: { inventoryItem: true } }; dockets: true };
+  }>>> = [];
+  let availableInventory: Awaited<ReturnType<typeof prisma.inventoryItem.findMany>> = [];
+  let allocatedColumnFilterValues: Record<string, { value: string; count: number }[]> = {};
 
-  const serializedReverse = reverseRequests.map(r => ({
-    id: r.id,
-    requestNumber: r.requestNumber,
-    serialNumber: r.serialNumber,
-    model: r.model,
-    employeeName: r.employeeName,
-    status: r.status as string,
-    warehouseLocation: r.warehouseLocation,
-    receivedDate: safeISO(r.receivedDate),
-    receivedBy: r.receivedBy,
-    qcEngineer: r.qcEngineer,
-    qcAssignedAt: safeISO(r.qcAssignedAt),
-    qcLocation: r.qcLocation,
-    qcCleanResult: r.qcCleanResult,
-    qcPurgeResult: r.qcPurgeResult,
-    qcResult: r.qcResult,
-    blancoSentAt: safeISO(r.blancoSentAt),
-    blancoSentBy: r.blancoSentBy,
-    blancoClearResult: r.blancoClearResult,
-    blancoPurgeResult: r.blancoPurgeResult,
-  }));
+  if (isProvisioning) {
+    // Forward stage window (cumulative — see FORWARD_WAREHOUSE_STATUSES): an
+    // order stays in this table from allocation onwards, never disappears.
+    const allocatedWhere: Prisma.OrderWhereInput = { status: { in: FORWARD_WAREHOUSE_STATUSES }, ...(search ? {
+      OR: [
+        { clientName: { contains: search, mode: "insensitive" as const } },
+        { deliveryLocation: { contains: search, mode: "insensitive" as const } },
+        { dcNumber: { contains: search, mode: "insensitive" as const } },
+        { assets: { some: { inventoryItem: { serialNumber: { contains: search, mode: "insensitive" as const } } } } },
+        { dockets: { some: { docketNumber: { contains: search, mode: "insensitive" as const } } } },
+        { dockets: { some: { ewayBillNumber: { contains: search, mode: "insensitive" as const } } } },
+      ],
+    } : {}) };
 
-  const warehouseLocations = warehouseLocationOptions.map(o => o.value);
+    const columnFilters = parseColumnFilters(searchParams, ALLOCATED_FILTER_KEYS);
+    if (columnFilters.serialNumbers) allocatedWhere.assets = { some: { inventoryItem: { serialNumber: { in: columnFilters.serialNumbers } } } };
+    const docketFilters: Prisma.DocketWhereInput[] = [];
+    if (columnFilters.docketNumber) docketFilters.push({ OR: blankTokenConditions("docketNumber", columnFilters.docketNumber) });
+    if (columnFilters.ewayBill) docketFilters.push({ OR: blankTokenConditions("ewayBillNumber", columnFilters.ewayBill) });
+    if (docketFilters.length) allocatedWhere.dockets = { some: { AND: docketFilters } };
+    if (columnFilters.clientName) allocatedWhere.clientName = { in: columnFilters.clientName };
+    if (columnFilters.deliveryLocation) allocatedWhere.deliveryLocation = { in: columnFilters.deliveryLocation };
+    if (columnFilters.status) allocatedWhere.status = { in: columnFilters.status as OrderStatus[] };
+    if (columnFilters.totalQuantity) allocatedWhere.totalQuantity = { in: columnFilters.totalQuantity.map(Number) };
+    andFilterConditions(allocatedWhere, collectBlankTokenConditions(columnFilters, { dcNumber: "dcNumber" }));
 
-  const [clientNameGroups, deliveryLocationGroups, totalQuantityGroups, dcNumberGroups, statusGroups, allocatedSerialGroups, allocatedDocketGroups, allocatedEwayGroups] = await Promise.all([
-    prisma.order.groupBy({ by: ["clientName"], where: allocatedWhere, _count: { _all: true } }),
-    prisma.order.groupBy({ by: ["deliveryLocation"], where: allocatedWhere, _count: { _all: true } }),
-    prisma.order.groupBy({ by: ["totalQuantity"], where: allocatedWhere, _count: { _all: true } }),
-    prisma.order.groupBy({ by: ["dcNumber"], where: allocatedWhere, _count: { _all: true } }),
-    prisma.order.groupBy({ by: ["status"], where: allocatedWhere, _count: { _all: true } }),
-    prisma.inventoryItem.groupBy({
-      by: ["serialNumber"],
-      where: { assets: { some: { order: allocatedWhere } } },
-      _count: { _all: true },
-    }),
-    prisma.docket.groupBy({
-      by: ["docketNumber"],
-      where: { order: allocatedWhere },
-      _count: { _all: true },
-    }),
-    prisma.docket.groupBy({
-      by: ["ewayBillNumber"],
-      where: { order: allocatedWhere },
-      _count: { _all: true },
-    }),
-  ]);
+    const [pending, allocatedCount, allocated, available, clientNameGroups, deliveryLocationGroups, totalQuantityGroups, dcNumberGroups, statusGroups, allocatedSerialGroups, allocatedDocketGroups, allocatedEwayGroups] = await Promise.all([
+      prisma.order.findMany({
+        where: { status: "ORDER_PLACED" },
+        include: { assets: { include: { inventoryItem: true } } },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      }),
+      prisma.order.count({ where: allocatedWhere }),
+      prisma.order.findMany({
+        where: allocatedWhere,
+        include: { assets: { include: { inventoryItem: true } }, dockets: true },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.inventoryItem.findMany({
+        where: { status: "ASSET_RETURN_TO_WAREHOUSE" },
+        orderBy: [{ serialNumber: "asc" }, { id: "asc" }],
+      }),
+      prisma.order.groupBy({ by: ["clientName"], where: allocatedWhere, _count: { _all: true } }),
+      prisma.order.groupBy({ by: ["deliveryLocation"], where: allocatedWhere, _count: { _all: true } }),
+      prisma.order.groupBy({ by: ["totalQuantity"], where: allocatedWhere, _count: { _all: true } }),
+      prisma.order.groupBy({ by: ["dcNumber"], where: allocatedWhere, _count: { _all: true } }),
+      prisma.order.groupBy({ by: ["status"], where: allocatedWhere, _count: { _all: true } }),
+      prisma.inventoryItem.groupBy({ by: ["serialNumber"], where: { assets: { some: { order: allocatedWhere } } }, _count: { _all: true } }),
+      prisma.docket.groupBy({ by: ["docketNumber"], where: { order: allocatedWhere }, _count: { _all: true } }),
+      prisma.docket.groupBy({ by: ["ewayBillNumber"], where: { order: allocatedWhere }, _count: { _all: true } }),
+    ]);
 
-  const allocatedColumnFilterValues: Record<string, { value: string; count: number }[]> = {};
-  allocatedColumnFilterValues.clientName = clientNameGroups
-    .map(r => ({ value: r.clientName ?? "(Blank)", count: r._count._all }))
-    .sort((a, b) => a.value.localeCompare(b.value));
-  allocatedColumnFilterValues.deliveryLocation = deliveryLocationGroups
-    .map(r => ({ value: r.deliveryLocation ?? "(Blank)", count: r._count._all }))
-    .sort((a, b) => a.value.localeCompare(b.value));
-  allocatedColumnFilterValues.totalQuantity = totalQuantityGroups
-    .map(r => ({ value: r.totalQuantity == null || String(r.totalQuantity).trim() === "" ? "(Blank)" : String(r.totalQuantity), count: r._count._all }))
-    .sort((a, b) => a.value.localeCompare(b.value));
-  allocatedColumnFilterValues.dcNumber = dcNumberGroups
-    .map(r => ({ value: r.dcNumber ?? "(Blank)", count: r._count._all }))
-    .sort((a, b) => a.value.localeCompare(b.value));
-  allocatedColumnFilterValues.status = statusGroups
-    .map(r => ({ value: r.status ?? "(Blank)", count: r._count._all }))
-    .sort((a, b) => a.value.localeCompare(b.value));
-  allocatedColumnFilterValues.serialNumbers = allocatedSerialGroups
-    .map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all }))
-    .sort((a, b) => a.value.localeCompare(b.value));
-  allocatedColumnFilterValues.docketNumber = allocatedDocketGroups
-    .map(r => ({ value: r.docketNumber ?? "(Blank)", count: r._count._all }))
-    .sort((a, b) => a.value.localeCompare(b.value));
-  allocatedColumnFilterValues.ewayBill = allocatedEwayGroups
-    .map(r => ({ value: r.ewayBillNumber ?? "(Blank)", count: r._count._all }))
-    .sort((a, b) => a.value.localeCompare(b.value));
+    pendingOrders = pending;
+    totalAllocated = allocatedCount;
+    allocatedOrders = allocated;
+    availableInventory = available;
+    allocatedColumnFilterValues = {
+      clientName: clientNameGroups.map(r => ({ value: r.clientName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      deliveryLocation: deliveryLocationGroups.map(r => ({ value: r.deliveryLocation ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      totalQuantity: totalQuantityGroups.map(r => ({ value: r.totalQuantity == null || String(r.totalQuantity).trim() === "" ? "(Blank)" : String(r.totalQuantity), count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      dcNumber: dcNumberGroups.map(r => ({ value: r.dcNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      status: statusGroups.map(r => ({ value: r.status ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      serialNumbers: allocatedSerialGroups.map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      docketNumber: allocatedDocketGroups.map(r => ({ value: r.docketNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      ewayBill: allocatedEwayGroups.map(r => ({ value: r.ewayBillNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    };
+  }
+
+  // ─── QC tab (only fetched when active) ───
+  let qcTotalCount = 0;
+  let qcTotalPages = 1;
+  let safeQcPage = page;
+  let serializedQc: Array<{
+    id: string; serialNumber: string; model: string; status: string;
+    employeeName: string | null; emailId: string | null; mobileNumber: string | null;
+    city: string | null; state: string | null; invoicingWarehouse: string | null;
+    qcLocation: string | null; qcRequestedAt: string | null;
+    qcEngineer: string | null; qcAssignedAt: string | null;
+    qcCleanResult: string | null; qcCleanRemarks: string | null;
+    qcCleanDate: string | null; qcCleanBy: string | null;
+    qcPurgeResult: string | null; qcPurgeRemarks: string | null;
+    qcPurgeDate: string | null; qcPurgeBy: string | null;
+    qcFinalResult: string | null; qcCompletedAt: string | null;
+  }> = [];
+  let qcColumnFilterValues: Record<string, { value: string; count: number }[]> = {};
+
+  if (isQc) {
+    const qcFilters = parseColumnFilters(searchParams, QC_FILTER_KEYS);
+    const qcWhere: Prisma.InventoryItemWhereInput = {
+      OR: [{ status: "QC_PENDING" }, { qcCompletedAt: { not: null } }],
+      ...(qcFilters.serialNumber ? { serialNumber: { in: qcFilters.serialNumber } } : {}),
+      ...(qcFilters.model ? { model: { in: qcFilters.model } } : {}),
+      ...(qcFilters.employeeName ? { employeeName: { in: qcFilters.employeeName } } : {}),
+      ...(qcFilters.qcEngineer ? { qcEngineer: { in: qcFilters.qcEngineer } } : {}),
+      ...(qcFilters.qcCleanResult ? { qcCleanResult: { in: qcFilters.qcCleanResult } } : {}),
+      ...(qcFilters.qcPurgeResult ? { qcPurgeResult: { in: qcFilters.qcPurgeResult } } : {}),
+    };
+
+    qcTotalCount = await prisma.inventoryItem.count({ where: qcWhere });
+    qcTotalPages = Math.max(1, Math.ceil(qcTotalCount / limit));
+    safeQcPage = Math.min(page, qcTotalPages);
+
+    const [qcPendingItems, qcSerialGroups, qcModelGroups, qcEmployeeGroups, qcEngineerGroups, qcCleanGroups, qcPurgeGroups] = await Promise.all([
+      prisma.inventoryItem.findMany({
+        where: qcWhere,
+        orderBy: [{ qcRequestedAt: "desc" }, { id: "desc" }],
+        skip: (safeQcPage - 1) * limit,
+        take: limit,
+      }),
+      prisma.inventoryItem.groupBy({ by: ["serialNumber"], where: qcWhere, _count: { _all: true } }),
+      prisma.inventoryItem.groupBy({ by: ["model"], where: qcWhere, _count: { _all: true } }),
+      prisma.inventoryItem.groupBy({ by: ["employeeName"], where: qcWhere, _count: { _all: true } }),
+      prisma.inventoryItem.groupBy({ by: ["qcEngineer"], where: qcWhere, _count: { _all: true } }),
+      prisma.inventoryItem.groupBy({ by: ["qcCleanResult"], where: qcWhere, _count: { _all: true } }),
+      prisma.inventoryItem.groupBy({ by: ["qcPurgeResult"], where: qcWhere, _count: { _all: true } }),
+    ]);
+
+    qcColumnFilterValues = {
+      serialNumber: qcSerialGroups.map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      model: qcModelGroups.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      employeeName: qcEmployeeGroups.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      qcEngineer: qcEngineerGroups.map(r => ({ value: r.qcEngineer ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      qcCleanResult: qcCleanGroups.map(r => ({ value: r.qcCleanResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      qcPurgeResult: qcPurgeGroups.map(r => ({ value: r.qcPurgeResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    };
+
+    serializedQc = qcPendingItems.map(i => ({
+      id: i.id,
+      serialNumber: i.serialNumber,
+      model: i.model,
+      status: i.status,
+      employeeName: i.employeeName,
+      emailId: i.emailId,
+      mobileNumber: i.mobileNumber,
+      city: i.city,
+      state: i.state,
+      invoicingWarehouse: i.invoicingWarehouse,
+      qcLocation: i.qcLocation,
+      qcRequestedAt: safeISO(i.qcRequestedAt),
+      qcEngineer: i.qcEngineer,
+      qcAssignedAt: safeISO(i.qcAssignedAt),
+      qcCleanResult: i.qcCleanResult,
+      qcCleanRemarks: i.qcCleanRemarks,
+      qcCleanDate: safeISO(i.qcCleanDate),
+      qcCleanBy: i.qcCleanBy,
+      qcPurgeResult: i.qcPurgeResult,
+      qcPurgeRemarks: i.qcPurgeRemarks,
+      qcPurgeDate: safeISO(i.qcPurgeDate),
+      qcPurgeBy: i.qcPurgeBy,
+      qcFinalResult: i.qcFinalResult,
+      qcCompletedAt: safeISO(i.qcCompletedAt),
+    }));
+  }
+
+  // ─── Reverse tab (only fetched when active) ───
+  let reverseTotalCount = 0;
+  let reverseTotalPages = 1;
+  let safeReversePage = rpage;
+  let serializedReverse: Array<{
+    id: string; requestNumber: string; serialNumber: string; model: string;
+    employeeName: string; status: string; warehouseLocation: string | null;
+    receivedDate: string | null; receivedBy: string | null;
+    qcEngineer: string | null; qcAssignedAt: string | null; qcLocation: string | null;
+    qcCleanResult: string | null; qcPurgeResult: string | null; qcResult: string | null;
+    blancoSentAt: string | null; blancoSentBy: string | null;
+    blancoClearResult: string | null; blancoPurgeResult: string | null;
+  }> = [];
+  let reverseColumnFilterValues: Record<string, { value: string; count: number }[]> = {};
+  let warehouseLocations: string[] = [];
+  let pipelineStageCount = 0;
+  let blancoStageCount = 0;
+
+  if (isReverse) {
+    const reverseFilters = parseColumnFilters(searchParams, REVERSE_FILTER_KEYS);
+    // Both Reverse sub-tabs are sticky (flag-based — see the scope builders in
+    // reverse-pickup-config), so a warehouse action never makes a row disappear.
+    const reverseSubScope = reverseSubTab === "blanco" ? warehouseBlancoScope() : warehousePipelineScope();
+    const reverseWhere: Prisma.ReversePickupRequestWhereInput = {
+      ...reverseSubScope,
+      ...(reverseFilters.rrequest ? { requestNumber: { in: reverseFilters.rrequest } } : {}),
+      ...(reverseFilters.rserial ? { serialNumber: { in: reverseFilters.rserial } } : {}),
+      ...(reverseFilters.rmodel ? { model: { in: reverseFilters.rmodel } } : {}),
+      ...(reverseFilters.remployee ? { employeeName: { in: reverseFilters.remployee } } : {}),
+      ...(reverseFilters.rstatus ? { status: { in: reverseFilters.rstatus as ReversePickupStatus[] } } : {}),
+    };
+    andFilterConditions(reverseWhere, collectBlankTokenConditions(reverseFilters, { rwarehouse: "warehouseLocation", rqcengineer: "qcEngineer", rclean: "qcCleanResult", rpurge: "qcPurgeResult" }));
+
+    reverseTotalCount = await prisma.reversePickupRequest.count({ where: reverseWhere });
+    reverseTotalPages = Math.max(1, Math.ceil(reverseTotalCount / rlimit));
+    safeReversePage = Math.min(rpage, reverseTotalPages);
+
+    const [
+      reverseRequests,
+      reverseRequestGroups, reverseSerialGroups, reverseModelGroups,
+      reverseEmployeeGroups, reverseStatusGroups, reverseWarehouseGroups,
+      reverseQcEngineerGroups, reverseCleanGroups, reversePurgeGroups,
+      warehouseLocationOptions, pipelineCount, blancoCount,
+    ] = await Promise.all([
+      prisma.reversePickupRequest.findMany({
+        where: reverseWhere,
+        select: {
+          id: true, requestNumber: true, serialNumber: true, model: true,
+          employeeName: true, status: true, warehouseLocation: true,
+          receivedDate: true, receivedBy: true,
+          qcEngineer: true, qcAssignedAt: true, qcLocation: true,
+          qcCleanResult: true, qcPurgeResult: true, qcResult: true,
+          blancoSentAt: true, blancoSentBy: true,
+          blancoClearResult: true, blancoPurgeResult: true,
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        skip: (safeReversePage - 1) * rlimit,
+        take: rlimit,
+      }),
+      prisma.reversePickupRequest.groupBy({ by: ["requestNumber"], where: reverseWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["serialNumber"], where: reverseWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["model"], where: reverseWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["employeeName"], where: reverseWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["status"], where: reverseWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["warehouseLocation"], where: reverseWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["qcEngineer"], where: reverseWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["qcCleanResult"], where: reverseWhere, _count: { _all: true } }),
+      prisma.reversePickupRequest.groupBy({ by: ["qcPurgeResult"], where: reverseWhere, _count: { _all: true } }),
+      prisma.dropdownOption.findMany({ where: { category: "warehouseLocation" }, orderBy: { value: "asc" } }),
+      // Sub-tab badges count only what still needs work; the table scopes below
+      // are sticky, so a table can list more rows than its badge shows.
+      prisma.reversePickupRequest.count({ where: { status: { in: WAREHOUSE_PIPELINE_SUB_STATUSES as ReversePickupStatus[] } } }),
+      prisma.reversePickupRequest.count({ where: { status: { in: WAREHOUSE_BLANCO_STATUSES as ReversePickupStatus[] } } }),
+    ]);
+
+    reverseColumnFilterValues = {
+      rrequest: reverseRequestGroups.map(r => ({ value: r.requestNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      rserial: reverseSerialGroups.map(r => ({ value: r.serialNumber ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      rmodel: reverseModelGroups.map(r => ({ value: r.model ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      remployee: reverseEmployeeGroups.map(r => ({ value: r.employeeName ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      rstatus: reverseStatusGroups.map(r => ({ value: r.status ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      rwarehouse: reverseWarehouseGroups.map(r => ({ value: r.warehouseLocation ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      rqcengineer: reverseQcEngineerGroups.map(r => ({ value: r.qcEngineer ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      rclean: reverseCleanGroups.map(r => ({ value: r.qcCleanResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+      rpurge: reversePurgeGroups.map(r => ({ value: r.qcPurgeResult ?? "(Blank)", count: r._count._all })).sort((a, b) => a.value.localeCompare(b.value)),
+    };
+
+    serializedReverse = reverseRequests.map(r => ({
+      id: r.id,
+      requestNumber: r.requestNumber,
+      serialNumber: r.serialNumber ?? "",
+      model: r.model ?? "",
+      employeeName: r.employeeName ?? "",
+      status: r.status as string,
+      warehouseLocation: r.warehouseLocation,
+      receivedDate: safeISO(r.receivedDate),
+      receivedBy: r.receivedBy,
+      qcEngineer: r.qcEngineer,
+      qcAssignedAt: safeISO(r.qcAssignedAt),
+      qcLocation: r.qcLocation,
+      qcCleanResult: r.qcCleanResult,
+      qcPurgeResult: r.qcPurgeResult,
+      qcResult: r.qcResult,
+      blancoSentAt: safeISO(r.blancoSentAt),
+      blancoSentBy: r.blancoSentBy,
+      blancoClearResult: r.blancoClearResult,
+      blancoPurgeResult: r.blancoPurgeResult,
+    }));
+    warehouseLocations = warehouseLocationOptions.map(o => o.value);
+    pipelineStageCount = pipelineCount;
+    blancoStageCount = blancoCount;
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
