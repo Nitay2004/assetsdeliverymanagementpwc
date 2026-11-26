@@ -179,8 +179,8 @@ export default async function LogisticsPage(props: { searchParams: Promise<Recor
     prisma.order.count({ where: { AND: [where, { status: "DOCKET_REQUESTED" }] } }),
     prisma.order.count({ where: { AND: [where, { status: { in: ["DOCKET_ASSIGNED", "DC_REQUESTED", "EWAY_BILL_REQUESTED", "RTO_DC_REQUESTED", "RTO_EWAY_BILL_REQUESTED"] } }] } }),
     prisma.order.count({ where: { AND: [where, { status: { in: ["DC_GENERATED", "EWAY_BILL_GENERATED", "RTO_DC_GENERATED", "RTO_EWAY_BILL_GENERATED"] } }] } }),
-    // inTransit: only true forward-logistics in-transit statuses (not delivered/return)
-    prisma.order.count({ where: { AND: [where, { status: "RTO_IN_TRANSIT" }] } }),
+    // In Transit: forward shipments dispatched and RTO shipments in transit.
+    prisma.order.count({ where: { AND: [where, { status: { in: ["DISPATCHED", "RTO_IN_TRANSIT"] } }] } }),
     // Delivered assets are counted from Inventory, not from orders: bulk Excel
     // imports never created an order, so the order table alone undercounts them.
     prisma.inventoryItem.count({ where: DELIVERED_INVENTORY_WHERE }),
