@@ -16,6 +16,8 @@ services:
   app:
     build:
       context: .
+      args:
+        SERVER_ACTIONS_ALLOWED_ORIGINS: ${SERVER_ACTIONS_ALLOWED_ORIGINS:-}
     container_name: asset-delivery
     restart: unless-stopped
     depends_on:

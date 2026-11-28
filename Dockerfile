@@ -12,6 +12,8 @@ RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ARG SERVER_ACTIONS_ALLOWED_ORIGINS=""
+ENV SERVER_ACTIONS_ALLOWED_ORIGINS=$SERVER_ACTIONS_ALLOWED_ORIGINS
 RUN npx prisma generate && npm run build
 
 # Carries the full Prisma CLI plus the schema and the migrations, so

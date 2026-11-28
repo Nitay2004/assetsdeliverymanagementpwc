@@ -35,22 +35,30 @@ export function LoginForm({
     setLoading(true);
     setError(null);
 
-    const formData = new FormData(e.currentTarget);
-    const isTwoFactorStep = pendingEmail !== null;
-    const result = isTwoFactorStep
-      ? await verifyTwoFactorAction(formData)
-      : await loginAction(formData);
+    try {
+      const formData = new FormData(e.currentTarget);
+      const isTwoFactorStep = pendingEmail !== null;
+      const result = isTwoFactorStep
+        ? await verifyTwoFactorAction(formData)
+        : await loginAction(formData);
 
-    if (result?.error) {
-      setError(result.error);
-      setLoading(false);
-    } else if (isTwoFactorStep && result && "cancelled" in result) {
-      setLoading(false);
-    } else if (result && "needsTwoFactor" in result && result.needsTwoFactor) {
-      setPendingEmail(result.email ?? null);
+      if (result?.error) {
+        setError(result.error);
+        setLoading(false);
+      } else if (isTwoFactorStep && result && "cancelled" in result) {
+        setLoading(false);
+      } else if (result && "needsTwoFactor" in result && result.needsTwoFactor) {
+        setPendingEmail(result.email ?? null);
+        setLoading(false);
+      }
+      // Note: on success, redirect happens in server action so we don't set loading false
+    } catch (err) {
+      const digest = (err as { digest?: string } | null)?.digest;
+      if (typeof digest === "string" && digest.startsWith("NEXT_")) throw err;
+      console.error("Login submit failed", err);
+      setError("Something went wrong. Please try again.");
       setLoading(false);
     }
-    // Note: on success, redirect happens in server action so we don't set loading false
   };
 
   const handleBack = async () => {
@@ -64,7 +72,7 @@ export function LoginForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <form onSubmit={handleSubmit} key={pendingEmail ?? "password"}>
+      <form method="post" onSubmit={handleSubmit} key={pendingEmail ?? "password"}>
         {/* Glassmorphism card */}
         <div className="flex flex-col gap-5 rounded-2xl border border-white/20 bg-white/10 text-white shadow-2xl backdrop-blur-xl p-8">
           {/* Header */}
